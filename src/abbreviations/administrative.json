@@ -34,5 +34,14 @@
   { "abbr": "環境基本法", "formal": "環境基本法", "law_id": null, "law_type": "Act", "domain": "administrative" },
   { "abbr": "大防法", "formal": "大気汚染防止法", "law_id": null, "law_type": "Act", "domain": "administrative", "aliases": ["大気汚染防止法"] },
   { "abbr": "水濁法", "formal": "水質汚濁防止法", "law_id": null, "law_type": "Act", "domain": "administrative", "aliases": ["水質汚濁防止法"] },
-  { "abbr": "廃掃法", "formal": "廃棄物の処理及び清掃に関する法律", "law_id": null, "law_type": "Act", "domain": "administrative", "note": "通称: 廃棄物処理法" }
+  { "abbr": "廃掃法", "formal": "廃棄物の処理及び清掃に関する法律", "law_id": null, "law_type": "Act", "domain": "administrative", "note": "通称: 廃棄物処理法" },
+  { "abbr": "電通事業法", "formal": "電気通信事業法", "law_id": null, "law_type": "Act", "domain": "administrative", "aliases": ["電気通信事業法"], "note": "Webサービス・メッセージング実装時の外部送信規律（27条の12）等" },
+  { "abbr": "電波法", "formal": "電波法", "law_id": null, "law_type": "Act", "domain": "administrative", "note": "IoT・無線デバイス開発時の技適等" },
+  { "abbr": "プロ責法", "formal": "特定電気通信役務提供者の損害賠償責任の制限及び発信者情報の開示に関する法律", "law_id": null, "law_type": "Act", "domain": "administrative", "aliases": ["プロバイダ責任制限法"], "note": "通称: プロバイダ責任制限法。UGC・SNSの運営者責任" },
+  { "abbr": "不正アクセス禁止法", "formal": "不正アクセス行為の禁止等に関する法律", "law_id": null, "law_type": "Act", "domain": "administrative" },
+  { "abbr": "特電法", "formal": "特定電子メールの送信の適正化等に関する法律", "law_id": null, "law_type": "Act", "domain": "administrative", "aliases": ["特定電子メール法"], "note": "通称: 特定電子メール法。メルマガ・営業メール" },
+  { "abbr": "サイバーセキュリティ基本法", "formal": "サイバーセキュリティ基本法", "law_id": null, "law_type": "Act", "domain": "administrative" },
+  { "abbr": "古物営業法", "formal": "古物営業法", "law_id": null, "law_type": "Act", "domain": "administrative", "note": "リユース・フリマ実装時" },
+  { "abbr": "青少年ネット環境整備法", "formal": "青少年が安全に安心してインターネットを利用できる環境の整備等に関する法律", "law_id": null, "law_type": "Act", "domain": "administrative" },
+  { "abbr": "国外送金調書法", "formal": "内国税の適正な課税の確保を図るための国外送金等に係る調書の提出等に関する法律", "law_id": null, "law_type": "Act", "domain": "administrative", "note": "クロスボーダー送金サービス" }
 ]

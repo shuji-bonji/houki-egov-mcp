@@ -1,32 +1,32 @@
-# jp-houki-ext-template
+# houki-hub-ext-template
 
-[jp-houki-mcp](https://github.com/shuji-bonji/jp-houki-mcp) の**拡張パッケージを新しく作るための最小テンプレート**です。
+[houki-hub-mcp](https://github.com/shuji-bonji/houki-hub-mcp) の**拡張パッケージを新しく作るための最小テンプレート**です。
 
-通達・判例・省庁監督指針など、e-Gov 外の法情報ソースを独立した npm パッケージとして jp-houki-mcp に差し込むことができます。
+通達・判例・省庁監督指針など、e-Gov 外の法情報ソースを独立した npm パッケージとして houki-hub-mcp に差し込むことができます。
 
 ## できること
 
-- jp-houki-mcp のコア（条文取得・略称辞書）はそのまま使い
+- houki-hub-mcp のコア（条文取得・略称辞書）はそのまま使い
 - 自分が実装した**通達・判例・その他のソース**のツールを追加
-- 利用者は環境変数 `JP_HOUKI_EXTENSIONS` でロード対象を切替
+- 利用者は環境変数 `HOUKI_HUB_EXTENSIONS` でロード対象を切替
 
 ## 使い方
 
 ```bash
 # 1. このテンプレをコピー
-cp -r examples/ext-template ~/workspace/jp-houki-ext-myext
+cp -r examples/ext-template ~/workspace/houki-hub-ext-myext
 
 # 2. package.json の name / description を書き換え
 # 3. src/index.ts の namespace / tools / handlers を実装
 # 4. 動作確認
-cd ~/workspace/jp-houki-ext-myext
+cd ~/workspace/houki-hub-ext-myext
 npm install
 npm run build
 npm link
 
-# 5. jp-houki-mcp 側から利用
+# 5. houki-hub-mcp 側から利用
 # .mcp.json:
-#   "env": { "JP_HOUKI_EXTENSIONS": "jp-houki-ext-myext" }
+#   "env": { "HOUKI_HUB_EXTENSIONS": "houki-hub-ext-myext" }
 ```
 
 ## ツール名の規則
@@ -38,7 +38,7 @@ npm link
 
 - **事実情報の提供に徹する**（判断を返さない）
 - 出典 URL を必ず返却
-- 略称対応があると便利（jp-houki-mcp コアの `resolveAbbreviation` を利用可能）
+- 略称対応があると便利（houki-hub-mcp コアの `resolveAbbreviation` を利用可能）
 - Markdown 整形で LLM に優しく
 
 ## 想定される拡張

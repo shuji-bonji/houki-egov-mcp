@@ -1,8 +1,8 @@
 /**
- * jp-houki-mcp Extension Template
+ * houki-hub-mcp Extension Template
  *
  * 通達・判例・省庁監督指針などの周辺情報ソースを
- * 独立した npm パッケージとして jp-houki-mcp に差し込むためのテンプレート。
+ * 独立した npm パッケージとして houki-hub-mcp に差し込むためのテンプレート。
  *
  * 使い方:
  * 1. このファイルをコピー
@@ -10,10 +10,10 @@
  * 3. tools と handlers を実装
  * 4. npm publish（or ローカル開発なら npm link）
  * 5. 利用者の .mcp.json で
- *    "env": { "JP_HOUKI_EXTENSIONS": "your-package-name" }
+ *    "env": { "HOUKI_HUB_EXTENSIONS": "your-package-name" }
  */
 
-import type { ExtensionFactory } from '@shuji-bonji/jp-houki-mcp/extensions';
+import type { ExtensionFactory } from '@shuji-bonji/houki-hub-mcp/extensions';
 
 const factory: ExtensionFactory = () => ({
   manifest: {
@@ -48,7 +48,7 @@ const factory: ExtensionFactory = () => ({
   handlers: {
     template_hello: async (args: { name?: string }) => {
       return {
-        message: `hello, ${args.name ?? 'world'} — jp-houki extension is alive`,
+        message: `hello, ${args.name ?? 'world'} — houki-hub extension is alive`,
       };
     },
     // template_search: async (args) => {

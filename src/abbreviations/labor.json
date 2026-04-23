@@ -25,5 +25,6 @@
   { "abbr": "作環法", "formal": "作業環境測定法", "law_id": null, "law_type": "Act", "domain": "labor" },
   { "abbr": "最賃法", "formal": "最低賃金法", "law_id": null, "law_type": "Act", "domain": "labor", "aliases": ["最低賃金法"] },
   { "abbr": "賃確法", "formal": "賃金の支払の確保等に関する法律", "law_id": null, "law_type": "Act", "domain": "labor" },
-  { "abbr": "社労士法", "formal": "社会保険労務士法", "law_id": null, "law_type": "Act", "domain": "labor", "aliases": ["社会保険労務士法"] }
+  { "abbr": "社労士法", "formal": "社会保険労務士法", "law_id": null, "law_type": "Act", "domain": "labor", "aliases": ["社会保険労務士法"] },
+  { "abbr": "フリーランス新法", "formal": "特定受託事業者に係る取引の適正化等に関する法律", "law_id": null, "law_type": "Act", "domain": "labor", "aliases": ["フリーランス保護新法", "特定受託事業者保護法"], "note": "通称: フリーランス新法（令和5年法律第25号、令和6年11月施行）" }
 ]

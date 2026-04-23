@@ -24,5 +24,10 @@
   { "abbr": "種苗法", "formal": "種苗法", "law_id": null, "law_type": "Act", "domain": "commercial" },
   { "abbr": "半導体回路配置法", "formal": "半導体集積回路の回路配置に関する法律", "law_id": null, "law_type": "Act", "domain": "commercial" },
   { "abbr": "保険業法", "formal": "保険業法", "law_id": null, "law_type": "Act", "domain": "commercial" },
-  { "abbr": "銀行法", "formal": "銀行法", "law_id": null, "law_type": "Act", "domain": "commercial" }
+  { "abbr": "銀行法", "formal": "銀行法", "law_id": null, "law_type": "Act", "domain": "commercial" },
+  { "abbr": "電子署名法", "formal": "電子署名及び認証業務に関する法律", "law_id": null, "law_type": "Act", "domain": "commercial", "aliases": ["電子署名"], "note": "通称: 電子署名法。電子契約の法的効力の根拠" },
+  { "abbr": "電子委任状法", "formal": "電子委任状の普及の促進に関する法律", "law_id": null, "law_type": "Act", "domain": "commercial" },
+  { "abbr": "IT書面一括法", "formal": "書面の交付等に関する情報通信の技術の利用のための関係法律の整備に関する法律", "law_id": null, "law_type": "Act", "domain": "commercial", "note": "通称: IT書面一括法" },
+  { "abbr": "資金決済法", "formal": "資金決済に関する法律", "law_id": null, "law_type": "Act", "domain": "commercial", "aliases": ["資金決済"], "note": "暗号資産・前払式支払手段・資金移動業の根拠" },
+  { "abbr": "犯収法", "formal": "犯罪による収益の移転防止に関する法律", "law_id": null, "law_type": "Act", "domain": "commercial", "aliases": ["犯罪収益移転防止法", "AML"], "note": "通称: 犯罪収益移転防止法。e-KYC の根拠" }
 ]

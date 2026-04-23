@@ -1,6 +1,6 @@
 # Extension Layer
 
-jp-houki-mcp の**拡張レイヤ**は、通達・裁決・下級裁判例など、e-Gov 外の法情報ソースを**独立 npm パッケージ**として追加するための仕組み。
+houki-hub-mcp の**拡張レイヤ**は、通達・裁決・下級裁判例など、e-Gov 外の法情報ソースを**独立 npm パッケージ**として追加するための仕組み。
 
 ## なぜ分離するのか
 
@@ -12,19 +12,19 @@ jp-houki-mcp の**拡張レイヤ**は、通達・裁決・下級裁判例など
 
 | パッケージ名 | 対象 | 参考既存実装 |
 |---|---|---|
-| `@jp-houki/ext-nta` | 国税庁基本通達・措置法通達 | `kentaroajisaka/tax-law-mcp` |
-| `@jp-houki/ext-saiketsu` | 国税不服審判所 公表裁決事例 | 同上 |
-| `@jp-houki/ext-mhlw` | 厚生労働省通達 | `kentaroajisaka/labor-law-mcp` |
-| `@jp-houki/ext-jaish` | 安全衛生情報センター（JAISH）通達 | 同上 |
-| `@jp-houki/ext-court` | 裁判所 判例検索（最高裁・下級裁） | — |
-| `@jp-houki/ext-fsa` | 金融庁 監督指針 | — |
+| `@houki-hub/ext-nta` | 国税庁基本通達・措置法通達 | `kentaroajisaka/tax-law-mcp` |
+| `@houki-hub/ext-saiketsu` | 国税不服審判所 公表裁決事例 | 同上 |
+| `@houki-hub/ext-mhlw` | 厚生労働省通達 | `kentaroajisaka/labor-law-mcp` |
+| `@houki-hub/ext-jaish` | 安全衛生情報センター（JAISH）通達 | 同上 |
+| `@houki-hub/ext-court` | 裁判所 判例検索（最高裁・下級裁） | — |
+| `@houki-hub/ext-fsa` | 金融庁 監督指針 | — |
 
 ## インターフェース（Phase 0 暫定）
 
 `src/extensions/types.ts` 参照。
 
 ```typescript
-import type { ExtensionFactory } from '@shuji-bonji/jp-houki-mcp/extensions';
+import type { ExtensionFactory } from '@shuji-bonji/houki-hub-mcp/extensions';
 
 const factory: ExtensionFactory = () => ({
   manifest: {
@@ -54,7 +54,7 @@ export default factory;
 ## 読み込み方（Phase 1 で実装予定）
 
 ```bash
-JP_HOUKI_EXTENSIONS="@jp-houki/ext-nta,@jp-houki/ext-mhlw" npx @shuji-bonji/jp-houki-mcp
+HOUKI_HUB_EXTENSIONS="@houki-hub/ext-nta,@houki-hub/ext-mhlw" npx @shuji-bonji/houki-hub-mcp
 ```
 
 起動時に環境変数で指定されたパッケージを動的 import し、`manifest.namespace` でツール名の衝突を防ぐ。

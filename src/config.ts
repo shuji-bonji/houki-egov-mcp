@@ -31,7 +31,7 @@ export const EGOV_API = {
 
 /**
  * e-Gov XML bulk download
- * Used as local-FTS source when JP_HOUKI_BULK_CACHE=1
+ * Used as local-FTS source when HOUKI_HUB_BULK_CACHE=1
  */
 export const EGOV_BULK = {
   indexUrl: 'https://laws.e-gov.go.jp/bulkdownload/',
@@ -62,9 +62,9 @@ export const CACHE_CONFIG = {
  */
 export const RUNTIME_FLAGS = {
   /** Enable local bulk-download cache (SQLite FTS5) */
-  bulkCache: process.env.JP_HOUKI_BULK_CACHE === '1',
+  bulkCache: process.env.HOUKI_HUB_BULK_CACHE === '1',
   /** Comma-separated list of extension packages to load */
-  extensions: (process.env.JP_HOUKI_EXTENSIONS ?? '')
+  extensions: (process.env.HOUKI_HUB_EXTENSIONS ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),

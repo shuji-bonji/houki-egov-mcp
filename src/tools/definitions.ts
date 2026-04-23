@@ -97,7 +97,7 @@ export const tools: Tool[] = [
   {
     name: 'search_fulltext',
     description:
-      '法令本文をキーワードで横断全文検索する。JP_HOUKI_BULK_CACHE=1 環境時に SQLite FTS5 で動作。未有効時は API フォールバック。',
+      '法令本文をキーワードで横断全文検索する。HOUKI_HUB_BULK_CACHE=1 環境時に SQLite FTS5 で動作。未有効時は API フォールバック。',
     inputSchema: {
       type: 'object',
       properties: {

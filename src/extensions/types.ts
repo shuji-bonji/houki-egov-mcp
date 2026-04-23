@@ -2,7 +2,7 @@
  * Extension Layer Interface
  *
  * 通達・裁決・下級裁判例などの周辺データソースを、
- * 独立 npm パッケージ（例: @jp-houki/ext-nta）として追加できるようにするための共通 I/F。
+ * 独立 npm パッケージ（例: @houki-hub/ext-nta）として追加できるようにするための共通 I/F。
  *
  * Phase 1 以降で確定させる。ここは暫定 I/F なので Breaking Change あり。
  */
@@ -43,8 +43,8 @@ export interface ExtensionModule {
  *
  * 実装例：
  *
- *     // @jp-houki/ext-nta/src/index.ts
- *     import type { ExtensionFactory } from '@shuji-bonji/jp-houki-mcp/extensions';
+ *     // @houki-hub/ext-nta/src/index.ts
+ *     import type { ExtensionFactory } from '@shuji-bonji/houki-hub-mcp/extensions';
  *     const factory: ExtensionFactory = () => ({
  *       manifest: { namespace: 'nta', label: '国税庁通達', ... },
  *       tools: [...],
