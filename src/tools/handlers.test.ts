@@ -5,6 +5,7 @@ import {
   handleGetLaw,
   handleGetToc,
   handleSearchFulltext,
+  handleExplainLawType,
   toolHandlers,
 } from './handlers.js';
 
@@ -59,10 +60,57 @@ describe('stub handlers (Phase 0)', () => {
   });
 });
 
+describe('handleExplainLawType', () => {
+  it('returns explanation for known law type', async () => {
+    const r = (await handleExplainLawType({ name: '政令' })) as {
+      found: boolean;
+      info?: { name: string; enacting_body: string; binds_citizens: boolean };
+    };
+    expect(r.found).toBe(true);
+    expect(r.info?.name).toBe('政令');
+    expect(r.info?.enacting_body).toBe('内閣');
+    expect(r.info?.binds_citizens).toBe(true);
+  });
+
+  it('resolves alias (施行令 → 政令)', async () => {
+    const r = (await handleExplainLawType({ name: '施行令' })) as {
+      found: boolean;
+      info?: { name: string };
+    };
+    expect(r.found).toBe(true);
+    expect(r.info?.name).toBe('政令');
+  });
+
+  it('explains 通達 as non-binding on citizens', async () => {
+    const r = (await handleExplainLawType({ name: '通達' })) as {
+      found: boolean;
+      info?: { binds_citizens: boolean; can_set_penalties: boolean };
+    };
+    expect(r.info?.binds_citizens).toBe(false);
+    expect(r.info?.can_set_penalties).toBe(false);
+  });
+
+  it('returns hint for unknown name', async () => {
+    const r = (await handleExplainLawType({ name: '架空法令' })) as {
+      found: boolean;
+      hint?: string;
+    };
+    expect(r.found).toBe(false);
+    expect(r.hint).toContain('試せる名前');
+  });
+});
+
 describe('toolHandlers map', () => {
   it('registers all expected tools', () => {
     expect(Object.keys(toolHandlers).sort()).toEqual(
-      ['get_law', 'get_toc', 'resolve_abbreviation', 'search_fulltext', 'search_law'].sort()
+      [
+        'explain_law_type',
+        'get_law',
+        'get_toc',
+        'resolve_abbreviation',
+        'search_fulltext',
+        'search_law',
+      ].sort()
     );
   });
 });

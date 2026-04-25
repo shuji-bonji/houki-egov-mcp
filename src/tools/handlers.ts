@@ -6,6 +6,7 @@
  */
 
 import { resolveAbbreviation } from '../abbreviations/index.js';
+import { findLawHierarchy, listLawHierarchyNames } from '../knowledge/law-hierarchy.js';
 import type { SearchLawArgs, GetLawArgs, GetTocArgs, SearchFulltextArgs } from '../types/index.js';
 
 const NOT_IMPLEMENTED = {
@@ -83,6 +84,31 @@ export async function handleResolveAbbreviation(args: { abbr: string }) {
 }
 
 /**
+ * explain_law_type — 法令種別の解説（Phase 0 で動作）
+ *
+ * 法務専門家でない利用者が「政令と省令の違い」「通達は守らなくていいのか」を
+ * 確認するための知識ツール。
+ */
+export async function handleExplainLawType(args: { name: string }) {
+  const entry = findLawHierarchy(args.name);
+  if (!entry) {
+    return {
+      name: args.name,
+      found: false,
+      hint: `知らない法令種別です。試せる名前: ${listLawHierarchyNames().join(', ')}`,
+      see_also: 'docs/LAW-HIERARCHY.md',
+    };
+  }
+  return {
+    name: args.name,
+    found: true,
+    info: entry,
+    related_tools: ['search_law', 'get_law', 'get_toc'],
+    see_also: 'docs/LAW-HIERARCHY.md',
+  };
+}
+
+/**
  * Tool handlers map
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -92,4 +118,5 @@ export const toolHandlers: Record<string, (args: any) => Promise<unknown>> = {
   get_toc: handleGetToc,
   search_fulltext: handleSearchFulltext,
   resolve_abbreviation: handleResolveAbbreviation,
+  explain_law_type: handleExplainLawType,
 };

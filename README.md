@@ -76,7 +76,13 @@
 - [ ] Phase 2: `search_fulltext`（bulkDL + SQLite FTS5）
 - [ ] Phase 3: 拡張レイヤ I/F 確定、公式拡張パッケージリリース
 
-詳細は [`docs/DESIGN.md`](docs/DESIGN.md) / [`docs/PAIN-POINTS-TEMPLATE.md`](docs/PAIN-POINTS-TEMPLATE.md) / [`CHANGELOG.md`](CHANGELOG.md) を参照。
+詳細は以下を参照：
+
+- [`docs/DESIGN.md`](docs/DESIGN.md) — 設計原則・業法との関係・拡張ロードマップ
+- [`docs/IMPLEMENTATION-PLAN.md`](docs/IMPLEMENTATION-PLAN.md) — Phase 1〜3 実装計画
+- [`docs/LAW-HIERARCHY.md`](docs/LAW-HIERARCHY.md) — 法令種別の階層リファレンス（専門家でない利用者向け）
+- [`docs/PAIN-POINTS-TEMPLATE.md`](docs/PAIN-POINTS-TEMPLATE.md) — 2週間痛点ログ
+- [`CHANGELOG.md`](CHANGELOG.md) — リリースノート
 
 ## Quick Start
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **法令種別ナレッジ** (`src/knowledge/law-hierarchy.ts`) — 9 種別（憲法・法律・政令・省令・規則・条例・告示・訓令・通達・通知）の制定主体・階層・拘束力・実務上の注意点を構造化
+- **新ツール `explain_law_type`** — 上記ナレッジを LLM から引けるツール。aliases / law_type_code 経由でも解決
+- **`docs/LAW-HIERARCHY.md`** — 専門家でない利用者向けの法令階層リファレンス（Mermaid図・比較表・実装エンジニア視点の含意付き）
+
 ### Planned (Phase 1)
 
 - e-Gov 法令API v2 クライアント実装
@@ -20,7 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Planned (Phase 3)
 
 - 拡張レイヤ I/F 確定
-- 公式拡張パッケージ（`@houki-hub/ext-nta`, `@houki-hub/ext-mhlw` 等）リリース
+- 公式拡張パッケージ（`@houki-hub/ext-nta`, `@houki-hub/ext-mhlw`, `@houki-hub/ext-jaish`, `@houki-hub/ext-saiketsu` 等）リリース
+
+### Planned (`@houki-hub/ext-court` 段階実装)
+
+判決検索拡張は外部データ提供状況に応じて3段階で実装する：
+
+- **Stage A**: 裁判所サイト（`courts.go.jp/app/hanrei_jp/`）の公開判決スクレイピング
+- **Stage B**: **民事判決オープンデータAPI（2026年度提供開始予定）対応** — 年間約20万件公開予定。日弁連法務研究財団／最高裁による API 仕様公開を待って実装
+- **Stage C**: bulk 取得 + ローカル SQLite FTS5（コアと同じ分散型 ground truth 思想を判例まで拡張、将来構想）
 
 ## [0.0.1] - 2026-04-23
 
