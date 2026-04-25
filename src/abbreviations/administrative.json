@@ -350,5 +350,32 @@
     "law_type": "Act",
     "domain": "administrative",
     "note": "クロスボーダー送金サービス"
+  },
+  {
+    "abbr": "公的個人認証法",
+    "formal": "電子署名等に係る地方公共団体情報システム機構の認証業務に関する法律",
+    "law_id": null,
+    "law_type": "Act",
+    "domain": "administrative",
+    "aliases": ["JPKI法"],
+    "note": "通称: 公的個人認証法。マイナンバーカード電子証明書（署名用・利用者証明用）の根拠法"
+  },
+  {
+    "abbr": "デジ手続法",
+    "formal": "情報通信技術を活用した行政の推進等に関する法律",
+    "law_id": null,
+    "law_type": "Act",
+    "domain": "administrative",
+    "aliases": ["デジタル手続法", "行政手続オンライン化法"],
+    "note": "通称: デジタル手続法。行政手続のオンライン化の基本法"
+  },
+  {
+    "abbr": "デジ庁設置法",
+    "formal": "デジタル庁設置法",
+    "law_id": null,
+    "law_type": "Act",
+    "domain": "administrative",
+    "aliases": ["デジタル庁設置法"],
+    "note": "デジタル庁の設置・所掌事務の根拠"
   }
 ]
