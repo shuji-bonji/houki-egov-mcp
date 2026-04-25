@@ -31,33 +31,25 @@ describe('handleResolveAbbreviation', () => {
   });
 });
 
-describe('stub handlers (Phase 0)', () => {
-  it('search_law returns not_implemented marker', async () => {
-    const r = (await handleSearchLaw({ keyword: 'test' })) as { status: string };
-    expect(r.status).toBe('not_implemented');
+// Phase 1 以降: search_law / get_law / get_toc / search_fulltext は実 API を叩くため、
+// 単体テストでは fetch をモックする必要がある。
+// ここでは未知の法令名に対するエラーパスのみ検証する（fetch しない経路）。
+describe('Phase 1 handlers — error paths (no network)', () => {
+  it('get_law returns error for empty law_name', async () => {
+    const r = (await handleGetLaw({ law_name: '' })) as { error?: string };
+    expect(r.error).toBeTruthy();
   });
 
-  it('get_law performs abbr resolution even while stubbed', async () => {
-    const r = (await handleGetLaw({ law_name: '消法' })) as {
-      status: string;
-      resolved_abbreviation: { formal: string } | null;
-    };
-    expect(r.status).toBe('not_implemented');
-    expect(r.resolved_abbreviation?.formal).toBe('消費税法');
+  it('search_law returns error for empty keyword', async () => {
+    const r = (await handleSearchLaw({ keyword: '' })) as { error?: string };
+    expect(r.error).toBeTruthy();
   });
 
-  it('get_toc performs abbr resolution even while stubbed', async () => {
-    const r = (await handleGetToc({ law_name: '労基法' })) as {
-      status: string;
-      resolved_abbreviation: { formal: string } | null;
-    };
-    expect(r.status).toBe('not_implemented');
-    expect(r.resolved_abbreviation?.formal).toBe('労働基準法');
-  });
-
-  it('search_fulltext returns not_implemented marker', async () => {
-    const r = (await handleSearchFulltext({ keyword: 'test' })) as { status: string };
-    expect(r.status).toBe('not_implemented');
+  it('handlers are exported as functions', () => {
+    expect(typeof handleSearchLaw).toBe('function');
+    expect(typeof handleGetLaw).toBe('function');
+    expect(typeof handleGetToc).toBe('function');
+    expect(typeof handleSearchFulltext).toBe('function');
   });
 });
 

@@ -1,8 +1,8 @@
 /**
  * MCP Tool Handlers
  *
- * NOTE: Phase 0 スケルトンのため、実装はスタブ。
- * Phase 1 で e-Gov API v2 クライアントと接続する。
+ * Phase 1: e-Gov 法令API v2 と接続する本実装。
+ * search_fulltext のみ Phase 2 まではコア機能のフォールバックを返す。
  */
 
 import { resolveAbbreviation } from '../abbreviations/index.js';
@@ -11,61 +11,63 @@ import {
   findBusinessLawRestriction,
   listBusinessLawProfessions,
 } from '../knowledge/business-law-restrictions.js';
+import { searchLawByKeyword, getLawArticle, getLawToc } from '../services/law-service.js';
 import type { SearchLawArgs, GetLawArgs, GetTocArgs, SearchFulltextArgs } from '../types/index.js';
 
-const NOT_IMPLEMENTED = {
-  status: 'not_implemented',
-  phase: 'Phase 0 (skeleton)',
-  note: 'この tool は Phase 1 で実装予定。現在は略称辞書のみ動作する。',
-};
-
 /**
- * search_law — 法令検索（スタブ）
+ * search_law — 法令検索（Phase 1 実装）
  */
 export async function handleSearchLaw(args: SearchLawArgs) {
-  return {
-    tool: 'search_law',
-    args,
-    ...NOT_IMPLEMENTED,
-  };
+  return searchLawByKeyword({
+    keyword: args.keyword,
+    law_type: args.law_type,
+    limit: args.limit,
+  });
 }
 
 /**
- * get_law — 条文取得（スタブ）
+ * get_law — 条文取得（Phase 1 実装）
  *
- * 動作するのは略称解決のみ。実 API 呼び出しは Phase 1。
+ * - article 未指定 + format!="json" → TOC を返す
+ * - article 指定 → 該当条文を Markdown で返す
+ * - paragraph / item で粒度を指定可能
  */
 export async function handleGetLaw(args: GetLawArgs) {
-  const resolved = resolveAbbreviation(args.law_name);
-  return {
-    tool: 'get_law',
-    args,
-    resolved_abbreviation: resolved,
-    ...NOT_IMPLEMENTED,
-  };
+  return getLawArticle({
+    law_name: args.law_name,
+    article: args.article,
+    paragraph: args.paragraph,
+    item: args.item,
+    format: (args.format as 'markdown' | 'json' | 'toc' | undefined) ?? 'markdown',
+    at: args.at,
+  });
 }
 
 /**
- * get_toc — 目次取得（スタブ）
+ * get_toc — 目次取得（Phase 1 実装）
  */
 export async function handleGetToc(args: GetTocArgs) {
-  const resolved = resolveAbbreviation(args.law_name);
-  return {
-    tool: 'get_toc',
-    args,
-    resolved_abbreviation: resolved,
-    ...NOT_IMPLEMENTED,
-  };
+  return getLawToc({
+    law_name: args.law_name,
+    at: args.at,
+  });
 }
 
 /**
- * search_fulltext — 全文検索（スタブ）
+ * search_fulltext — 全文検索
+ *
+ * Phase 2 で SQLite FTS5 によるローカル全文検索を実装予定。
+ * 現状は search_law にフォールバック（タイトル検索）して旨を返す。
  */
 export async function handleSearchFulltext(args: SearchFulltextArgs) {
+  const fallback = await searchLawByKeyword({
+    keyword: args.keyword,
+    law_type: args.law_type,
+    limit: args.limit,
+  });
   return {
-    tool: 'search_fulltext',
-    args,
-    ...NOT_IMPLEMENTED,
+    note: 'search_fulltext の本実装は Phase 2（bulkDL + SQLite FTS5）。現状は search_law（タイトル一致）にフォールバックしています',
+    fallback,
   };
 }
 

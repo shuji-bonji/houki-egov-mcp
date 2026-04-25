@@ -18,15 +18,19 @@ export const PACKAGE_INFO = {
 /**
  * e-Gov Law API v2 endpoints
  * Spec: https://laws.e-gov.go.jp/api/2/swagger-ui
+ *
+ * NOTE: Query parameters use snake_case (law_title, law_type, ...) — verified 2026-04-23
  */
 export const EGOV_API = {
   baseUrl: 'https://laws.e-gov.go.jp/api/2',
   /** Search laws by keyword/title/number */
-  lawsEndpoint: '/laws',
-  /** Fetch law body (XML/JSON) */
-  lawDataEndpoint: (lawId: string) => `/law_data/${lawId}`,
-  /** Fetch law revisions */
-  lawRevisionsEndpoint: (lawId: string) => `/law_revisions/${lawId}`,
+  laws: 'https://laws.e-gov.go.jp/api/2/laws',
+  /** Fetch law body (JSON tree) */
+  lawData: (lawId: string) => `https://laws.e-gov.go.jp/api/2/law_data/${lawId}`,
+  /** Fetch law revisions list */
+  lawRevisions: (lawId: string) => `https://laws.e-gov.go.jp/api/2/law_revisions/${lawId}`,
+  /** Public-facing URL（出典として返却） */
+  publicLawUrl: (lawId: string) => `https://laws.e-gov.go.jp/law/${lawId}`,
 } as const;
 
 /**

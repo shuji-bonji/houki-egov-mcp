@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
+### Added (Phase 1 — e-Gov 法令API v2 コア実装)
+
+- **e-Gov 法令API v2 クライアント** (`src/services/egov-client.ts`)
+  - `searchLaws` / `getLawData` — snake_case パラメータで叩く
+  - 指数バックオフ・タイムアウト・AbortController 対応
+  - `EgovHttpError` 型でステータス保持
+- **法令ツリー走査** (`src/services/law-tree.ts`)
+  - JSON 化された XML ツリー（`{tag, attr, children}`）を走査
+  - `findArticle` / `findParagraph` / `findItem` / `extractToc` など
+- **法令サービス層** (`src/services/law-service.ts`)
+  - 略称解決 → law_id 解決 → 本文取得 → 整形のオーケストレーション
+  - LRU cache で `/law_data` 応答を保持（時点 `at` もキー）
+- **Markdown 整形** (`src/formatters/markdown.ts`)
+  - 条文・項・号レベルの粒度に応じた見出し
+  - 出典 URL・取得日時を必ず添付
+- **条番号の表記揺れ吸収** (`src/utils/article-num.ts`) — `第30条の2` ↔ `30_2`
+- **LRU Cache** (`src/utils/cache.ts`)
+- **4ツールの本実装**:
+  - `search_law` — タイトル検索（略称→正式名解決済み）
+  - `get_law` — 条/項/号レベルの本文取得（Markdown / JSON / TOC）
+  - `get_toc` — 法令の目次のみ取得
+  - `search_fulltext` — Phase 2 までは search_law にフォールバック
+
+### Added (Phase 0 同梱)
 
 - **法令種別ナレッジ** (`src/knowledge/law-hierarchy.ts`) — 10 種別（憲法・法律・政令・省令・規則・条例・告示・訓令・通達・通知）の制定主体・階層・拘束力・実務上の注意点を構造化
 - **業法独占規定ナレッジ** (`src/knowledge/business-law-restrictions.ts`) — 7職業（弁護士・税理士・社労士・公認会計士・司法書士・行政書士・弁理士）の業務独占規定・違反要件・規制外の典型例を構造化
@@ -17,6 +40,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`docs/USE-CASES.md`** — プロダクト開発のユースケース集（電帳法・電子契約・個情法・e-KYC）
 - **拡張パッケージ計画拡充** — `@houki-hub/ext-meti` / `ext-soumu` / `ext-moj` / `ext-ppc` を Phase 3 計画に追加（合計9パッケージ）
 - **拡張ツールの統一インターフェース設計** — `{namespace}_search` / `_get` / `_list` + `type` パラメータでの絞り込み
+
+### Tests
+
+- **74 tests passed**（Phase 0: 49 → Phase 1: 74、+25）
+  - law-tree: 14 / cache: 6 / article-num: 6 / handlers: 15
+- E2E 動作確認: 消法30条1項取得・労基法目次取得・消費税法検索
+
+### Known Limitations (v0.1.0)
+
+- 漢数字の条番号（「第三十条の二」など）は未対応 — アラビア数字でご指定ください
+- `search_fulltext` は Phase 2（bulkDL + SQLite FTS5）まで本実装ではない
 
 ### Planned (Phase 1)
 

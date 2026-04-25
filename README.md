@@ -63,19 +63,23 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-%3E%3D20-brightgreen)](https://nodejs.org/)
 
-**Phase 0（スケルトン整備）完了** — 2026-04-23
+**Phase 1（e-Gov 法令API v2 コア実装）完了** — 2026-04-25
 
 - [x] プロジェクト骨格（package.json / tsconfig / ESLint / Prettier / Vitest）
-- [x] 略称辞書の初期版（6分野・**162エントリ**）
-- [x] **ナレッジ層**（法令種別10種・業法独占規定7職業）
-- [x] **新ツール**：`explain_law_type` / `explain_business_law_restriction`
+- [x] 略称辞書（6分野・**165エントリ**）
+- [x] ナレッジ層（法令種別10種・業法独占規定7職業）
+- [x] **e-Gov 法令API v2 クライアント** + 4ツール本実装
+  - `search_law` — タイトル検索（略称→正式名解決済み）
+  - `get_law` — 条/項/号レベル本文取得（Markdown / JSON / TOC）
+  - `get_toc` — 目次取得
+  - `search_fulltext` — Phase 2 まで search_law にフォールバック
+- [x] 法令ツリー走査・LRU cache・Markdown 整形
+- [x] `explain_law_type` / `explain_business_law_restriction`（Phase 0 同梱）
 - [x] 拡張レイヤ I/F 暫定版（`ExtensionFactory`）
 - [x] DISCLAIMER / CONTRIBUTING / 業法との関係 / プロダクト開発ユースケース集
 - [x] GitHub Actions CI（Node 20 / 22 マトリクス）
-- [x] テストスイート（**46+ tests**）
-- [ ] **2週間の痛点ログ → MVP機能スコープ確定**（Phase 1 への Gate）
-- [ ] Phase 1: e-Gov法令API v2 クライアント + `get_law` / `search_law` / `get_toc` 実装
-- [ ] Phase 2: `search_fulltext`（bulkDL + SQLite FTS5）
+- [x] テストスイート（**74 tests**）
+- [ ] Phase 2: `search_fulltext` 本実装（bulkDL + SQLite FTS5）
 - [ ] Phase 3: 拡張レイヤ I/F 確定、公式拡張パッケージリリース（9パッケージ計画）
 
 詳細は以下を参照：
