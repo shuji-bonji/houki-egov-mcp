@@ -67,20 +67,23 @@
 
 - [x] プロジェクト骨格（package.json / tsconfig / ESLint / Prettier / Vitest）
 - [x] 略称辞書の初期版（6分野・**162エントリ**）
+- [x] **ナレッジ層**（法令種別10種・業法独占規定7職業）
+- [x] **新ツール**：`explain_law_type` / `explain_business_law_restriction`
 - [x] 拡張レイヤ I/F 暫定版（`ExtensionFactory`）
-- [x] DISCLAIMER / CONTRIBUTING / 業法との関係ドキュメント
+- [x] DISCLAIMER / CONTRIBUTING / 業法との関係 / プロダクト開発ユースケース集
 - [x] GitHub Actions CI（Node 20 / 22 マトリクス）
-- [x] テストスイート（辞書整合性・ハンドラ疎通）
+- [x] テストスイート（**46+ tests**）
 - [ ] **2週間の痛点ログ → MVP機能スコープ確定**（Phase 1 への Gate）
 - [ ] Phase 1: e-Gov法令API v2 クライアント + `get_law` / `search_law` / `get_toc` 実装
 - [ ] Phase 2: `search_fulltext`（bulkDL + SQLite FTS5）
-- [ ] Phase 3: 拡張レイヤ I/F 確定、公式拡張パッケージリリース
+- [ ] Phase 3: 拡張レイヤ I/F 確定、公式拡張パッケージリリース（9パッケージ計画）
 
 詳細は以下を参照：
 
 - [`docs/DESIGN.md`](docs/DESIGN.md) — 設計原則・業法との関係・拡張ロードマップ
 - [`docs/IMPLEMENTATION-PLAN.md`](docs/IMPLEMENTATION-PLAN.md) — Phase 1〜3 実装計画
 - [`docs/LAW-HIERARCHY.md`](docs/LAW-HIERARCHY.md) — 法令種別の階層リファレンス（専門家でない利用者向け）
+- [`docs/USE-CASES.md`](docs/USE-CASES.md) — プロダクト開発の典型ユースケース（電帳法・電子契約・個情法・e-KYC）
 - [`docs/PAIN-POINTS-TEMPLATE.md`](docs/PAIN-POINTS-TEMPLATE.md) — 2週間痛点ログ
 - [`CHANGELOG.md`](CHANGELOG.md) — リリースノート
 

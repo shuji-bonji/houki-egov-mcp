@@ -6,6 +6,7 @@ import {
   handleGetToc,
   handleSearchFulltext,
   handleExplainLawType,
+  handleExplainBusinessLawRestriction,
   toolHandlers,
 } from './handlers.js';
 
@@ -100,10 +101,55 @@ describe('handleExplainLawType', () => {
   });
 });
 
+describe('handleExplainBusinessLawRestriction', () => {
+  it('returns explanation for known profession', async () => {
+    const r = (await handleExplainBusinessLawRestriction({ name: '弁護士' })) as {
+      found: boolean;
+      info?: { law_name: string; clause: string };
+    };
+    expect(r.found).toBe(true);
+    expect(r.info?.law_name).toBe('弁護士法');
+    expect(r.info?.clause).toBe('第72条');
+  });
+
+  it('resolves by law name (税理士法 → 税理士)', async () => {
+    const r = (await handleExplainBusinessLawRestriction({ name: '税理士法' })) as {
+      found: boolean;
+      info?: { profession: string };
+    };
+    expect(r.info?.profession).toBe('税理士');
+  });
+
+  it('resolves alias (社労士 → 社会保険労務士)', async () => {
+    const r = (await handleExplainBusinessLawRestriction({ name: '社労士' })) as {
+      found: boolean;
+      info?: { profession: string };
+    };
+    expect(r.info?.profession).toContain('社会保険労務士');
+  });
+
+  it('returns hint for unknown name', async () => {
+    const r = (await handleExplainBusinessLawRestriction({ name: '架空士業' })) as {
+      found: boolean;
+      hint?: string;
+    };
+    expect(r.found).toBe(false);
+    expect(r.hint).toContain('試せる名前');
+  });
+
+  it('includes disclaimer in successful result', async () => {
+    const r = (await handleExplainBusinessLawRestriction({ name: '弁護士' })) as {
+      disclaimer?: string;
+    };
+    expect(r.disclaimer).toContain('有資格者に相談');
+  });
+});
+
 describe('toolHandlers map', () => {
   it('registers all expected tools', () => {
     expect(Object.keys(toolHandlers).sort()).toEqual(
       [
+        'explain_business_law_restriction',
         'explain_law_type',
         'get_law',
         'get_toc',

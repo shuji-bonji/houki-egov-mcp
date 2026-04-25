@@ -9,9 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **法令種別ナレッジ** (`src/knowledge/law-hierarchy.ts`) — 9 種別（憲法・法律・政令・省令・規則・条例・告示・訓令・通達・通知）の制定主体・階層・拘束力・実務上の注意点を構造化
-- **新ツール `explain_law_type`** — 上記ナレッジを LLM から引けるツール。aliases / law_type_code 経由でも解決
-- **`docs/LAW-HIERARCHY.md`** — 専門家でない利用者向けの法令階層リファレンス（Mermaid図・比較表・実装エンジニア視点の含意付き）
+- **法令種別ナレッジ** (`src/knowledge/law-hierarchy.ts`) — 10 種別（憲法・法律・政令・省令・規則・条例・告示・訓令・通達・通知）の制定主体・階層・拘束力・実務上の注意点を構造化
+- **業法独占規定ナレッジ** (`src/knowledge/business-law-restrictions.ts`) — 7職業（弁護士・税理士・社労士・公認会計士・司法書士・行政書士・弁理士）の業務独占規定・違反要件・規制外の典型例を構造化
+- **新ツール `explain_law_type`** — 法令種別ナレッジを LLM から引けるツール
+- **新ツール `explain_business_law_restriction`** — 業法独占規定ナレッジを LLM から引けるツール
+- **`docs/LAW-HIERARCHY.md`** — 専門家でない利用者向けの法令階層リファレンス
+- **`docs/USE-CASES.md`** — プロダクト開発のユースケース集（電帳法・電子契約・個情法・e-KYC）
+- **拡張パッケージ計画拡充** — `@houki-hub/ext-meti` / `ext-soumu` / `ext-moj` / `ext-ppc` を Phase 3 計画に追加（合計9パッケージ）
+- **拡張ツールの統一インターフェース設計** — `{namespace}_search` / `_get` / `_list` + `type` パラメータでの絞り込み
 
 ### Planned (Phase 1)
 

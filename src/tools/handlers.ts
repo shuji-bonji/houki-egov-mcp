@@ -7,6 +7,10 @@
 
 import { resolveAbbreviation } from '../abbreviations/index.js';
 import { findLawHierarchy, listLawHierarchyNames } from '../knowledge/law-hierarchy.js';
+import {
+  findBusinessLawRestriction,
+  listBusinessLawProfessions,
+} from '../knowledge/business-law-restrictions.js';
 import type { SearchLawArgs, GetLawArgs, GetTocArgs, SearchFulltextArgs } from '../types/index.js';
 
 const NOT_IMPLEMENTED = {
@@ -109,6 +113,32 @@ export async function handleExplainLawType(args: { name: string }) {
 }
 
 /**
+ * explain_business_law_restriction — 士業独占規定の解説（Phase 0 で動作）
+ *
+ * 利用者が「houki-hub-mcp + LLM の活用が業法に抵触しないか」を判断するための知識ツール。
+ */
+export async function handleExplainBusinessLawRestriction(args: { name: string }) {
+  const entry = findBusinessLawRestriction(args.name);
+  if (!entry) {
+    return {
+      name: args.name,
+      found: false,
+      hint: `知らない士業／業法です。試せる名前: ${listBusinessLawProfessions().join(', ')}`,
+      see_also: 'DISCLAIMER.md',
+    };
+  }
+  return {
+    name: args.name,
+    found: true,
+    info: entry,
+    related_tools: ['explain_law_type', 'get_law'],
+    see_also: 'DISCLAIMER.md',
+    disclaimer:
+      '本データは法令の概要を示すものであり、個別事案の判断は有資格者に相談してください。境界事例は判例・通達でも解釈が分かれることがあります。',
+  };
+}
+
+/**
  * Tool handlers map
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -119,4 +149,5 @@ export const toolHandlers: Record<string, (args: any) => Promise<unknown>> = {
   search_fulltext: handleSearchFulltext,
   resolve_abbreviation: handleResolveAbbreviation,
   explain_law_type: handleExplainLawType,
+  explain_business_law_restriction: handleExplainBusinessLawRestriction,
 };
