@@ -27,6 +27,10 @@ npm-debug.log*
 # Test
 coverage/
 
+# Vite/Vitest が config 読み込み時に作る一時ファイル
+*.timestamp-*.mjs
+vitest.config.ts.timestamp-*
+
 # Environment
 .env
 .env.local
