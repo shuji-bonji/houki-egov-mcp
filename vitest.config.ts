@@ -13,14 +13,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: [
-        'src/**/*.test.ts',
-        'src/types/**',
-        'src/index.ts',
-        'src/abbreviations/**',
-        'src/extensions/**',
-        'src/knowledge/business-law-restrictions.ts',
-      ],
+      exclude: ['src/**/*.test.ts', 'src/types/**', 'src/index.ts'],
     },
   },
 });

@@ -1,6 +1,6 @@
 import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
 import eslintConfigPrettier from 'eslint-config-prettier';
+import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   js.configs.recommended,
@@ -34,17 +34,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: [
-      'dist/**',
-      'node_modules/**',
-      '*.js',
-      'scripts/**',
-      'examples/**',
-      // v0.2.0 で削除予定（sandbox からは rm できないため、ユーザー側で手作業削除）
-      'src/abbreviations/**',
-      'src/extensions/**',
-      'src/knowledge/business-law-restrictions.ts',
-      'src/knowledge/business-law-restrictions.test.ts',
-    ],
+    ignores: ['dist/**', 'node_modules/**', '*.js', 'scripts/**', 'examples/**'],
   }
 );

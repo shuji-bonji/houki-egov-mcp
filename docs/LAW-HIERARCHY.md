@@ -253,6 +253,5 @@ explain_law_type({ name: "Act" })
 
 - [README.md](../README.md) — プロジェクト概要
 - [DISCLAIMER.md](../DISCLAIMER.md) — カバレッジ範囲・責任分離
-- [docs/DESIGN.md](DESIGN.md) — 設計原則
-- [docs/IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) — Phase 1〜3 計画
+- [docs/DESIGN.md](DESIGN.md) — 設計原則・houki-hub family のロードマップ
 - [src/knowledge/law-hierarchy.ts](../src/knowledge/law-hierarchy.ts) — 構造化データの実体
