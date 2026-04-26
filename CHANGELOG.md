@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added (Phase 1 — e-Gov 法令API v2 コア実装)
+### Planned (Phase 1 磨き込み — 痛点ログ駆動)
+
+- 漢数字対応（「第三十条」を 30 に変換）
+- 大規模法令の応答サイズ対策（民法・会社法）
+- エラーメッセージの LLM 可読化向上
+
+## [0.1.0] - 2026-04-26
+
+**Phase 1（e-Gov 法令API v2 コア実装）完了リリース**。条文・目次取得が実 API ベースで動作する最初の実用バージョン。
+
+### Added — Phase 1 コア実装
 
 - **e-Gov 法令API v2 クライアント** (`src/services/egov-client.ts`)
   - `searchLaws` / `getLawData` — snake_case パラメータで叩く
@@ -30,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `get_toc` — 法令の目次のみ取得
   - `search_fulltext` — Phase 2 までは search_law にフォールバック
 
-### Added (Phase 0 同梱)
+### Added — Phase 0 同梱（v0.1.0 で正式化）
 
 - **法令種別ナレッジ** (`src/knowledge/law-hierarchy.ts`) — 10 種別（憲法・法律・政令・省令・規則・条例・告示・訓令・通達・通知）の制定主体・階層・拘束力・実務上の注意点を構造化
 - **業法独占規定ナレッジ** (`src/knowledge/business-law-restrictions.ts`) — 7職業（弁護士・税理士・社労士・公認会計士・司法書士・行政書士・弁理士）の業務独占規定・違反要件・規制外の典型例を構造化
@@ -43,20 +53,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Tests
 
-- **74 tests passed**（Phase 0: 49 → Phase 1: 74、+25）
-  - law-tree: 14 / cache: 6 / article-num: 6 / handlers: 15
-- E2E 動作確認: 消法30条1項取得・労基法目次取得・消費税法検索
+- **74 tests passed**（v0.0.1: 49 → v0.1.0: 74、+25）
+  - law-tree: 14 / cache: 6 / article-num: 6 / handlers: 15 / abbreviations: 13 / law-hierarchy: 11 / business-law-restrictions: 9
+- E2E 動作確認: 消法30条1項取得・労基法目次取得・消費税法検索（実 e-Gov API 経由）
 
-### Known Limitations (v0.1.0)
+### Internal
+
+- リポジトリリネーム: `jp-houki-mcp` → `houki-hub-mcp`
+- `.gitignore` に Vite/Vitest の timestamp 一時ファイルを追加
+
+### Known Limitations
 
 - 漢数字の条番号（「第三十条の二」など）は未対応 — アラビア数字でご指定ください
-- `search_fulltext` は Phase 2（bulkDL + SQLite FTS5）まで本実装ではない
+- `search_fulltext` は Phase 2（bulkDL + SQLite FTS5）まで本実装ではない（タイトル一致 search_law にフォールバック）
+- 大規模法令（民法・会社法等）の本文一括取得時にレスポンスサイズが大きい
 
-### Planned (Phase 1)
+---
 
-- e-Gov 法令API v2 クライアント実装
-- `get_law` / `search_law` / `get_toc` 本実装（現状はスタブ）
-- 略称辞書に `law_id` を埋めるバッチ検証スクリプト
+## [Future planning — 0.1.0 以降]
 
 ### Planned (Phase 2)
 
@@ -110,5 +124,6 @@ Phase 0（スケルトン整備）完了リリース。
 
 **Phase 0 完了**。Phase 1 本実装の前に、**2週間の実運用痛点ログ**（`docs/PAIN-POINTS-TEMPLATE.md`）を経由して MVP スコープを確定する。
 
-[Unreleased]: https://github.com/shuji-bonji/houki-hub-mcp/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/shuji-bonji/houki-hub-mcp/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/shuji-bonji/houki-hub-mcp/releases/tag/v0.1.0
 [0.0.1]: https://github.com/shuji-bonji/houki-hub-mcp/releases/tag/v0.0.1
