@@ -77,4 +77,55 @@ describe('NEXT_ACTIONS presets', () => {
     const a = NEXT_ACTIONS.visitEgovSite('325AC0000000204');
     expect(a.example?.url).toBe('https://laws.e-gov.go.jp/law/325AC0000000204');
   });
+
+  it('delegateTo carries the target MCP hint as example', () => {
+    const a = NEXT_ACTIONS.delegateTo('houki-nta');
+    expect(a.action).toBe('delegate_to_mcp');
+    expect(a.example).toEqual({ mcp: 'houki-nta' });
+  });
+});
+
+describe('family-wide code 語彙 (v0.3.0+)', () => {
+  it('SOURCE_RATE_LIMITED is accepted by makeError', () => {
+    const err = makeError('SOURCE_RATE_LIMITED', '429 returned', {
+      retryable: true,
+      detail: { status: 429 },
+    });
+    expect(err.code).toBe('SOURCE_RATE_LIMITED');
+    expect(err.retryable).toBe(true);
+  });
+
+  it('SOURCE_TIMEOUT is accepted', () => {
+    expect(makeError('SOURCE_TIMEOUT', 'timeout').code).toBe('SOURCE_TIMEOUT');
+  });
+
+  it('SOURCE_API_ERROR is accepted', () => {
+    expect(makeError('SOURCE_API_ERROR', 'api error').code).toBe('SOURCE_API_ERROR');
+  });
+
+  it('SOURCE_UNAVAILABLE is accepted', () => {
+    expect(makeError('SOURCE_UNAVAILABLE', 'cannot reach host').code).toBe('SOURCE_UNAVAILABLE');
+  });
+
+  it('OUT_OF_SCOPE is accepted with delegateTo next_action', () => {
+    const err = makeError('OUT_OF_SCOPE', '「消費税法基本通達」は houki-nta の管轄です', {
+      next_actions: [NEXT_ACTIONS.delegateTo('houki-nta')],
+    });
+    expect(err.code).toBe('OUT_OF_SCOPE');
+    expect(err.next_actions?.[0].action).toBe('delegate_to_mcp');
+  });
+});
+
+describe('legacy EGOV_* code 後方互換 (v0.2.x からの移行期間)', () => {
+  it('EGOV_RATE_LIMITED still type-checks (deprecated)', () => {
+    expect(makeError('EGOV_RATE_LIMITED', 'legacy').code).toBe('EGOV_RATE_LIMITED');
+  });
+
+  it('EGOV_TIMEOUT still type-checks (deprecated)', () => {
+    expect(makeError('EGOV_TIMEOUT', 'legacy').code).toBe('EGOV_TIMEOUT');
+  });
+
+  it('EGOV_API_ERROR still type-checks (deprecated)', () => {
+    expect(makeError('EGOV_API_ERROR', 'legacy').code).toBe('EGOV_API_ERROR');
+  });
 });

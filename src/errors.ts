@@ -12,24 +12,46 @@
  * - retryable: 一時的エラーかどうか（true なら時間をおいて再試行可）
  */
 
-/** エラーコード — 安定した識別子。LLM の分岐用に用途別に分けてある */
+/**
+ * エラーコード — 安定した識別子。LLM の分岐用に用途別に分けてある。
+ *
+ * v0.3.0 で houki-hub family の共通語彙 (`SOURCE_*` / `OUT_OF_SCOPE`) を採用。
+ * 既存の `EGOV_*` 系は **後方互換のため残置**しているが、新規実装では `SOURCE_*` を使うこと。
+ *
+ * @see https://github.com/shuji-bonji/houki-research-skill/blob/main/docs/ERROR-CODES.md
+ */
 export type LawErrorCode =
-  /** 引数バリデーション失敗（クライアント側責任） */
+  // --- 引数・入力 (クライアント側責任) ---
+  /** 引数バリデーション失敗 */
   | 'INVALID_ARGUMENT'
+  /** 条番号フォーマットが不正（例: "三十" のような未対応の漢数字） */
+  | 'INVALID_ARTICLE_NUM'
+  /** 別 MCP の管轄リソースが要求された（略称解決の結果、houki-egov 以外と判明） */
+  | 'OUT_OF_SCOPE'
+  // --- リソース未発見 ---
   /** 法令名が解決できなかった */
   | 'LAW_NOT_FOUND'
   /** 条/項/号が見つからなかった */
   | 'ARTICLE_NOT_FOUND'
-  /** 条番号フォーマットが不正（例: "三十" のような未対応の漢数字） */
-  | 'INVALID_ARTICLE_NUM'
   /** 略称辞書に該当なし */
   | 'ABBREVIATION_NOT_FOUND'
-  /** e-Gov API がエラーを返した */
+  // --- 外部ソース由来 (family 共通) ---
+  /** 外部 API (e-Gov) がエラー応答 */
+  | 'SOURCE_API_ERROR'
+  /** 外部 API がタイムアウト */
+  | 'SOURCE_TIMEOUT'
+  /** 外部 API がレート制限を返した（HTTP 429） */
+  | 'SOURCE_RATE_LIMITED'
+  /** 外部リソースに接続不能（DNS 失敗・ネットワーク断） */
+  | 'SOURCE_UNAVAILABLE'
+  // --- 旧コード (v0.2.x までの後方互換、新規実装では使わない) ---
+  /** @deprecated v0.3.0+ では `SOURCE_API_ERROR` を使う */
   | 'EGOV_API_ERROR'
-  /** e-Gov API がタイムアウトした */
+  /** @deprecated v0.3.0+ では `SOURCE_TIMEOUT` を使う */
   | 'EGOV_TIMEOUT'
-  /** e-Gov API がレート制限を返した（429） */
+  /** @deprecated v0.3.0+ では `SOURCE_RATE_LIMITED` を使う */
   | 'EGOV_RATE_LIMITED'
+  // --- システム ---
   /** 未知のツール */
   | 'UNKNOWN_TOOL'
   /** 内部エラー（バグ） */
@@ -127,5 +149,10 @@ export const NEXT_ACTIONS = {
     example: lawId
       ? { url: `https://laws.e-gov.go.jp/law/${lawId}` }
       : { url: 'https://laws.e-gov.go.jp/' },
+  }),
+  delegateTo: (mcpHint: string): NextAction => ({
+    action: 'delegate_to_mcp',
+    reason: `${mcpHint} の管轄リソースです。該当 MCP に切り替えてください`,
+    example: { mcp: mcpHint },
   }),
 } as const;

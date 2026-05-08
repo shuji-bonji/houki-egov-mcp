@@ -118,6 +118,50 @@ houki-egov-mcp は **単体で利用可能**ですが、houki-hub MCP family の
 
 family 全体の設計思想・想定利用シーン・業法との関係は [`docs/DESIGN.md`](docs/DESIGN.md) を参照。
 
+## エラー応答 (houki-hub family contract)
+
+**v0.3.0** より、本 MCP のエラー応答は **houki-hub family 共通契約**に完全準拠します。`code` 文字列は family 全体で統一された語彙を使用するため、複数の MCP を併用しても LLM・Skill 層は一貫したロジックで解釈できます。
+
+- [`docs/ERROR-CODES.md`](https://github.com/shuji-bonji/houki-research-skill/blob/main/docs/ERROR-CODES.md) — 共通エラーコード語彙の正典 (houki-research-skill)
+- [`docs/ERROR-HANDLING.md`](https://github.com/shuji-bonji/houki-research-skill/blob/main/docs/ERROR-HANDLING.md) — 解釈ポリシー / next_actions テンプレ
+
+houki-egov-mcp の [`src/errors.ts`](src/errors.ts) は family 全体の **リファレンス実装**として位置付けられています。他 MCP は同じ `code` 語彙を共有しつつ、共通パッケージへの依存は持たずに独立実装します。
+
+```json
+{
+  "error": "法令『消費税法』第3000条は存在しません",
+  "code": "ARTICLE_NOT_FOUND",
+  "hint": "条番号を get_toc で確認してください",
+  "next_actions": [
+    { "action": "get_toc", "reason": "目次で正しい条番号を特定", "example": { "law_name": "消費税法" } }
+  ],
+  "retryable": false
+}
+```
+
+### 本 MCP で使用するコード
+
+| code | 用途 | retryable |
+|---|---|---|
+| `INVALID_ARGUMENT` | キーワード未指定など引数バリデーション失敗 | `false` |
+| `INVALID_ARTICLE_NUM` | 条番号フォーマットが不正 (例: 未対応の漢数字) | `false` |
+| `OUT_OF_SCOPE` | 通達名で `get_law` を呼んだ等、別 MCP の管轄リソースが要求された | `false` |
+| `LAW_NOT_FOUND` | 略称解決・検索のいずれでも法令が見つからない | `false` |
+| `ARTICLE_NOT_FOUND` | 指定された条/項/号が見つからない | `false` |
+| `SOURCE_API_ERROR` | e-Gov API がエラー応答 (4xx/5xx) | 状況による |
+| `SOURCE_TIMEOUT` | e-Gov API がタイムアウト | `true` |
+| `SOURCE_RATE_LIMITED` | e-Gov API がレート制限 (HTTP 429) | `true` |
+| `SOURCE_UNAVAILABLE` | DNS 失敗 / ECONNREFUSED 等で e-Gov に到達不能 | `true` |
+| `INTERNAL_ERROR` | 内部エラー (バグ・予期せぬ例外) | `false` |
+| `UNKNOWN_TOOL` | 存在しない tool 名が呼ばれた | `false` |
+
+### Migration (v0.2.x → v0.3.0)
+
+- v0.2.x までは `EGOV_API_ERROR` / `EGOV_TIMEOUT` / `EGOV_RATE_LIMITED` を返していました。v0.3.0 からは family 共通の `SOURCE_API_ERROR` / `SOURCE_TIMEOUT` / `SOURCE_RATE_LIMITED` に切替。
+- `EGOV_*` は `LawErrorCode` の型としては残置していますが、本 MCP からはもう発行しません。次のメジャー (v1.0.0) で削除予定。
+- 構造化エラーの形 (`{ error, code, hint?, next_actions?, retryable?, detail? }`) は不変。クライアント側で `code` 文字列の比較をしている場合は `SOURCE_*` を受け付けるよう更新してください。
+- `OUT_OF_SCOPE` を新たに受け取る可能性があります。例えば「消基通」(消費税法基本通達 / 国税庁の通達) を `get_law` の `law_name` に渡すと、`next_actions[0].example.mcp = "houki-nta"` を含む `OUT_OF_SCOPE` が返されるので、Skill 層は houki-nta-mcp に切り替えてください。
+
 ## ドキュメント
 
 - [`docs/LAW-HIERARCHY.md`](docs/LAW-HIERARCHY.md) — 法令種別の階層リファレンス（専門家でない利用者向け）

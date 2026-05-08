@@ -13,6 +13,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
 - search_fulltext の SQLite FTS5 本実装（Phase 2 — bulkDL ベース）
 
+## [0.3.0] - 2026-05-08
+
+houki-hub family の error contract に完全準拠するための磨き込みリリース。`code` 語彙を family 全体で揃え、別 MCP の管轄リソース要求に対する `OUT_OF_SCOPE` 検知を導入。
+
+### Added
+
+- **family 共通エラーコード `SOURCE_*` を採用** — `LawErrorCode` に `SOURCE_API_ERROR` / `SOURCE_TIMEOUT` / `SOURCE_RATE_LIMITED` / `SOURCE_UNAVAILABLE` を追加。`SOURCE_UNAVAILABLE` は ECONNREFUSED / ENOTFOUND / EAI_AGAIN 等のネットワーク到達不能を検知する新コード。
+- **`OUT_OF_SCOPE` エラーコードと scope ガード** — 略称解決の結果が houki-egov 以外の管轄 (例: 通達は `houki-nta`、判例は `houki-court`) と判明した場合、新規 `checkAbbreviationScope()` が `get_law` / `get_toc` / `get_law_revisions` の入口で `OUT_OF_SCOPE` エラーを返す。`next_actions[0].example.mcp` で正しい MCP を指示するため、Skill 層が透過的にルーティングできる。
+- **`NEXT_ACTIONS.delegateTo(mcpHint)` プリセット** — `OUT_OF_SCOPE` 時に他 MCP への切替を勧める next_action。
+
+### Changed
+
+- **`egovHttpErrorToLawError` が SOURCE_* を発行するように移行** — 内部実装を `EGOV_RATE_LIMITED` → `SOURCE_RATE_LIMITED` / `EGOV_TIMEOUT` → `SOURCE_TIMEOUT` / `EGOV_API_ERROR` → `SOURCE_API_ERROR` に切替。`SOURCE_UNAVAILABLE` の検知ロジックも追加。
+- **エラーコード分類のドキュメンテーション** — `src/errors.ts` の `LawErrorCode` を「引数・入力 / リソース未発見 / 外部ソース由来 / 旧コード / システム」のカテゴリ別に整理。
+
+### Deprecated
+
+- **`EGOV_RATE_LIMITED` / `EGOV_TIMEOUT` / `EGOV_API_ERROR`** — `LawErrorCode` の型としては残置 (v0.2.x 前提のクライアントが破綻しないため) が、内部実装からはもう発行しない。新規実装では `SOURCE_*` を使うこと。次のメジャー (v1.0.0) で削除予定。
+
+### Migration (v0.2.1 → v0.3.0)
+
+- 後方互換: 構造化エラーの形 (`{ error, code, hint?, next_actions?, retryable?, detail? }`) は変わらない
+- ただし以前 `EGOV_*` で来ていた `code` が `SOURCE_*` に変わる。client/Skill 側で `code` 文字列の比較をしている場合は両方を受け付けるようにするか、houki-research-skill の最新 `docs/ERROR-CODES.md` に従う
+- `OUT_OF_SCOPE` を新たに受け取る可能性がある (例: 通達名で `get_law` を呼んだとき)。Skill 側は `resolved.source_mcp_hint` または `next_actions[0].example.mcp` を見て該当 MCP に切替
+
 ## [0.2.1] - 2026-05-03
 
 外部レビューを反映した磨き込みリリース。破壊的変更なし、すべて後方互換。

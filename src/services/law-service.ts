@@ -42,11 +42,14 @@ import {
  * EgovHttpError などの例外を、LLM 可読な LawServiceError に変換する。
  * code / hint / next_actions / retryable を含む統一形にすることで、
  * 呼び出し側 LLM が「次に何をすべきか」を判断しやすくする。
+ *
+ * v0.3.0 で family 共通の `SOURCE_*` 語彙に切替。
+ * `EGOV_*` 系は LawErrorCode に残置しているが、本関数からはもう発行しない。
  */
 function egovHttpErrorToLawError(err: unknown): LawServiceError {
   if (err instanceof EgovHttpError) {
     if (err.status === 429) {
-      return makeError('EGOV_RATE_LIMITED', 'e-Gov API がレート制限を返しました（429）', {
+      return makeError('SOURCE_RATE_LIMITED', 'e-Gov API がレート制限を返しました（429）', {
         hint: '短時間に多数のリクエストを送るとレート制限が発動します',
         retryable: true,
         next_actions: [NEXT_ACTIONS.retryLater()],
@@ -54,7 +57,7 @@ function egovHttpErrorToLawError(err: unknown): LawServiceError {
       });
     }
     if (err.status === 0) {
-      return makeError('EGOV_TIMEOUT', 'e-Gov API がタイムアウトしました', {
+      return makeError('SOURCE_TIMEOUT', 'e-Gov API がタイムアウトしました', {
         hint: 'ネットワーク状態を確認するか、時間をおいて再試行してください',
         retryable: true,
         next_actions: [NEXT_ACTIONS.retryLater(), NEXT_ACTIONS.visitEgovSite()],
@@ -63,7 +66,7 @@ function egovHttpErrorToLawError(err: unknown): LawServiceError {
     }
     if (err.status >= 500) {
       return makeError(
-        'EGOV_API_ERROR',
+        'SOURCE_API_ERROR',
         `e-Gov API がサーバーエラーを返しました（${err.status}）`,
         {
           hint: 'e-Gov 側の一時的障害の可能性があります',
@@ -73,17 +76,55 @@ function egovHttpErrorToLawError(err: unknown): LawServiceError {
         }
       );
     }
-    return makeError('EGOV_API_ERROR', `e-Gov API error: ${err.message}`, {
+    return makeError('SOURCE_API_ERROR', `e-Gov API error: ${err.message}`, {
       retryable: false,
       detail: { status: err.status, url: err.url },
     });
   }
+  // ネットワーク到達不能 (DNS 失敗・接続拒否) は SOURCE_UNAVAILABLE
   const cause = err instanceof Error ? err.message : String(err);
-  return makeError('EGOV_API_ERROR', `e-Gov API 呼び出しに失敗しました: ${cause}`, {
+  if (
+    cause.includes('ECONNREFUSED') ||
+    cause.includes('ENOTFOUND') ||
+    cause.includes('EAI_AGAIN') ||
+    cause.includes('getaddrinfo')
+  ) {
+    return makeError('SOURCE_UNAVAILABLE', `e-Gov API に接続できません: ${cause}`, {
+      hint: 'ネットワーク接続または DNS 解決に問題がある可能性があります',
+      retryable: true,
+      next_actions: [NEXT_ACTIONS.retryLater(), NEXT_ACTIONS.visitEgovSite()],
+      detail: { cause },
+    });
+  }
+  return makeError('SOURCE_API_ERROR', `e-Gov API 呼び出しに失敗しました: ${cause}`, {
     retryable: true,
     next_actions: [NEXT_ACTIONS.retryLater()],
     detail: { cause },
   });
+}
+
+/**
+ * houki-egov-mcp の管轄外リソース (通達・PDF・判例 等) が略称解決で判明した場合、
+ * `OUT_OF_SCOPE` エラーを返す。Skill 層は `next_actions[0].example.mcp` を見て
+ * 適切な MCP に透過的にルーティングする。
+ *
+ * `houki-egov` 管轄、または辞書に未登録の場合は `null` を返し、通常フローに進める。
+ */
+function checkAbbreviationScope(name: string): LawServiceError | null {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const abbr = resolveAbbreviation(trimmed);
+  if (!abbr) return null;
+  if (abbr.source_mcp_hint === 'houki-egov') return null;
+  return makeError(
+    'OUT_OF_SCOPE',
+    `「${abbr.formal}」は ${abbr.source_mcp_hint} の管轄です（houki-egov-mcp は法律・政令・省令の本文のみを扱います）`,
+    {
+      hint: `${abbr.source_mcp_hint}-mcp の対応 tool に切り替えてください`,
+      next_actions: [NEXT_ACTIONS.delegateTo(abbr.source_mcp_hint)],
+      detail: { cause: `source_mcp_hint=${abbr.source_mcp_hint}` },
+    }
+  );
 }
 
 /** 法令本文（パース済み）のキャッシュ。キーは `${law_id}:${at ?? 'current'}` */
@@ -239,6 +280,9 @@ export async function getLawArticle(opts: {
     | { format: 'toc'; markdown: string; meta: ArticleMeta }
   >
 > {
+  const scopeError = checkAbbreviationScope(opts.law_name);
+  if (scopeError) return scopeError;
+
   const resolved = await resolveLawId(opts.law_name);
   if (!resolved) {
     return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
@@ -391,6 +435,9 @@ export async function getLawToc(opts: { law_name: string; at?: string; depth?: n
     truncated: boolean;
   }>
 > {
+  const scopeError = checkAbbreviationScope(opts.law_name);
+  if (scopeError) return scopeError;
+
   const resolved = await resolveLawId(opts.law_name);
   if (!resolved) {
     return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
@@ -476,6 +523,9 @@ export async function getLawRevisionsByName(opts: { law_name: string; latest?: n
     }>;
   }>
 > {
+  const scopeError = checkAbbreviationScope(opts.law_name);
+  if (scopeError) return scopeError;
+
   const resolved = await resolveLawId(opts.law_name);
   if (!resolved) {
     return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
