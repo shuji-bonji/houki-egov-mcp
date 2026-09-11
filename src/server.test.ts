@@ -108,6 +108,35 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
     expect(JSON.parse(firstText(res3)).code).toBe('INVALID_ARGUMENT');
   });
 
+  it('すべてのツールの inputSchema に additionalProperties: false が付く (v0.6.0)', async () => {
+    const res = await client.listTools();
+    for (const t of res.tools) {
+      expect(t.inputSchema.additionalProperties).toBe(false);
+    }
+  });
+
+  it('inputSchema に無い引数は INVALID_ARGUMENT で、detail.issues の path に引数名が入る (v0.6.0)', async () => {
+    const res = await client.callTool({
+      name: 'explain_law_type',
+      arguments: { name: '政令', typo: 1 },
+    });
+    expect(res.isError).toBe(true);
+    const body = JSON.parse(firstText(res));
+    expect(body.code).toBe('INVALID_ARGUMENT');
+    expect(body.detail.issues[0].path).toBe('typo');
+  });
+
+  it('get_law の item は文字列も inputSchema の検証を通る (v0.6.0)', async () => {
+    // paragraph が無いので handler が INVALID_ARGUMENT を返す（e-Gov には触れない）
+    const res = await client.callTool({
+      name: 'get_law',
+      arguments: { law_name: '消費税法', article: '2', item: '8の2' },
+    });
+    const body = JSON.parse(firstText(res));
+    expect(body.code).toBe('INVALID_ARGUMENT');
+    expect(body.error).toContain('paragraph');
+  });
+
   it('explain_law_type が isError なしで JSON を返す', async () => {
     const res = await client.callTool({ name: 'explain_law_type', arguments: { name: '政令' } });
     expect(res.isError).toBeFalsy();

@@ -5,51 +5,42 @@
  * Single Source of Truth はそちら。
  */
 
-import type { Domain, LawTypeCode, OutputFormat } from '../constants.js';
+import type {
+  explainLawTypeTool,
+  getLawRevisionsTool,
+  getLawTool,
+  getTocTool,
+  resolveAbbreviationTool,
+  searchFulltextTool,
+  searchLawTool,
+} from '../tools/definitions.js';
+import type { ArgsOf } from '../tools/tool-args.js';
 
 // houki-abbreviations から re-export（後方互換のため）
 export type { AbbreviationEntry } from '@shuji-bonji/houki-abbreviations';
 
-/** 法令検索引数 */
-export interface SearchLawArgs {
-  keyword: string;
-  law_type?: LawTypeCode;
-  domain?: Domain;
-  limit?: number;
-}
+/**
+ * ツールの引数の型（v0.6.0 から inputSchema から導く。手書きの interface はやめた）。
+ * inputSchema は src/tools/definitions.ts。導き方は src/tools/tool-args.ts の `ArgsOf`。
+ */
 
-/** 条文取得引数 */
-export interface GetLawArgs {
-  /** 法令名または略称。例: "消法", "消費税法" */
-  law_name: string;
-  /** 条番号。format=toc の場合は省略可 */
-  article?: string;
-  /** 項番号 */
-  paragraph?: number;
-  /** 号番号。数値（8）か文字列（"8"・"8の2"・"第8号の2"） */
-  item?: number | string;
-  /** 出力形式 */
-  format?: OutputFormat;
-  /** 時点指定（YYYY-MM-DD）。e-Gov API v2 の改正前条文取得に対応 */
-  at?: string;
-}
+/** 法令検索引数 */
+export type SearchLawArgs = ArgsOf<typeof searchLawTool.inputSchema>;
+
+/** 条文取得引数。item は数値（8）か文字列（"8"・"8の2"・"第8号の2"） */
+export type GetLawArgs = ArgsOf<typeof getLawTool.inputSchema>;
 
 /** 目次取得引数 */
-export interface GetTocArgs {
-  law_name: string;
-  at?: string;
-  /**
-   * 階層の打ち切り深さ。例: 1=編まで, 2=章まで, 3=節まで。
-   * 民法・会社法のような大規模法令でレスポンスサイズを抑える用途。
-   * 省略時は全階層を返す。
-   */
-  depth?: number;
-}
+export type GetTocArgs = ArgsOf<typeof getTocTool.inputSchema>;
 
 /** 全文検索引数（bulk cache モード時のみ有効） */
-export interface SearchFulltextArgs {
-  keyword: string;
-  domain?: Domain;
-  law_type?: LawTypeCode;
-  limit?: number;
-}
+export type SearchFulltextArgs = ArgsOf<typeof searchFulltextTool.inputSchema>;
+
+/** 改正履歴取得引数 */
+export type GetLawRevisionsArgs = ArgsOf<typeof getLawRevisionsTool.inputSchema>;
+
+/** 略称解決引数 */
+export type ResolveAbbreviationArgs = ArgsOf<typeof resolveAbbreviationTool.inputSchema>;
+
+/** 法令種別の解説引数 */
+export type ExplainLawTypeArgs = ArgsOf<typeof explainLawTypeTool.inputSchema>;

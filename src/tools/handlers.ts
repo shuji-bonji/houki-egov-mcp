@@ -24,8 +24,26 @@ import {
   getLawToc,
   searchLawByKeyword,
 } from '../services/law-service.js';
-import type { GetLawArgs, GetTocArgs, SearchFulltextArgs, SearchLawArgs } from '../types/index.js';
+import type {
+  ExplainLawTypeArgs,
+  GetLawArgs,
+  GetLawRevisionsArgs,
+  GetTocArgs,
+  ResolveAbbreviationArgs,
+  SearchFulltextArgs,
+  SearchLawArgs,
+} from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import {
+  explainLawTypeTool,
+  getLawRevisionsTool,
+  getLawTool,
+  getTocTool,
+  resolveAbbreviationTool,
+  searchFulltextTool,
+  searchLawTool,
+} from './definitions.js';
+import { bindTool, type ToolHandler } from './tool-args.js';
 
 /**
  * search_law — 法令検索
@@ -189,14 +207,14 @@ async function searchFulltextFallback(
 /**
  * get_law_revisions — 法令の改正履歴取得
  */
-export async function handleGetLawRevisions(args: { law_name: string; latest?: number }) {
+export async function handleGetLawRevisions(args: GetLawRevisionsArgs) {
   return getLawRevisionsByName(args);
 }
 
 /**
  * resolve_abbreviation — 略称解決（@shuji-bonji/houki-abbreviations 経由）
  */
-export async function handleResolveAbbreviation(args: { abbr: string }) {
+export async function handleResolveAbbreviation(args: ResolveAbbreviationArgs) {
   const result = resolveAbbreviation(args.abbr);
   if (!result) {
     // ABBREVIATION_NOT_FOUND は致命的ではないため、エラー応答ではなく
@@ -221,7 +239,7 @@ export async function handleResolveAbbreviation(args: { abbr: string }) {
  * 法務専門家でない利用者が「政令と省令の違い」「通達は守らなくていいのか」を
  * 確認するための知識ツール。
  */
-export async function handleExplainLawType(args: { name: string }) {
+export async function handleExplainLawType(args: ExplainLawTypeArgs) {
   const entry = findLawHierarchy(args.name);
   if (!entry) {
     // 既存形を維持（テストとの後方互換）。next_actions のみ補足。
@@ -249,15 +267,17 @@ export async function handleExplainLawType(args: { name: string }) {
 }
 
 /**
- * Tool handlers map
+ * tools/call の受け口の表。
+ *
+ * 引数は unknown で受け、`bindTool()` が inputSchema で検証してから型付きで各 handler に渡す
+ * （v0.6.0。v0.5.x は `(args: any) => …` の表で、検証は server.ts が行っていた）。
  */
-// biome-ignore lint/suspicious/noExplicitAny: 各 handler の引数型が異なるため、dispatch 表では any で受ける
-export const toolHandlers: Record<string, (args: any) => Promise<unknown>> = {
-  search_law: handleSearchLaw,
-  get_law: handleGetLaw,
-  get_toc: handleGetToc,
-  get_law_revisions: handleGetLawRevisions,
-  search_fulltext: handleSearchFulltext,
-  resolve_abbreviation: handleResolveAbbreviation,
-  explain_law_type: handleExplainLawType,
+export const toolHandlers: Record<string, ToolHandler> = {
+  search_law: bindTool(searchLawTool, handleSearchLaw),
+  get_law: bindTool(getLawTool, handleGetLaw),
+  get_toc: bindTool(getTocTool, handleGetToc),
+  get_law_revisions: bindTool(getLawRevisionsTool, handleGetLawRevisions),
+  search_fulltext: bindTool(searchFulltextTool, (args) => handleSearchFulltext(args)),
+  resolve_abbreviation: bindTool(resolveAbbreviationTool, handleResolveAbbreviation),
+  explain_law_type: bindTool(explainLawTypeTool, handleExplainLawType),
 };

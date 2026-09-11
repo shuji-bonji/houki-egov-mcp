@@ -1,188 +1,214 @@
 /**
  * MCP Tool Definitions
+ *
+ * inputSchema は `as const` で書き、引数の型は `ArgsOf<typeof xxxTool.inputSchema>` で導く（v0.6.0）。
+ * すべての inputSchema に `additionalProperties: false` を付け、未知の引数は INVALID_ARGUMENT にする。
  */
 import type { Tool } from '@modelcontextprotocol/server';
 import { DOMAINS, LIMITS, OUTPUT_FORMATS } from '../constants.js';
+import { type ToolSpec, toMcpTool } from './tool-args.js';
 
+// ========================================
+// Phase 1: Core (e-Gov API v2)
+// ========================================
+export const searchLawTool = {
+  name: 'search_law',
+  description:
+    '日本の法令をキーワード・略称・分野で検索する。e-Gov法令API v2 を使用。略称辞書による正式名称への自動補完あり。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      keyword: {
+        type: 'string',
+        description:
+          '検索キーワード。例: "消費税", "労働基準", "育児休業"。略称も可（例: "消法", "労基法"）',
+      },
+      law_type: {
+        type: 'string',
+        enum: ['Act', 'CabinetOrder', 'ImperialOrdinance', 'MinisterialOrdinance', 'Rule'],
+        description: '法令種別で絞り込み',
+      },
+      domain: {
+        type: 'string',
+        enum: [...DOMAINS],
+        description: '分野タグで絞り込み（略称辞書ベース）',
+      },
+      limit: {
+        type: 'number',
+        description: `取得件数（デフォルト: ${LIMITS.searchDefault}、最大: ${LIMITS.searchMax}）`,
+        default: LIMITS.searchDefault,
+      },
+    },
+    required: ['keyword'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
+export const getLawTool = {
+  name: 'get_law',
+  description:
+    '日本の法令から条文を取得する。略称（消法・所法・労基法 等）対応。条/項/号レベル指定可能。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      law_name: {
+        type: 'string',
+        description: '法令名または略称。例: "消費税法", "消法", "労基法", "民法"',
+      },
+      article: {
+        type: 'string',
+        description: '条番号。例: "30", "30の2"。format="toc" の場合は省略可',
+      },
+      paragraph: {
+        type: 'number',
+        description: '項番号。省略時は条文全体',
+      },
+      item: {
+        type: ['number', 'string'],
+        description:
+          '号番号。数値（8）か文字列（"8"・"8の2"・"第8号の2"）。枝番号の号（第8号の2）は文字列で指定する。paragraph と一緒に指定する。省略時は項全体',
+      },
+      format: {
+        type: 'string',
+        enum: [...OUTPUT_FORMATS],
+        description:
+          '出力形式。"markdown"=条文全文（デフォルト）, "toc"=目次のみ（トークン節約）, "json"=構造化',
+        default: 'markdown',
+      },
+      at: {
+        type: 'string',
+        description:
+          '時点指定。YYYY-MM-DD 形式。例: "2024-04-01" でその時点の条文を取得（e-Gov v2 対応）',
+      },
+    },
+    required: ['law_name'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
+export const getTocTool = {
+  name: 'get_toc',
+  description:
+    '法令の目次（編・章・節・条の構造）のみを取得する。トークン節約用。depth で階層を浅く打ち切れる（民法・会社法のような大規模法令の概観把握向け）。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      law_name: {
+        type: 'string',
+        description: '法令名または略称',
+      },
+      at: {
+        type: 'string',
+        description: '時点指定（YYYY-MM-DD）',
+      },
+      depth: {
+        type: 'number',
+        description:
+          '構造階層の打ち切り深さ。1=編まで、2=章まで、3=節まで。省略時は全階層。例: 民法を depth=1 で取得すると「第一編 総則」「第二編 物権」のような大区分のみが返る',
+      },
+    },
+    required: ['law_name'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
+export const searchFulltextTool = {
+  name: 'search_fulltext',
+  description:
+    '法令の条文本文をキーワードで横断全文検索する（ローカル SQLite FTS5）。`houki-egov-mcp --bulk-download-everything` で構築した bulk DB を引き、略称は正式名称に OR 展開（例: "消法" → "消費税法"）。各ヒットに条番号・snippet・score・DB の鮮度 (freshness) を付けて返す。bulk DB 未構築時は search_law（法令名のタイトル一致）にフォールバックし、その旨を note で返す。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      keyword: {
+        type: 'string',
+        description:
+          '検索キーワード。スペース区切りで AND 検索。法令名・略称を含めると（例: "民法 不法行為", "労基法 時間外"）その法令の条に絞って本文を検索する。「第30条」を含めると該当条番号のヒットを上位に寄せ、法令名 + 条番号だけ（例: "民法 第709条"）ならその条を直接返す（漢数字は未対応）',
+      },
+      domain: {
+        type: 'string',
+        enum: [...DOMAINS],
+        description:
+          '分野タグ。v0.5.0 では受け付けるが絞り込みは行わない（bulk DB の category 列が未投入のため。Phase 2-13 で実効化）',
+      },
+      law_type: {
+        type: 'string',
+        enum: ['Act', 'CabinetOrder', 'ImperialOrdinance', 'MinisterialOrdinance', 'Rule'],
+        description: '法令種別で絞り込み',
+      },
+      limit: {
+        type: 'number',
+        description: `取得件数（デフォルト: ${LIMITS.fulltextDefault}、最大: ${LIMITS.fulltextMax}）`,
+        default: LIMITS.fulltextDefault,
+      },
+    },
+    required: ['keyword'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
+export const resolveAbbreviationTool = {
+  name: 'resolve_abbreviation',
+  description:
+    '略称・通称から正式な法令名と law_id を解決する。略称辞書の内容を確認するための診断ツール。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      abbr: {
+        type: 'string',
+        description: '略称。例: "消法", "所法", "労基法", "民"',
+      },
+    },
+    required: ['abbr'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
+export const getLawRevisionsTool = {
+  name: 'get_law_revisions',
+  description:
+    '法令の改正履歴を取得する。e-Gov v2 /law_revisions を使用。各改正の公布日・施行日・改正法令番号・状態（現行/旧法/未施行）等を返す。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      law_name: {
+        type: 'string',
+        description: '法令名または略称。例: "消費税法", "消法", "民法"',
+      },
+      latest: {
+        type: 'number',
+        description: '最新N件のみ返却（省略時は全件）。例: 5',
+      },
+    },
+    required: ['law_name'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
+export const explainLawTypeTool = {
+  name: 'explain_law_type',
+  description:
+    '法令種別（憲法・法律・政令・省令・規則・条例・告示・通達 等）の制定主体・階層上の位置・国民への拘束力・実務上の注意点を解説する。法務専門家でない利用者が「政令と省令の違い」「通達は守らなくていいのか」等を確認するための知識ツール。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description:
+          '法令種別の名前。例: "法律", "政令", "省令", "規則", "条例", "告示", "通達", "訓令", "憲法"。aliases も解決可（例: "施行令" → 政令、"施行規則" → 省令、"Act" → 法律）',
+      },
+    },
+    required: ['name'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
+/** tools/list に出すツールの一覧（定義の順） */
 export const tools: Tool[] = [
-  // ========================================
-  // Phase 1: Core (e-Gov API v2)
-  // ========================================
-  {
-    name: 'search_law',
-    description:
-      '日本の法令をキーワード・略称・分野で検索する。e-Gov法令API v2 を使用。略称辞書による正式名称への自動補完あり。',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        keyword: {
-          type: 'string',
-          description:
-            '検索キーワード。例: "消費税", "労働基準", "育児休業"。略称も可（例: "消法", "労基法"）',
-        },
-        law_type: {
-          type: 'string',
-          enum: ['Act', 'CabinetOrder', 'ImperialOrdinance', 'MinisterialOrdinance', 'Rule'],
-          description: '法令種別で絞り込み',
-        },
-        domain: {
-          type: 'string',
-          enum: [...DOMAINS],
-          description: '分野タグで絞り込み（略称辞書ベース）',
-        },
-        limit: {
-          type: 'number',
-          description: `取得件数（デフォルト: ${LIMITS.searchDefault}、最大: ${LIMITS.searchMax}）`,
-          default: LIMITS.searchDefault,
-        },
-      },
-      required: ['keyword'],
-    },
-  },
-  {
-    name: 'get_law',
-    description:
-      '日本の法令から条文を取得する。略称（消法・所法・労基法 等）対応。条/項/号レベル指定可能。',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        law_name: {
-          type: 'string',
-          description: '法令名または略称。例: "消費税法", "消法", "労基法", "民法"',
-        },
-        article: {
-          type: 'string',
-          description: '条番号。例: "30", "30の2"。format="toc" の場合は省略可',
-        },
-        paragraph: {
-          type: 'number',
-          description: '項番号。省略時は条文全体',
-        },
-        item: {
-          type: ['number', 'string'],
-          description:
-            '号番号。数値（8）か文字列（"8"・"8の2"・"第8号の2"）。枝番号の号（第8号の2）は文字列で指定する。paragraph と一緒に指定する。省略時は項全体',
-        },
-        format: {
-          type: 'string',
-          enum: [...OUTPUT_FORMATS],
-          description:
-            '出力形式。"markdown"=条文全文（デフォルト）, "toc"=目次のみ（トークン節約）, "json"=構造化',
-          default: 'markdown',
-        },
-        at: {
-          type: 'string',
-          description:
-            '時点指定。YYYY-MM-DD 形式。例: "2024-04-01" でその時点の条文を取得（e-Gov v2 対応）',
-        },
-      },
-      required: ['law_name'],
-    },
-  },
-  {
-    name: 'get_toc',
-    description:
-      '法令の目次（編・章・節・条の構造）のみを取得する。トークン節約用。depth で階層を浅く打ち切れる（民法・会社法のような大規模法令の概観把握向け）。',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        law_name: {
-          type: 'string',
-          description: '法令名または略称',
-        },
-        at: {
-          type: 'string',
-          description: '時点指定（YYYY-MM-DD）',
-        },
-        depth: {
-          type: 'number',
-          description:
-            '構造階層の打ち切り深さ。1=編まで、2=章まで、3=節まで。省略時は全階層。例: 民法を depth=1 で取得すると「第一編 総則」「第二編 物権」のような大区分のみが返る',
-        },
-      },
-      required: ['law_name'],
-    },
-  },
-  {
-    name: 'search_fulltext',
-    description:
-      '法令の条文本文をキーワードで横断全文検索する（ローカル SQLite FTS5）。`houki-egov-mcp --bulk-download-everything` で構築した bulk DB を引き、略称は正式名称に OR 展開（例: "消法" → "消費税法"）。各ヒットに条番号・snippet・score・DB の鮮度 (freshness) を付けて返す。bulk DB 未構築時は search_law（法令名のタイトル一致）にフォールバックし、その旨を note で返す。',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        keyword: {
-          type: 'string',
-          description:
-            '検索キーワード。スペース区切りで AND 検索。法令名・略称を含めると（例: "民法 不法行為", "労基法 時間外"）その法令の条に絞って本文を検索する。「第30条」を含めると該当条番号のヒットを上位に寄せ、法令名 + 条番号だけ（例: "民法 第709条"）ならその条を直接返す（漢数字は未対応）',
-        },
-        domain: {
-          type: 'string',
-          enum: [...DOMAINS],
-          description:
-            '分野タグ。v0.5.0 では受け付けるが絞り込みは行わない（bulk DB の category 列が未投入のため。Phase 2-13 で実効化）',
-        },
-        law_type: {
-          type: 'string',
-          enum: ['Act', 'CabinetOrder', 'ImperialOrdinance', 'MinisterialOrdinance', 'Rule'],
-          description: '法令種別で絞り込み',
-        },
-        limit: {
-          type: 'number',
-          description: `取得件数（デフォルト: ${LIMITS.fulltextDefault}、最大: ${LIMITS.fulltextMax}）`,
-          default: LIMITS.fulltextDefault,
-        },
-      },
-      required: ['keyword'],
-    },
-  },
-  {
-    name: 'resolve_abbreviation',
-    description:
-      '略称・通称から正式な法令名と law_id を解決する。略称辞書の内容を確認するための診断ツール。',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        abbr: {
-          type: 'string',
-          description: '略称。例: "消法", "所法", "労基法", "民"',
-        },
-      },
-      required: ['abbr'],
-    },
-  },
-  {
-    name: 'get_law_revisions',
-    description:
-      '法令の改正履歴を取得する。e-Gov v2 /law_revisions を使用。各改正の公布日・施行日・改正法令番号・状態（現行/旧法/未施行）等を返す。',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        law_name: {
-          type: 'string',
-          description: '法令名または略称。例: "消費税法", "消法", "民法"',
-        },
-        latest: {
-          type: 'number',
-          description: '最新N件のみ返却（省略時は全件）。例: 5',
-        },
-      },
-      required: ['law_name'],
-    },
-  },
-  {
-    name: 'explain_law_type',
-    description:
-      '法令種別（憲法・法律・政令・省令・規則・条例・告示・通達 等）の制定主体・階層上の位置・国民への拘束力・実務上の注意点を解説する。法務専門家でない利用者が「政令と省令の違い」「通達は守らなくていいのか」等を確認するための知識ツール。',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: {
-          type: 'string',
-          description:
-            '法令種別の名前。例: "法律", "政令", "省令", "規則", "条例", "告示", "通達", "訓令", "憲法"。aliases も解決可（例: "施行令" → 政令、"施行規則" → 省令、"Act" → 法律）',
-        },
-      },
-      required: ['name'],
-    },
-  },
-];
+  searchLawTool,
+  getLawTool,
+  getTocTool,
+  searchFulltextTool,
+  resolveAbbreviationTool,
+  getLawRevisionsTool,
+  explainLawTypeTool,
+].map(toMcpTool);

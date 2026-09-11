@@ -77,6 +77,9 @@ npm test
 「消費税法30条1項を見せて」
   → get_law(law_name="消法", article="30", paragraph=1)
 
+「消費税法2条1項8号の2（特定資産の譲渡等）を見せて」
+  → get_law(law_name="消法", article="2", paragraph=1, item="8の2")
+
 「労働基準法の目次を取得」
   → get_toc(law_name="労基法")
 
@@ -137,7 +140,7 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 
 ## 状態
 
-**v0.5.4 (2026-09-11)**
+**v0.6.0 (2026-09-12)**
 
 - [x] e-Gov 法令API v2 クライアント（`searchLaws` / `getLawData` / `getLawRevisions`）
 - [x] 法令ツリー走査（条/項/号、目次抽出）+ LRU cache
@@ -149,7 +152,9 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 - [x] Phase 2-7: `search_fulltext` の FTS5 本実装（略称 OR 展開 / revision 重複排除 / relevance scoring / freshness）
 - [x] MCP SDK v2（`@modelcontextprotocol/server`）/ Node 22・24 / TypeScript 7 / Biome
 - [x] Trusted Publisher (OIDC) で publish
-- [x] テストスイート（**258 tests**）
+- [x] `get_law` の `item` で枝番号の号（`"8の2"`・`"第8号の2"`）を指定（v0.6.0）
+- [x] ツールの引数の型を inputSchema から導き（json-schema-to-ts の `FromSchema`）、未知の引数は `INVALID_ARGUMENT`（v0.6.0）
+- [x] テストスイート（**287 tests**）
 
 ### 計画中
 
@@ -199,8 +204,8 @@ houki-egov-mcp の [`src/errors.ts`](src/errors.ts) は family 全体の **リ�
 
 | code | 用途 | retryable |
 |---|---|---|
-| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum。`detail.issues[]` に内訳）、キーワード未指定 等 | `false` |
-| `INVALID_ARTICLE_NUM` | 条番号フォーマットが不正 (例: 未対応の漢数字) | `false` |
+| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・inputSchema に無い引数。`detail.issues[]` に内訳）、キーワード未指定、`get_law` で `item` だけを指定して `paragraph` が無い 等 | `false` |
+| `INVALID_ARTICLE_NUM` | 条番号・号番号のフォーマットが不正 (例: 未対応の漢数字) | `false` |
 | `OUT_OF_SCOPE` | 通達名で `get_law` を呼んだ等、別 MCP の管轄リソースが要求された | `false` |
 | `LAW_NOT_FOUND` | 略称解決・検索のいずれでも法令が見つからない | `false` |
 | `ARTICLE_NOT_FOUND` | 指定された条/項/号が見つからない | `false` |

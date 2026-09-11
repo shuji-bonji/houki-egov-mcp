@@ -17,6 +17,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 漢数字対応（「第三十条」を 30 に変換）
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
 
+## [0.6.0] - 2026-09-12
+
+**minor リリース** — `get_law` の `item` で枝番号の号（第8号の2）を指定できるようにし、ツールの引数を inputSchema で厳密に扱うようにした。`item` の型が広がり、inputSchema に無い引数がエラーになるため minor。
+
+### Added
+
+- **`get_law` の `item` に文字列**: `8` / `"8"` / `"8の2"` / `"第8号の2"` を受け付ける（inputSchema は `type: ["number", "string"]`）。`toEgovItemNum()`（`src/utils/article-num.ts`）で e-Gov の `Num` 形式（`"8_2"`）にそろえて `findItem()` で探す。v0.5.4 までは `item` が数値だけで、`Num="8_2"` の号（消費税法 第2条第1項第8号の2 など）を指定できなかった。漢数字（`"八の二"`）は条番号と同じく未対応で `INVALID_ARTICLE_NUM`
+- 号を指定したときの Markdown の見出しを `formatItemLabel()` で「# 消費税法 第2条第1項第8号の2」にする（これまでは「第8_2号」になりえた）。号が見つからないときのメッセージも同じ表示
+
+### Changed
+
+- **inputSchema に無い引数は `INVALID_ARGUMENT`**: すべてのツールの inputSchema に `additionalProperties: false` を付けた。これまでは受け取って捨てていた。`detail.issues[].path` にその引数名が入る（既定バリデータの message には引数名が入らないため、`listUnknownArgs()` で数える）
+- **`get_law` で `item` だけを指定して `paragraph` が無いときは `INVALID_ARGUMENT`**: これまでは `item` を黙って無視して条全体を返していた
+- **ツールの引数の型を inputSchema から導く**: `src/tools/tool-args.ts` を追加。inputSchema を `as const` で書き、[json-schema-to-ts](https://github.com/ThomasAribart/json-schema-to-ts) の `FromSchema`（`keepDefaultedPropertiesOptional: true`）で引数の型を導く（`ArgsOf<typeof getLawTool.inputSchema>`）。`src/types/index.ts` の手書きの引数の interface はやめた
+  - `toolHandlers` を `Record<string, (args: any) => …>` から `Record<string, ToolHandler>`（引数は `unknown`）にした。`bindTool()` が inputSchema で検証してから型付きで handler に渡す。検証は server.ts の `validateArgs()` から `bindTool()` に移した
+  - biome の `noExplicitAny` の抑制コメントが無くなった
+  - `json-schema-to-ts` は型だけを使うので devDependencies
+- `format: "json"` の `item_num` は引数の値のまま（`number | string`）
+
+### Tests
+
+- 10 件追加（`toEgovItemNum` / `formatItemLabel` 4 件、`findItem` の枝番号 1 件、見出し 1 件、`item` だけを指定したとき 1 件、server の `additionalProperties` / 未知の引数 / `item` の文字列 3 件）。合計 **287 tests**（見込み）
+
+### 利用側への影響
+
+- inputSchema に無い引数を送っていた場合は `INVALID_ARGUMENT` になる（`detail.issues[].path` で引数名が分かる）
+- `get_law` に `item` を送るときは `paragraph` も必要（これまでも `paragraph` が無いと `item` は効いていなかった）
+
 ## [0.5.4] - 2026-09-11
 
 ### Fixed
