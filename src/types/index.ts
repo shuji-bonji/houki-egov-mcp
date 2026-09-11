@@ -26,8 +26,8 @@ export interface GetLawArgs {
   article?: string;
   /** 項番号 */
   paragraph?: number;
-  /** 号番号 */
-  item?: number;
+  /** 号番号。数値（8）か文字列（"8"・"8の2"・"第8号の2"） */
+  item?: number | string;
   /** 出力形式 */
   format?: OutputFormat;
   /** 時点指定（YYYY-MM-DD）。e-Gov API v2 の改正前条文取得に対応 */

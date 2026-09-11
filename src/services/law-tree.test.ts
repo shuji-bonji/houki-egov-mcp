@@ -151,8 +151,22 @@ describe('findParagraph / findItem', () => {
   it('finds item within paragraph', () => {
     const a = findArticle(fixture, '30')!;
     const p = findParagraph(a, 1)!;
-    const i = findItem(p, 1);
+    const i = findItem(p, '1');
     expect(i?.attr?.Num).toBe('1');
+  });
+
+  it('finds a branch-numbered item by e-Gov Num (v0.6.0)', () => {
+    const p: LawNode = {
+      tag: 'Paragraph',
+      attr: { Num: '1' },
+      children: [
+        { tag: 'Item', attr: { Num: '8' }, children: [] },
+        { tag: 'Item', attr: { Num: '8_2' }, children: [] },
+      ],
+    };
+    expect(findItem(p, '8_2')?.attr?.Num).toBe('8_2');
+    expect(findItem(p, '8')?.attr?.Num).toBe('8');
+    expect(findItem(p, '9')).toBeNull();
   });
 });
 

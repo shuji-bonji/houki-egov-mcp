@@ -15,7 +15,12 @@ import {
   NEXT_ACTIONS,
 } from '../errors.js';
 import { formatArticleMarkdown, formatTocMarkdown } from '../formatters/markdown.js';
-import { formatArticleLabel, toEgovArticleNum } from '../utils/article-num.js';
+import {
+  formatArticleLabel,
+  formatItemLabel,
+  toEgovArticleNum,
+  toEgovItemNum,
+} from '../utils/article-num.js';
 import { LRUCache } from '../utils/cache.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -270,7 +275,8 @@ export async function getLawArticle(opts: {
   law_name: string;
   article?: string;
   paragraph?: number;
-  item?: number;
+  /** 号番号。数値（8）か文字列（"8"・"8の2"・"第8号の2"）。v0.6.0 から文字列も受け付ける */
+  item?: number | string;
   format?: 'markdown' | 'json' | 'toc';
   at?: string;
 }): Promise<
@@ -282,6 +288,15 @@ export async function getLawArticle(opts: {
 > {
   const scopeError = checkAbbreviationScope(opts.law_name);
   if (scopeError) return scopeError;
+
+  // v0.6.0: item だけを指定して paragraph が無いと、これまでは item を黙って無視して条全体を返していた
+  if (opts.item !== undefined && opts.paragraph === undefined) {
+    return makeError(
+      'INVALID_ARGUMENT',
+      'item（号番号）を指定するときは paragraph（項番号）も指定してください',
+      { hint: '号は項の中にあります。第1項の号なら paragraph: 1 を付けてください' }
+    );
+  }
 
   const resolved = await resolveLawId(opts.law_name);
   if (!resolved) {
@@ -370,11 +385,19 @@ export async function getLawArticle(opts: {
       );
     }
     if (opts.item !== undefined) {
-      item = findItem(paragraph, opts.item);
+      let itemNum: string;
+      try {
+        itemNum = toEgovItemNum(opts.item);
+      } catch (err) {
+        return makeError('INVALID_ARTICLE_NUM', (err as Error).message, {
+          hint: '号番号は半角数字（例: 8）または "8の2" 形式で指定してください',
+        });
+      }
+      item = findItem(paragraph, itemNum);
       if (!item) {
         return makeError(
           'ARTICLE_NOT_FOUND',
-          `号が見つかりません: ${formatArticleLabel(articleNum)}第${opts.paragraph}項第${opts.item}号`,
+          `号が見つかりません: ${formatArticleLabel(articleNum)}第${opts.paragraph}項${formatItemLabel(itemNum)}`,
           {
             hint: '号番号は 1 始まりで指定してください。項全体が必要なら item を省略してください',
           }
@@ -496,7 +519,8 @@ export interface ArticleMeta {
 export interface ArticleJson {
   article_num: string;
   paragraph_num?: number;
-  item_num?: number;
+  /** 指定された号番号（引数の値のまま。v0.6.0 から "8の2" のような文字列もありうる） */
+  item_num?: number | string;
   node: LawNode;
 }
 

@@ -281,6 +281,20 @@ describe('formatArticleMarkdown', () => {
     );
   });
 
+  it('item: branch-numbered item header is 第8号の2 (no "第8_2号")', () => {
+    const p = paragraph('1', [item8, item8no2]);
+    const md = formatArticleMarkdown({
+      ...base,
+      article: article('2', [p]),
+      paragraph: p,
+      item: item8no2,
+    });
+    const lines = md.split('\n');
+    expect(lines[0]).toBe('# 消費税法 第2条第1項第8号の2');
+    expect(lines).toContain('八の二 特定資産の譲渡等　事業者向け電気通信利用役務の提供をいう。');
+    expect(md).not.toContain('資産の譲渡等　事業として');
+  });
+
   it('paragraph: branch-numbered items keep 八の二 (no "8_2 の二")', () => {
     const p = paragraph('1', [item8, item8no2]);
     const md = formatArticleMarkdown({ ...base, article: article('2', [p]), paragraph: p });

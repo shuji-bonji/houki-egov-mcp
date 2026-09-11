@@ -19,7 +19,7 @@ import {
   getArticleCaption,
   type TocNode,
 } from '../services/law-tree.js';
-import { formatArticleLabel, fromEgovArticleNum } from '../utils/article-num.js';
+import { formatArticleLabel, formatItemLabel, fromEgovArticleNum } from '../utils/article-num.js';
 
 export interface FormatArticleOptions {
   lawTitle: string;
@@ -46,7 +46,7 @@ export function formatArticleMarkdown(opts: FormatArticleOptions): string {
   // 見出し
   let header: string;
   if (item && paragraph) {
-    header = `# ${lawTitle} ${articleLabel}第${paragraph.attr?.Num}項第${item.attr?.Num}号`;
+    header = `# ${lawTitle} ${articleLabel}第${paragraph.attr?.Num}項${formatItemLabel(item.attr?.Num ?? '')}`;
   } else if (paragraph) {
     header = `# ${lawTitle} ${articleLabel}第${paragraph.attr?.Num}項`;
   } else {

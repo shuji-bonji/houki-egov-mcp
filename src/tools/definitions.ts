@@ -59,8 +59,9 @@ export const tools: Tool[] = [
           description: '項番号。省略時は条文全体',
         },
         item: {
-          type: 'number',
-          description: '号番号。省略時は項全体',
+          type: ['number', 'string'],
+          description:
+            '号番号。数値（8）か文字列（"8"・"8の2"・"第8号の2"）。枝番号の号（第8号の2）は文字列で指定する。paragraph と一緒に指定する。省略時は項全体',
         },
         format: {
           type: 'string',

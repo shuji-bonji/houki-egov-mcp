@@ -85,10 +85,12 @@ export function findParagraph(article: LawNode, paragraphNum: number): LawNode |
 
 /**
  * Paragraph の中から指定の号を取得。
+ *
+ * @param itemNum e-Gov API 形式の号番号（`toEgovItemNum()` の戻り値）。例: "8", "8_2"
  */
-export function findItem(paragraph: LawNode, itemNum: number): LawNode | null {
+export function findItem(paragraph: LawNode, itemNum: string): LawNode | null {
   for (const c of paragraph.children ?? []) {
-    if (typeof c === 'object' && c.tag === 'Item' && c.attr?.Num === String(itemNum)) {
+    if (typeof c === 'object' && c.tag === 'Item' && c.attr?.Num === itemNum) {
       return c;
     }
   }
