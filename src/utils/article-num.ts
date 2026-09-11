@@ -41,3 +41,21 @@ export function toEgovArticleNum(input: string): string {
 export function fromEgovArticleNum(num: string): string {
   return num.replace(/_/g, 'の');
 }
+
+/**
+ * 条番号から「第N条」「第N条のM」の表示を作る。
+ *
+ * "30"      → "第30条"
+ * "70_6"    → "第70条の6"
+ * "42_12_4" → "第42条の12の4"
+ *
+ * 利用者入力の "70の6" を渡しても同じ結果になる。
+ * `fromEgovArticleNum()` の戻り値を `第${…}条` に埋め込むと「第70の6条」になるため、
+ * 見出し・目次・エラーメッセージの条表示はこの関数で組み立てる。
+ */
+export function formatArticleLabel(num: string): string {
+  const s = num.trim();
+  if (!s) return '';
+  const [head, ...branches] = s.replace(/の/g, '_').split('_');
+  return `第${head}条${branches.map((b) => `の${b}`).join('')}`;
+}

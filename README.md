@@ -137,7 +137,7 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 
 ## 状態
 
-**v0.5.3 (2026-09-07)**
+**v0.5.4 (2026-09-11)**
 
 - [x] e-Gov 法令API v2 クライアント（`searchLaws` / `getLawData` / `getLawRevisions`）
 - [x] 法令ツリー走査（条/項/号、目次抽出）+ LRU cache

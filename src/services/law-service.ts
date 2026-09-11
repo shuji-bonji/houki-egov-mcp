@@ -15,7 +15,7 @@ import {
   NEXT_ACTIONS,
 } from '../errors.js';
 import { formatArticleMarkdown, formatTocMarkdown } from '../formatters/markdown.js';
-import { toEgovArticleNum } from '../utils/article-num.js';
+import { formatArticleLabel, toEgovArticleNum } from '../utils/article-num.js';
 import { LRUCache } from '../utils/cache.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -348,7 +348,7 @@ export async function getLawArticle(opts: {
   if (!article) {
     return makeError(
       'ARTICLE_NOT_FOUND',
-      `条文が見つかりません: 第${opts.article}条 in ${resolved.title}`,
+      `条文が見つかりません: ${formatArticleLabel(articleNum)} in ${resolved.title}`,
       {
         hint: '法令名・条番号を確認してください。format: "toc" で目次を確認できます',
         next_actions: [NEXT_ACTIONS.getToc(opts.law_name)],
@@ -363,7 +363,7 @@ export async function getLawArticle(opts: {
     if (!paragraph) {
       return makeError(
         'ARTICLE_NOT_FOUND',
-        `項が見つかりません: 第${opts.paragraph}項 (Article ${opts.article})`,
+        `項が見つかりません: ${formatArticleLabel(articleNum)}第${opts.paragraph}項`,
         {
           hint: '項番号は 1 始まりで指定してください。条文全体が必要なら paragraph を省略してください',
         }
@@ -374,7 +374,7 @@ export async function getLawArticle(opts: {
       if (!item) {
         return makeError(
           'ARTICLE_NOT_FOUND',
-          `号が見つかりません: 第${opts.item}号 (Paragraph ${opts.paragraph})`,
+          `号が見つかりません: ${formatArticleLabel(articleNum)}第${opts.paragraph}項第${opts.item}号`,
           {
             hint: '号番号は 1 始まりで指定してください。項全体が必要なら item を省略してください',
           }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fromEgovArticleNum, toEgovArticleNum } from './article-num.js';
+import { formatArticleLabel, fromEgovArticleNum, toEgovArticleNum } from './article-num.js';
 
 describe('toEgovArticleNum', () => {
   it('handles bare arabic numbers', () => {
@@ -31,5 +31,24 @@ describe('fromEgovArticleNum', () => {
     expect(fromEgovArticleNum('30')).toBe('30');
     expect(fromEgovArticleNum('30_2')).toBe('30の2');
     expect(fromEgovArticleNum('57_4')).toBe('57の4');
+  });
+});
+
+describe('formatArticleLabel', () => {
+  it('builds 第N条 for a plain number', () => {
+    expect(formatArticleLabel('30')).toBe('第30条');
+  });
+
+  it('puts branch numbers after 条', () => {
+    expect(formatArticleLabel('70_6')).toBe('第70条の6');
+    expect(formatArticleLabel('42_12_4')).toBe('第42条の12の4');
+  });
+
+  it('accepts user input with の', () => {
+    expect(formatArticleLabel('70の6')).toBe('第70条の6');
+  });
+
+  it('returns empty string for empty input', () => {
+    expect(formatArticleLabel('')).toBe('');
   });
 });

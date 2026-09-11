@@ -17,6 +17,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 漢数字対応（「第三十条」を 30 に変換）
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
 
+## [0.5.4] - 2026-09-11
+
+### Fixed
+
+- **`get_law` の Markdown の条・号の表示**（#16）
+  - 枝番号の条の見出しが「第70の6条」になっていた。`formatArticleLabel()`（`src/utils/article-num.ts`）で「第70条の6」「第42条の12の4」と組み立て、見出し・目次（`format: "toc"`）・`ARTICLE_NOT_FOUND` のメッセージで使う
+  - 号の本文が `ItemTitle`・`Column`・`Subitem1`（イ・ロ・ハ）を区切りなしで連結していた（`八資産の譲渡等事業として…`）。`formatProvisionLines()` で構造どおりに組み立てる
+    - 号: `ItemTitle` をそのまま行頭に置き、半角空白の後に本文（`八 資産の譲渡等　事業として…`）。Column の間は全角空白（e-Gov 法令検索の画面表示と同じ）
+    - 号の下の `Subitem1`〜`Subitem10`: Markdown の箇条書き（深さ 1 は `- イ …`、深さ 2 は `  - （１） …`）
+    - `TableStruct` / `List` など: 中身は従来どおり文字列の連結で、前後の本文とは改行で分ける
+  - 項・条をまとめて取るときの号番号は算用数字（`8 `）への付け替えをやめ、`ItemTitle` の漢数字をそのまま出す。枝番号の号が `4_2 の二国外事業者…` になっていた崩れもこれで直る
+  - 項・号が見つからないときのメッセージを `項が見つかりません: 第30条第9項` / `号が見つかりません: 第2条第1項第99号` の形にそろえた（従来は `(Article 30)` を併記）
+- `format: "json"` の出力は変えていない
+- テスト 14 件追加（`src/formatters/markdown.test.ts` 新規 10 件、`formatArticleLabel` 4 件。合計 **272 tests**）
+
+### Known limitations
+
+- `item` は number のため、枝番号の号（第2条第1項第8号の2）は指定できない。別 issue で扱う
+
 ## [0.5.3] - 2026-09-07
 
 ### Added
