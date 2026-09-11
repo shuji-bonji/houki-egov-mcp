@@ -84,6 +84,17 @@ export function findParagraph(article: LawNode, paragraphNum: number): LawNode |
 }
 
 /**
+ * 項番号の指定が無いまま号を探すときの項を返す（v0.6.0）。
+ *
+ * 項が 1 つだけの条は、「消費税法施行令第14条の3第1号」のように第1項を書かずに号を示す。
+ * そのため、項が 1 つだけならその項を返し、複数あればどの項か決まらないので null を返す。
+ */
+export function findParagraphForItem(article: LawNode): LawNode | null {
+  const paragraphs = findChildrenByTag(article, 'Paragraph');
+  return paragraphs.length === 1 ? paragraphs[0] : null;
+}
+
+/**
  * Paragraph の中から指定の号を取得。
  *
  * @param itemNum e-Gov API 形式の号番号（`toEgovItemNum()` の戻り値）。例: "8", "8_2"

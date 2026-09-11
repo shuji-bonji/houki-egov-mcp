@@ -53,15 +53,6 @@ describe('handleResolveAbbreviation', () => {
 // 単体テストでは fetch をモックする必要がある。
 // ここでは未知の法令名に対するエラーパスのみ検証する（fetch しない経路）。
 describe('Phase 1 handlers — error paths (no network)', () => {
-  it('get_law returns INVALID_ARGUMENT when item is given without paragraph (v0.6.0)', async () => {
-    const r = (await handleGetLaw({ law_name: '消費税法', article: '2', item: '8の2' })) as {
-      code?: string;
-      error?: string;
-    };
-    expect(r.code).toBe('INVALID_ARGUMENT');
-    expect(r.error).toContain('paragraph');
-  });
-
   it('get_law returns error for empty law_name', async () => {
     const r = (await handleGetLaw({ law_name: '' })) as { error?: string };
     expect(r.error).toBeTruthy();

@@ -36,8 +36,10 @@ import {
   countTocNodes,
   extractToc,
   findArticle,
+  findChildrenByTag,
   findItem,
   findParagraph,
+  findParagraphForItem,
   type LawNode,
   limitTocDepth,
   type TocNode,
@@ -289,15 +291,6 @@ export async function getLawArticle(opts: {
   const scopeError = checkAbbreviationScope(opts.law_name);
   if (scopeError) return scopeError;
 
-  // v0.6.0: item だけを指定して paragraph が無いと、これまでは item を黙って無視して条全体を返していた
-  if (opts.item !== undefined && opts.paragraph === undefined) {
-    return makeError(
-      'INVALID_ARGUMENT',
-      'item（号番号）を指定するときは paragraph（項番号）も指定してください',
-      { hint: '号は項の中にあります。第1項の号なら paragraph: 1 を付けてください' }
-    );
-  }
-
   const resolved = await resolveLawId(opts.law_name);
   if (!resolved) {
     return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
@@ -384,25 +377,38 @@ export async function getLawArticle(opts: {
         }
       );
     }
-    if (opts.item !== undefined) {
-      let itemNum: string;
-      try {
-        itemNum = toEgovItemNum(opts.item);
-      } catch (err) {
-        return makeError('INVALID_ARTICLE_NUM', (err as Error).message, {
-          hint: '号番号は半角数字（例: 8）または "8の2" 形式で指定してください',
-        });
-      }
-      item = findItem(paragraph, itemNum);
-      if (!item) {
-        return makeError(
-          'ARTICLE_NOT_FOUND',
-          `号が見つかりません: ${formatArticleLabel(articleNum)}第${opts.paragraph}項${formatItemLabel(itemNum)}`,
-          {
-            hint: '号番号は 1 始まりで指定してください。項全体が必要なら item を省略してください',
-          }
-        );
-      }
+  } else if (opts.item !== undefined) {
+    // v0.6.0: item だけが指定されたとき。項が 1 つだけの条は「第14条の3第1号」のように第1項を書かないので、
+    // その項の号として探す。項が複数ある条は、どの項の号か決まらないので INVALID_ARGUMENT。
+    // v0.5.4 までは paragraph が無いと item を黙って無視し、条全体を返していた
+    paragraph = findParagraphForItem(article);
+    if (!paragraph) {
+      const count = findChildrenByTag(article, 'Paragraph').length;
+      return makeError(
+        'INVALID_ARGUMENT',
+        `${formatArticleLabel(articleNum)}は項が ${count} 個あるため、item（号番号）を指定するときは paragraph（項番号）も指定してください`,
+        { hint: '項が 1 つだけの条では paragraph を省略できます' }
+      );
+    }
+  }
+  if (opts.item !== undefined && paragraph) {
+    let itemNum: string;
+    try {
+      itemNum = toEgovItemNum(opts.item);
+    } catch (err) {
+      return makeError('INVALID_ARTICLE_NUM', (err as Error).message, {
+        hint: '号番号は半角数字（例: 8）または "8の2" 形式で指定してください',
+      });
+    }
+    item = findItem(paragraph, itemNum);
+    if (!item) {
+      return makeError(
+        'ARTICLE_NOT_FOUND',
+        `号が見つかりません: ${formatArticleLabel(articleNum)}第${paragraph.attr?.Num ?? ''}項${formatItemLabel(itemNum)}`,
+        {
+          hint: '号番号は 1 始まりで指定してください。項全体が必要なら item を省略してください',
+        }
+      );
     }
   }
 

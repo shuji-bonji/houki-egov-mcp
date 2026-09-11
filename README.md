@@ -204,7 +204,7 @@ houki-egov-mcp の [`src/errors.ts`](src/errors.ts) は family 全体の **リ�
 
 | code | 用途 | retryable |
 |---|---|---|
-| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・inputSchema に無い引数。`detail.issues[]` に内訳）、キーワード未指定、`get_law` で `item` だけを指定して `paragraph` が無い 等 | `false` |
+| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・inputSchema に無い引数。`detail.issues[]` に内訳）、キーワード未指定、`get_law` で項が複数ある条に `paragraph` なしで `item` を指定した 等 | `false` |
 | `INVALID_ARTICLE_NUM` | 条番号・号番号のフォーマットが不正 (例: 未対応の漢数字) | `false` |
 | `OUT_OF_SCOPE` | 通達名で `get_law` を呼んだ等、別 MCP の管轄リソースが要求された | `false` |
 | `LAW_NOT_FOUND` | 略称解決・検索のいずれでも法令が見つからない | `false` |

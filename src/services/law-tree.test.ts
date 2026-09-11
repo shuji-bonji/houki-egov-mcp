@@ -9,6 +9,7 @@ import {
   findChildrenByTag,
   findItem,
   findParagraph,
+  findParagraphForItem,
   getArticleCaption,
   getArticleTitle,
   getLawTitle,
@@ -153,6 +154,27 @@ describe('findParagraph / findItem', () => {
     const p = findParagraph(a, 1)!;
     const i = findItem(p, '1');
     expect(i?.attr?.Num).toBe('1');
+  });
+
+  it('findParagraphForItem: 項が 1 つの条はその項、複数ある条は null (v0.6.0)', () => {
+    const single: LawNode = {
+      tag: 'Article',
+      attr: { Num: '14_3' },
+      children: [
+        { tag: 'ArticleTitle', children: ['第十四条の三'] },
+        { tag: 'Paragraph', attr: { Num: '1' }, children: [] },
+      ],
+    };
+    expect(findParagraphForItem(single)?.attr?.Num).toBe('1');
+    const multi: LawNode = {
+      tag: 'Article',
+      attr: { Num: '2' },
+      children: [
+        { tag: 'Paragraph', attr: { Num: '1' }, children: [] },
+        { tag: 'Paragraph', attr: { Num: '2' }, children: [] },
+      ],
+    };
+    expect(findParagraphForItem(multi)).toBeNull();
   });
 
   it('finds a branch-numbered item by e-Gov Num (v0.6.0)', () => {

@@ -127,14 +127,14 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
   });
 
   it('get_law の item は文字列も inputSchema の検証を通る (v0.6.0)', async () => {
-    // paragraph が無いので handler が INVALID_ARGUMENT を返す（e-Gov には触れない）
+    // 通達名（消基通）なので handler が OUT_OF_SCOPE を返す（e-Gov には触れない）。
+    // INVALID_ARGUMENT にならないことで、item の文字列が inputSchema の検証を通ったことを確かめる
     const res = await client.callTool({
       name: 'get_law',
-      arguments: { law_name: '消費税法', article: '2', item: '8の2' },
+      arguments: { law_name: '消基通', article: '2', paragraph: 1, item: '8の2' },
     });
     const body = JSON.parse(firstText(res));
-    expect(body.code).toBe('INVALID_ARGUMENT');
-    expect(body.error).toContain('paragraph');
+    expect(body.code).toBe('OUT_OF_SCOPE');
   });
 
   it('explain_law_type が isError なしで JSON を返す', async () => {
