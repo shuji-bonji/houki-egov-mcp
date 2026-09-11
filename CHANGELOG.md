@@ -26,11 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - 号の本文が `ItemTitle`・`Column`・`Subitem1`（イ・ロ・ハ）を区切りなしで連結していた（`八資産の譲渡等事業として…`）。`formatProvisionLines()` で構造どおりに組み立てる
     - 号: `ItemTitle` をそのまま行頭に置き、半角空白の後に本文（`八 資産の譲渡等　事業として…`）。Column の間は全角空白（e-Gov 法令検索の画面表示と同じ）
     - 号の下の `Subitem1`〜`Subitem10`: Markdown の箇条書き（深さ 1 は `- イ …`、深さ 2 は `  - （１） …`）
-    - `TableStruct` / `List` など: 中身は従来どおり文字列の連結で、前後の本文とは改行で分ける
+    - `List` など: 中身は従来どおり文字列の連結で、前後の本文とは改行で分ける
   - 項・条をまとめて取るときの号番号は算用数字（`8 `）への付け替えをやめ、`ItemTitle` の漢数字をそのまま出す。枝番号の号が `4_2 の二国外事業者…` になっていた崩れもこれで直る
+  - **項の直下の表（`TableStruct`）が Markdown に出ていなかった**（所得税法 89 条 1 項の税率表など。v0.5.3 以前から）。`formatParagraph()` が `ParagraphSentence` と `Item` しか出していなかった。項の子を文書の順に出すようにし、表は `formatTableStructLines()` で Markdown の表にする
+    - `TableHeaderRow` が無い表（法令の表の多く）は見出し行を空欄にし、1 行目もデータとして出す
+    - `rowspan` / `colspan` で結合されたセルは結合先を空欄にして列をそろえる。セルの中の `|` は `\|`
+    - `TableStructTitle` は表の前、`Remarks`（備考）は表の後に出す
+    - 号・イロハの中の表も同じ形にする（箇条書きの中では字下げ）。v0.5.3 までは表の文字をすべて連結して本文につなげていた
   - 項・号が見つからないときのメッセージを `項が見つかりません: 第30条第9項` / `号が見つかりません: 第2条第1項第99号` の形にそろえた（従来は `(Article 30)` を併記）
 - `format: "json"` の出力は変えていない
-- テスト 14 件追加（`src/formatters/markdown.test.ts` 新規 10 件、`formatArticleLabel` 4 件。合計 **272 tests**）
+- テスト 19 件追加（`src/formatters/markdown.test.ts` 新規 15 件、`formatArticleLabel` 4 件。合計 **277 tests**）
 
 ### Known limitations
 

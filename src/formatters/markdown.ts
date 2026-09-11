@@ -5,6 +5,7 @@
  * - 見出しは `# 法令名 第X条第Y項第Z号`（指定された粒度に応じて）。枝番号の条は `第70条の6`
  * - 号は `ItemTitle` の漢数字を行頭に置き（`八 資産の譲渡等　事業として…`）、
  *   Column の間は全角空白、号の下のイ・ロ・ハ（Subitem1〜10）は Markdown の箇条書きにする
+ * - 表（TableStruct）は Markdown の表にし、前後に空行を入れる
  * - 末尾に必ず出典 URL と取得日時を付ける
  * - 本MCPは事実情報の提示に徹し、判断・解釈は加えない
  */
@@ -55,7 +56,7 @@ export function formatArticleMarkdown(opts: FormatArticleOptions): string {
   // 本文
   let body: string;
   if (item) {
-    body = formatProvisionLines(item).join('\n');
+    body = joinLines(formatProvisionLines(item));
   } else if (paragraph) {
     body = formatParagraph(paragraph);
   } else {
@@ -79,28 +80,48 @@ function formatArticleBody(article: LawNode): string {
   return paragraphs.map(formatParagraph).join('\n\n');
 }
 
+/** 項の子のうち、本文として出さないもの（項番号・項見出し） */
+const PARAGRAPH_SKIP_TAGS = new Set(['ParagraphNum', 'ParagraphCaption']);
+
 /**
- * Paragraph を整形。
+ * Paragraph を整形。子を文書の順に出す。
  * - 1項のみ → "（項本文）"
  * - 号は 1 号 1 行（`formatProvisionLines()`）で、その下のイ・ロ・ハは箇条書き
+ * - 項の直下の表（所得税法 89 条 1 項の税率表など）は Markdown の表
+ * - それ以外の子（`List` など）は文字列を連結して 1 行
  */
 function formatParagraph(paragraph: LawNode): string {
   const paragraphNum = paragraph.attr?.Num ?? '';
-  const sentenceNode = findChildByTag(paragraph, 'ParagraphSentence');
-  const paragraphText = sentenceNode ? formatSentenceText(sentenceNode) : '';
-  const items = findChildrenByTag(paragraph, 'Item');
 
   const lines: string[] = [];
   // 項番号は 1 のみのとき表示しない（条文単独の場合）
   if (paragraphNum && paragraphNum !== '1') {
     lines.push(`**第${paragraphNum}項**`);
   }
-  if (paragraphText) lines.push(paragraphText);
 
-  for (const item of items) {
-    lines.push(...formatProvisionLines(item));
+  for (const child of paragraph.children ?? []) {
+    if (typeof child !== 'object' || PARAGRAPH_SKIP_TAGS.has(child.tag)) continue;
+    if (child.tag === 'ParagraphSentence') {
+      const text = formatSentenceText(child);
+      if (text) lines.push(text);
+    } else if (child.tag === 'Item') {
+      lines.push(...formatProvisionLines(child));
+    } else if (child.tag === 'TableStruct') {
+      lines.push(...formatTableStructLines(child));
+    } else {
+      const text = extractText(child).trim();
+      if (text) lines.push(text);
+    }
   }
-  return lines.join('\n');
+  return joinLines(lines);
+}
+
+/** 行を改行でつなぎ、表の前後に入れた空行が 2 行以上続かないようにし、先頭と末尾の空行を落とす */
+function joinLines(lines: string[]): string {
+  return lines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^\n+|\n+$/g, '');
 }
 
 /** Column（号の見出し語と定義文など）の区切り。e-Gov 法令検索の画面表示と同じ全角空白 */
@@ -130,8 +151,8 @@ function formatSentenceText(node: LawNode): string {
  * - 1 行目: 見出し（`ItemTitle` / `Subitem1Title` …）+ 半角空白 + 本文
  *   - `ItemTitle` が無い号は `Num` を表示用にして使う（"8_2" → "8の2"）
  * - `Subitem1`〜: 改行して Markdown の箇条書きにする（深さ 1 は `- `、深さ 2 は `  - `）
- * - それ以外の子（`TableStruct` / `List` など）: 文字列を連結して 1 行にする
- *   （中身は v0.5.3 までと同じ。改行して前後の本文とつながらないようにする）
+ * - `TableStruct`: Markdown の表（`formatTableStructLines()`）。箇条書きの中では字下げする
+ * - それ以外の子（`List` など）: 文字列を連結して 1 行にする
  *
  * @param depth 0 = 号、1 = Subitem1、2 = Subitem2 …
  */
@@ -153,12 +174,113 @@ export function formatProvisionLines(node: LawNode, depth = 0): string[] {
     if (typeof child !== 'object' || child === titleNode || child === sentenceNode) continue;
     if (SUBITEM_TAG.test(child.tag)) {
       lines.push(...formatProvisionLines(child, depth + 1));
+    } else if (child.tag === 'TableStruct') {
+      lines.push(...formatTableStructLines(child).map((l) => (l ? continuation + l : l)));
     } else {
       const text = extractText(child).trim();
       if (text) lines.push(continuation + text);
     }
   }
   return lines;
+}
+
+/**
+ * 表（TableStruct）を Markdown の表の行の配列にする。前後に空行を入れる。
+ *
+ * - `TableStructTitle` は表の前の行に出す
+ * - `TableHeaderRow` があれば 1 行目を Markdown の見出し行にする。無ければ見出し行は空欄にする
+ *   （法令の表の多くは見出し行を持たず、1 行目もデータなので、1 行目を見出しに流用しない）
+ * - `rowspan` / `colspan` で結合されたセルは、結合先を空欄にして列をそろえる
+ * - セルの中の `|` は `\|` にする
+ * - `Remarks`（備考）は表の後の行に出す
+ */
+export function formatTableStructLines(tableStruct: LawNode): string[] {
+  const lines: string[] = [''];
+  const title = findChildByTag(tableStruct, 'TableStructTitle');
+  if (title) {
+    const text = extractText(title).trim();
+    if (text) lines.push(text, '');
+  }
+  for (const child of tableStruct.children ?? []) {
+    if (typeof child !== 'object') continue;
+    if (child.tag === 'Table') {
+      lines.push(...formatTableLines(child), '');
+    } else if (child.tag === 'Remarks') {
+      lines.push(...formatRemarksLines(child), '');
+    }
+  }
+  return lines;
+}
+
+/** Table を Markdown の表にする（空行は含めない） */
+function formatTableLines(table: LawNode): string[] {
+  const rows = (table.children ?? []).filter(
+    (c): c is LawNode =>
+      typeof c === 'object' && (c.tag === 'TableHeaderRow' || c.tag === 'TableRow')
+  );
+  if (rows.length === 0) return [];
+
+  // rowspan / colspan を展開した格子。結合先は空欄
+  const grid: string[][] = [];
+  const occupied: boolean[][] = [];
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
+    grid[r] ??= [];
+    occupied[r] ??= [];
+    let c = 0;
+    for (const cell of row.children ?? []) {
+      if (typeof cell !== 'object') continue;
+      while (occupied[r][c]) c++;
+      const rowspan = Math.max(1, Number(cell.attr?.rowspan) || 1);
+      const colspan = Math.max(1, Number(cell.attr?.colspan) || 1);
+      for (let dr = 0; dr < rowspan && r + dr < rows.length; dr++) {
+        grid[r + dr] ??= [];
+        occupied[r + dr] ??= [];
+        for (let dc = 0; dc < colspan; dc++) {
+          occupied[r + dr][c + dc] = true;
+          grid[r + dr][c + dc] = dr === 0 && dc === 0 ? formatCellText(cell) : '';
+        }
+      }
+      c += colspan;
+    }
+  }
+
+  const width = Math.max(...grid.map((g) => g.length));
+  const toRow = (cells: string[]) =>
+    `| ${Array.from({ length: width }, (_, i) => cells[i] ?? '').join(' | ')} |`;
+  const hasHeader = rows[0].tag === 'TableHeaderRow';
+  const header = hasHeader ? grid[0] : [];
+  const body = hasHeader ? grid.slice(1) : grid;
+  return [
+    toRow(header),
+    `| ${Array.from({ length: width }, () => '---').join(' | ')} |`,
+    ...body.map(toRow),
+  ];
+}
+
+/** セル（TableColumn / TableHeaderColumn）の文字列。子（Sentence など）は半角空白でつなぐ */
+function formatCellText(cell: LawNode): string {
+  const parts = (cell.children ?? []).map((c) => extractText(c).trim()).filter(Boolean);
+  return parts.join(' ').replace(/\|/g, '\\|');
+}
+
+/** Remarks（備考）を行の配列にする。1 行目は RemarksLabel + 本文、号があれば続ける */
+function formatRemarksLines(remarks: LawNode): string[] {
+  const label = findChildByTag(remarks, 'RemarksLabel');
+  const head: string[] = [];
+  if (label) head.push(extractText(label).trim());
+  const lines: string[] = [];
+  for (const child of remarks.children ?? []) {
+    if (typeof child !== 'object' || child === label) continue;
+    if (child.tag === 'Item') {
+      lines.push(...formatProvisionLines(child));
+    } else {
+      const text = extractText(child).trim();
+      if (text) head.push(text);
+    }
+  }
+  const first = head.filter(Boolean).join(' ');
+  return first ? [first, ...lines] : lines;
 }
 
 /**

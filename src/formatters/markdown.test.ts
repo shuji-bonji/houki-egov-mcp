@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { LawNode } from '../services/egov-client.js';
-import { formatArticleMarkdown, formatProvisionLines, formatTocMarkdown } from './markdown.js';
+import {
+  formatArticleMarkdown,
+  formatProvisionLines,
+  formatTableStructLines,
+  formatTocMarkdown,
+} from './markdown.js';
 
 const sentence = (text: string): LawNode => ({
   tag: 'Sentence',
@@ -11,6 +16,20 @@ const column = (num: string, text: string): LawNode => ({
   tag: 'Column',
   attr: { Num: num },
   children: [sentence(text)],
+});
+
+const cell = (text: string, attr?: Record<string, string>, tag = 'TableColumn'): LawNode => ({
+  tag,
+  attr,
+  children: [sentence(text)],
+});
+const row = (cells: Array<string | LawNode>, tag = 'TableRow'): LawNode => ({
+  tag,
+  children: cells.map((c) => (typeof c === 'string' ? cell(c) : c)),
+});
+const table = (rows: LawNode[], extra: LawNode[] = []): LawNode => ({
+  tag: 'TableStruct',
+  children: [{ tag: 'Table', children: rows }, ...extra],
 });
 
 // 消費税法 第2条第1項第8号・第8号の2 を簡略化したフィクスチャ（ItemSentence が Column 2 つ）
@@ -137,17 +156,46 @@ describe('formatProvisionLines', () => {
     expect(formatProvisionLines(node)).toEqual(['3の2 本文']);
   });
 
-  it('puts other children (TableStruct etc.) on their own line', () => {
+  it('puts other children (List etc.) on their own line', () => {
     const node: LawNode = {
       tag: 'Item',
       attr: { Num: '1' },
       children: [
         { tag: 'ItemTitle', children: ['一'] },
-        { tag: 'ItemSentence', children: [sentence('次の表のとおり')] },
-        { tag: 'TableStruct', children: [{ tag: 'Table', children: ['区分', '税率'] }] },
+        { tag: 'ItemSentence', children: [sentence('次に掲げるもの')] },
+        { tag: 'List', children: [{ tag: 'ListSentence', children: [sentence('甲')] }] },
       ],
     };
-    expect(formatProvisionLines(node)).toEqual(['一 次の表のとおり', '区分税率']);
+    expect(formatProvisionLines(node)).toEqual(['一 次に掲げるもの', '甲']);
+  });
+
+  it('renders TableStruct in a Subitem as an indented Markdown table', () => {
+    const node: LawNode = {
+      tag: 'Item',
+      attr: { Num: '1' },
+      children: [
+        { tag: 'ItemTitle', children: ['一'] },
+        { tag: 'ItemSentence', children: [sentence('次による')] },
+        {
+          tag: 'Subitem1',
+          attr: { Num: '1' },
+          children: [
+            { tag: 'Subitem1Title', children: ['イ'] },
+            { tag: 'Subitem1Sentence', children: [sentence('次の表のとおり')] },
+            table([row(['区分', '税率'])]),
+          ],
+        },
+      ],
+    };
+    expect(formatProvisionLines(node)).toEqual([
+      '一 次による',
+      '- イ 次の表のとおり',
+      '',
+      '  |  |  |',
+      '  | --- | --- |',
+      '  | 区分 | 税率 |',
+      '',
+    ]);
   });
 });
 
@@ -201,11 +249,108 @@ describe('formatArticleMarkdown', () => {
     expect(md.split('\n')[0]).toBe('# 消費税法 第30条第2項');
   });
 
+  it('paragraph: renders a TableStruct directly under Paragraph (所得税法 89 条 1 項)', () => {
+    const p = paragraph('1', [
+      { tag: 'ParagraphNum', children: [] },
+      {
+        tag: 'ParagraphSentence',
+        children: [sentence('次の表の下欄に掲げる税率を乗じて計算する。')],
+      },
+      table([
+        row(['百九十五万円以下の金額', '百分の五']),
+        row(['四千万円を超える金額', '百分の四十五']),
+      ]),
+    ]);
+    const md = formatArticleMarkdown({
+      ...base,
+      lawTitle: '所得税法',
+      article: article('89', [p]),
+      paragraph: p,
+    });
+    expect(md).toContain(
+      [
+        '次の表の下欄に掲げる税率を乗じて計算する。',
+        '',
+        '|  |  |',
+        '| --- | --- |',
+        '| 百九十五万円以下の金額 | 百分の五 |',
+        '| 四千万円を超える金額 | 百分の四十五 |',
+        '',
+        '---',
+      ].join('\n')
+    );
+  });
+
   it('paragraph: branch-numbered items keep 八の二 (no "8_2 の二")', () => {
     const p = paragraph('1', [item8, item8no2]);
     const md = formatArticleMarkdown({ ...base, article: article('2', [p]), paragraph: p });
     expect(md).toContain('八の二 特定資産の譲渡等　');
     expect(md).not.toContain('8_2');
+  });
+});
+
+describe('formatTableStructLines', () => {
+  it('uses a blank header row when TableHeaderRow is absent', () => {
+    expect(formatTableStructLines(table([row(['a', 'b']), row(['c', 'd'])]))).toEqual([
+      '',
+      '|  |  |',
+      '| --- | --- |',
+      '| a | b |',
+      '| c | d |',
+      '',
+    ]);
+  });
+
+  it('uses TableHeaderRow as the header and prints TableStructTitle and Remarks', () => {
+    const node: LawNode = {
+      tag: 'TableStruct',
+      children: [
+        { tag: 'TableStructTitle', children: ['別表'] },
+        {
+          tag: 'Table',
+          children: [
+            row(
+              [
+                cell('区分', undefined, 'TableHeaderColumn'),
+                cell('税率', undefined, 'TableHeaderColumn'),
+              ],
+              'TableHeaderRow'
+            ),
+            row(['甲', '百分の五']),
+          ],
+        },
+        {
+          tag: 'Remarks',
+          children: [{ tag: 'RemarksLabel', children: ['備考'] }, sentence('この表は例示である。')],
+        },
+      ],
+    };
+    expect(formatTableStructLines(node)).toEqual([
+      '',
+      '別表',
+      '',
+      '| 区分 | 税率 |',
+      '| --- | --- |',
+      '| 甲 | 百分の五 |',
+      '',
+      '備考 この表は例示である。',
+      '',
+    ]);
+  });
+
+  it('fills cells merged by rowspan / colspan with empty cells and escapes |', () => {
+    const node = table([
+      row([cell('A', { rowspan: '2' }), cell('B|C', { colspan: '2' })]),
+      row(['d', 'e']),
+    ]);
+    expect(formatTableStructLines(node)).toEqual([
+      '',
+      '|  |  |  |',
+      '| --- | --- | --- |',
+      '| A | B\\|C |  |',
+      '|  | d | e |',
+      '',
+    ]);
   });
 });
 
