@@ -13,6 +13,31 @@
 
 LLM が条文をキーワード・略称・分野で検索したり、特定の条項を Markdown / JSON で取得したり、改正履歴を引いたりできるようにする。
 
+## まず試す（ローカル DB なし）
+
+登録するだけで、7 ツールのうち 6 つはそのまま動きます。e-Gov 法令 API v2 をその場で呼ぶためで、事前の取り込みは要りません。
+
+```json
+// claude_desktop_config.json
+{
+  "mcpServers": {
+    "houki-egov": {
+      "command": "npx",
+      "args": ["-y", "@shuji-bonji/houki-egov-mcp"]
+    }
+  }
+}
+```
+
+再起動して「消費税法第 30 条第 1 項を見せて」「インボイス制度の登録要件は」のように尋ねると、`search_law` → `get_law` の順に呼ばれ、法令番号と e-Gov の URL 付きで本文が返ります。
+
+ローカル DB が要るのは `search_fulltext`（条文本文の横断検索）だけです。DB が無いときは `search_law`（法令名の検索）に切り替わり、応答の `source` が `"api-fallback"` になります。本文の全文検索が要ると分かったら、そのとき一度だけ下記の「CLI（ローカル DB の構築）」を実行してください。全法令 zip（約 290 MB）の取得と取り込みが走ります。
+
+| | ローカル DB なし | ローカル DB あり |
+|---|---|---|
+| `search_law` `get_law` `get_toc` `get_law_revisions` `resolve_abbreviation` `explain_law_type` | 動く（e-Gov API をその場で呼ぶ） | 同じ |
+| `search_fulltext` | `search_law` に切り替わる（`source: "api-fallback"`） | 条文本文を横断検索する（`freshness` 付き） |
+
 ## 提供ツール
 
 | Tool | 用途 |
@@ -31,17 +56,7 @@ LLM が条文をキーワード・略称・分野で検索したり、特定の�
 
 ### Claude Desktop で使う
 
-```json
-// claude_desktop_config.json
-{
-  "mcpServers": {
-    "houki-egov": {
-      "command": "npx",
-      "args": ["-y", "@shuji-bonji/houki-egov-mcp"]
-    }
-  }
-}
-```
+上の「まず試す」の `claude_desktop_config.json` の例をそのまま使います。ローカル DB は無くても動きます。
 
 ### Claude Code plugin で使う
 
@@ -103,6 +118,8 @@ npm test
 ```
 
 ## CLI（ローカル DB の構築 — v0.3.1+）
+
+ローカル DB が要るのは `search_fulltext` だけです。それ以外の 6 ツールは DB が無くても動くので、条文本文の横断検索が要ると分かってから作れば足ります（上の「まず試す」）。
 
 全文検索用のローカル DB（SQLite FTS5）は、e-Gov の bulk ダウンロード zip から構築します。MCP server として常駐する通常起動とは別に、フラグ付きで起動すると CLI モードで動作します。
 
