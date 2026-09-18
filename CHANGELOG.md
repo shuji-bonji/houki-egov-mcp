@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Docs
+
+- **README の冒頭に「まず試す（ローカル DB なし）」を置いた**: 7 ツールのうち 6 つは登録するだけで動き、ローカル DB が要るのは `search_fulltext` だけであることを、`claude_desktop_config.json` の例と DB あり / なしの対応表で先に示す。これまでは「CLI（ローカル DB の構築）」の約 290 MB の取り込みが、動かすための前提のように読めた。houki-hub#22 の (b) 導入の時間（nta 側は houki-nta-mcp#35 の `--quickstart`）
+
 ### In progress (Phase 2 — 残作業)
 
 - Phase 2-13: API enrichment（`category` / `revisions_meta` / PreviousEnforced・Repeal の精緻化）
