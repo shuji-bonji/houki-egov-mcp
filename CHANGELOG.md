@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Docs
-
-- **README の冒頭に「まず試す（ローカル DB なし）」を置いた**: 7 ツールのうち 6 つは登録するだけで動き、ローカル DB が要るのは `search_fulltext` だけであることを、`claude_desktop_config.json` の例と DB あり / なしの対応表で先に示す。これまでは「CLI（ローカル DB の構築）」の約 290 MB の取り込みが、動かすための前提のように読めた。houki-hub#22 の (b) 導入の時間（nta 側は houki-nta-mcp#35 の `--quickstart`）
-
 ### In progress (Phase 2 — 残作業)
 
 - Phase 2-13: API enrichment（`category` / `revisions_meta` / PreviousEnforced・Repeal の精緻化）
@@ -20,6 +16,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - 漢数字対応（「第三十条」を 30 に変換）
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
+
+## [0.6.1] - 2026-09-19
+
+**patch リリース** — コードは変えていない。README の冒頭と npm の説明を「実装する前に、その仕様が法令のどこに触れるかを条文で確かめる」に揃え、公式 MCP Registry に載せるための `mcpName` を足した。
+
+### Docs
+
+- **README の 1 行目と npm の `description` を、houki-hub family で決めた仕事の 1 行に揃えた**（houki-hub#22 の (c)）。「実装する前に、その仕様が法令のどこに触れるかを条文で確かめる」。通達・Q&A は houki-nta-mcp が担当し、「法律で決まっている」と「通達でそうなっている」を混ぜないことも冒頭に書いた。npm の `description` は英語を先にした（npm の検索は英語の語で当たることが多い）
+- **README の冒頭に「まず試す（ローカル DB なし）」を置いた**: 7 ツールのうち 6 つは登録するだけで動き、ローカル DB が要るのは `search_fulltext` だけであることを、`claude_desktop_config.json` の例と DB あり / なしの対応表で先に示す。これまでは「CLI（ローカル DB の構築）」の約 290 MB の取り込みが、動かすための前提のように読めた。houki-hub#22 の (b) 導入の時間（nta 側は houki-nta-mcp#35 の `--quickstart`）
+
+### Added
+
+- **`package.json` に `mcpName: "io.github.shuji-bonji/houki-egov-mcp"`**: 公式 MCP Registry（registry.modelcontextprotocol.io）が npm パッケージの所有確認に使う印。Registry への登録そのものは `server.json` と `mcp-publisher` で行う（この版の publish 後）
 
 ## [0.6.0] - 2026-09-12
 
