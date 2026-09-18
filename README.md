@@ -9,9 +9,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/Node-%3E%3D22-brightgreen)](https://nodejs.org/)
 
-日本の法令（憲法・法律・政令・省令・規則）を **e-Gov 法令API v2** 経由で取得する MCP サーバ。
+**実装する前に、その仕様が法令のどこに触れるかを条文で確かめる**ための MCP サーバ。日本の法令（憲法・法律・政令・省令・規則）を **e-Gov 法令API v2** から、条・項・号の単位で、法令番号と URL を添えて返す。
 
-LLM が条文をキーワード・略称・分野で検索したり、特定の条項を Markdown / JSON で取得したり、改正履歴を引いたりできるようにする。
+LLM が条文をキーワード・略称・分野で検索したり、特定の条項を Markdown / JSON で取得したり、改正履歴を引いたりできるようにする。通達・Q&A は [`@shuji-bonji/houki-nta-mcp`](https://github.com/shuji-bonji/houki-nta-mcp) が担当し、「法律で決まっている」と「通達でそうなっている」を混ぜない。
 
 ## まず試す（ローカル DB なし）
 

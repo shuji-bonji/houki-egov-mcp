@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/.claude-plugin/plugin.schema.json",
   "name": "houki-egov-mcp",
-  "version": "0.6.0",
-  "description": "日本の法令 (e-Gov 法令API v2) MCP server。法令検索・条文取得・略称解決・改正沿革の取得を提供。houki-hub family の一員。",
+  "version": "0.6.1",
+  "description": "実装する前に、その仕様が法令のどこに触れるかを条文で確かめるための MCP server。日本の法令 (憲法・法律・政令・省令・規則) を e-Gov 法令API v2 から条・項・号の単位で、法令番号と URL を添えて返す。ローカル DB を作れば条文本文の全文検索もできる。houki-hub family の一員。",
   "author": {
     "name": "shuji-bonji",
     "email": "bonji@mikuro.jp",
