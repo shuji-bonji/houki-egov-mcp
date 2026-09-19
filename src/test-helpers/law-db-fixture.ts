@@ -105,7 +105,8 @@ export async function seedTestDb(db: DatabaseT.Database): Promise<void> {
     { path: '105DF0000000337_18721109_000000000000000.xml', content: XML_FUKOKU },
   ]);
   await ingestZip({ db, zip, nowIso: '2026-09-01T00:00:00+09:00' });
-  // 旧 revision を PreviousEnforced に (ingester は CSV から CurrentEnforced/UnEnforced しか付けない)
+  // 旧 revision を PreviousEnforced に (v0.8.0 からは ingester が施行日で落とすので不要だが、
+  // fixture の前提を明示するため残す)
   db.prepare(
     `UPDATE laws SET current_revision_status = 'PreviousEnforced' WHERE law_revision_id = ?`
   ).run('363AC0000000108_20191001_000000000000000');

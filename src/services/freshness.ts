@@ -57,7 +57,7 @@ export interface FreshnessInfo {
 export function buildWarning(
   staleness: StalenessLevel,
   daysSince: number,
-  bulkDownloadHint = '`houki-egov-mcp --bulk-download-incremental` (または `--bulk-download-everything`)'
+  bulkDownloadHint = '`houki-egov-mcp --sync` (最終同期から 90 日を超えていれば `--bulk-download-everything`)'
 ): string | undefined {
   if (staleness !== 'outdated') return undefined;
   return `bulk DB が ${daysSince} 日前のデータです。最新化するには ${bulkDownloadHint} を実行してください`;

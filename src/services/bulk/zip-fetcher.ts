@@ -35,6 +35,17 @@ export class BulkFetchError extends Error {
   }
 }
 
+/** HTTP 応答が 2xx でなかった (status を持つ。差分 zip が無い日の 500 を呼び出し側が見分けるため) */
+export class BulkHttpError extends BulkFetchError {
+  constructor(
+    message: string,
+    public readonly status: number
+  ) {
+    super(message);
+    this.name = 'BulkHttpError';
+  }
+}
+
 /** zip マジック (PK\x03\x04) 不一致 */
 export class ZipFormatError extends BulkFetchError {
   constructor(message: string) {
@@ -195,7 +206,10 @@ async function streamToFile(args: {
   });
 
   if (!response.ok) {
-    throw new BulkFetchError(`HTTP ${response.status} ${response.statusText} from ${url}`);
+    throw new BulkHttpError(
+      `HTTP ${response.status} ${response.statusText} from ${url}`,
+      response.status
+    );
   }
   if (!response.body) {
     throw new BulkFetchError(`response.body が null (URL: ${url})`);

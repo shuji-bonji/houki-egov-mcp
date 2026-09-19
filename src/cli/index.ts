@@ -5,6 +5,7 @@
  * 以下のフラグ付きで起動すると bulk DL / status を実行して exit する。
  *
  *   --bulk-download-everything       file_section=1 で全件 DL + DB ingest
+ *   --sync                            sync_state.last_sync_date から今日までの差分を日ごとに DL + ingest
  *   --bulk-download-by-date YYYYMMDD file_section=3 で 1 日分の差分 DL + ingest (デバッグ用)
  *   --status                          sync_state + DB 件数 + freshness を表示
  *   --help / -h                       使い方
@@ -15,10 +16,17 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PACKAGE_INFO } from '../config.js';
+import { BULK_CONFIG, EGOV_BULK, HTTP_CONFIG, PACKAGE_INFO } from '../config.js';
 import { closeDb, defaultDbPath, openDb } from '../db/index.js';
 import { type IngestResult, ingestZip } from '../services/bulk/ingester.js';
 import {
+  createSqliteSyncStore,
+  runSync,
+  type SyncDayResult,
+  type SyncResult,
+} from '../services/bulk/sync.js';
+import {
+  BulkFetchError,
   type BulkProgress,
   downloadFullZip,
   downloadIncrementalZip,
@@ -63,6 +71,11 @@ export async function runCli(argv: string[]): Promise<CliResult> {
 
   if (cmd === '--bulk-download-everything') {
     return await runBulkDownloadEverything();
+  }
+
+  // --bulk-download-incremental は PHASE2-DESIGN.md で予定していた名前。同じ動作
+  if (cmd === '--sync' || cmd === '--bulk-download-incremental') {
+    return await runSyncCommand();
   }
 
   if (cmd === '--bulk-download-by-date') {
@@ -189,6 +202,115 @@ async function runBulkDownloadByDate(yyyymmdd: string): Promise<CliResult> {
   }
 }
 
+/**
+ * 差分同期: last_sync_date 〜 今日 (JST) の差分 zip を日ごとに DL + ingest。
+ * 計画と進行は services/bulk/sync.ts が持ち、ここは実 DL / ingest と表示だけ
+ */
+async function runSyncCommand(): Promise<CliResult> {
+  const command = 'sync';
+  const dbPath = defaultDbPath();
+  const tmpDir = await mkdtemp(join(tmpdir(), 'houki-egov-sync-'));
+
+  console.error(`[sync] 差分同期`);
+  console.error(`  DB: ${dbPath}`);
+
+  const db = openDb(dbPath);
+  try {
+    const store = createSqliteSyncStore(db);
+    const result = await runSync({
+      store,
+      limitDays: BULK_CONFIG.incrementalLimitDays,
+      checkReachable: async () => {
+        const res = await fetch(EGOV_BULK.indexUrl, {
+          method: 'HEAD',
+          headers: { 'User-Agent': HTTP_CONFIG.userAgent },
+        });
+        if (!res.ok) {
+          throw new BulkFetchError(
+            `e-Gov に接続できません (HTTP ${res.status} from ${EGOV_BULK.indexUrl})`
+          );
+        }
+      },
+      downloadDay: async (yyyymmdd) => {
+        const zipPath = join(tmpDir, `R${yyyymmdd.slice(2)}.zip`);
+        const dl = await downloadIncrementalZip(yyyymmdd, {
+          dest: zipPath,
+          expectedBytes: 5_000_000,
+        });
+        return { zipPath, bytes: dl.bytes };
+      },
+      ingestDay: async (zipPath) => {
+        const zip = await openZipFile(zipPath);
+        return ingestZip({ db, zip, source: 'incremental', updateSyncState: false });
+      },
+      cleanupDay: (zipPath) => rm(zipPath, { force: true }),
+      onDay: (r, i, total) => console.error(`  [${i + 1}/${total}] ${formatSyncDay(r)}`),
+    });
+    return { exitCode: printSyncResult(result), command };
+  } catch (err) {
+    console.error(`[ERROR] ${(err as Error).message ?? err}`);
+    return { exitCode: 1, command };
+  } finally {
+    closeDb(db);
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/** 同期結果を表示し、exit code を返す */
+function printSyncResult(r: SyncResult): number {
+  const { plan } = r;
+  if (plan.kind === 'no-state') {
+    console.error(
+      `[sync] まだ全件取り込みが行われていません。先に --bulk-download-everything を実行してください`
+    );
+    return 1;
+  }
+  if (plan.kind === 'full-required') {
+    console.error(
+      `[sync] last_sync_date ${plan.lastSyncDate} から ${plan.daysSince} 日空いています。日次差分の公開範囲 (${plan.limitDays} 日) を超えているので、--bulk-download-everything を実行してください`
+    );
+    return 1;
+  }
+
+  const ingested = r.days.filter((d) => d.status === 'ingested');
+  const empty = r.days.filter((d) => d.status === 'empty');
+  const upserted = ingested.reduce((n, d) => n + (d.ingest?.upserted ?? 0), 0);
+  const unchanged = ingested.reduce((n, d) => n + (d.ingest?.unchanged ?? 0), 0);
+  const failedLaws = ingested.reduce((n, d) => n + (d.ingest?.failed ?? 0), 0);
+
+  if (r.failed) {
+    console.error(`[ERROR] ${r.failed.date}: ${r.failed.message}`);
+    if (r.days.length > 0) {
+      console.error(
+        `  ${r.lastSyncDate} までを last_sync_date に記録しました (${r.days.length} 日分を確認、${upserted} 件 upsert)。再実行すると続きから同期します`
+      );
+    } else {
+      console.error(`  last_sync_date は ${r.lastSyncDate} のままです`);
+    }
+    return 1;
+  }
+
+  const parts = [`${r.days.length} 日分を確認 (${plan.from} 〜 ${plan.to})`];
+  if (upserted > 0) {
+    parts.push(`${ingested.length} 日に差分あり: ${upserted} 件 upsert, ${unchanged} 件 unchanged`);
+  } else if (unchanged > 0) {
+    parts.push(`新たに取り込んだ法令はありません (確認した ${unchanged} 件はすべて取り込み済み)`);
+  } else {
+    parts.push('新たに取り込んだ法令はありません');
+  }
+  if (empty.length > 0) parts.push(`${empty.length} 日は差分なし`);
+  if (failedLaws > 0) parts.push(`${failedLaws} 件は XML を読めず skip`);
+  console.error(`[完了] ${parts.join('、')}。全体 ${formatDuration(r.durationMs)}`);
+  console.error(`  last_sync_date: ${r.lastSyncDate}`);
+  return 0;
+}
+
+function formatSyncDay(d: SyncDayResult): string {
+  if (d.status === 'empty' || !d.ingest) return `${d.date}: 差分なし`;
+  const size = d.bytes === undefined ? '' : `${formatBytes(d.bytes)}, `;
+  return `${d.date}: ${formatIngestCounts(d.ingest)} (${size}${formatDuration(d.durationMs)})`;
+}
+
 /** sync_state + 件数 + freshness をターミナルに表示 */
 async function runStatus(): Promise<CliResult> {
   const dbPath = defaultDbPath();
@@ -221,6 +343,8 @@ async function runStatus(): Promise<CliResult> {
       console.log(`    staleness:       ${fresh.staleness}`);
       if (fresh.warning) {
         console.log(`  ⚠ ${fresh.warning}`);
+      } else if (fresh.days_since_sync > 0) {
+        console.log(`  差分を取り込むには --sync を実行してください`);
       }
     }
     return { exitCode: 0, command: 'status' };
@@ -235,7 +359,11 @@ function printHelp(): void {
 
 USAGE:
   houki-egov-mcp                                 MCP server を起動 (default)
-  houki-egov-mcp --bulk-download-everything      全件 zip を DL + DB に ingest
+  houki-egov-mcp --bulk-download-everything      全件 zip (約 290 MB) を DL + DB に ingest。初回と、
+                                                  最終同期から 90 日を超えたとき
+  houki-egov-mcp --sync                           最終同期日から今日までの日次差分を DL + ingest。
+                                                  差分が無い日は飛ばし、途中で失敗しても
+                                                  成功した日までを記録する
   houki-egov-mcp --bulk-download-by-date YYYYMMDD  単日差分を DL + ingest (デバッグ用)
   houki-egov-mcp --status                         同期状態と DB 件数を表示
   houki-egov-mcp --version                        バージョン表示
@@ -245,6 +373,8 @@ ENVIRONMENT:
   HOUKI_EGOV_DB_PATH=/path/to.db    DB ファイルパスを上書き
                                      (default: \${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/laws.db)
   HOUKI_EGOV_BULK_RETRY=3           bulk DL 失敗時のリトライ回数
+  HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS=90
+                                    --sync が差分で追える最大日数 (超えたら全件取り込みを促す)
 
 DOCS:
   docs/PHASE2-DESIGN.md             設計詳細
@@ -276,10 +406,12 @@ function formatDuration(ms: number): string {
 }
 
 function formatIngestResult(r: IngestResult): string {
-  const parts: string[] = [];
-  parts.push(`${r.upserted} 件 upsert`);
+  return `${formatIngestCounts(r)} (${formatDuration(r.durationMs)})`;
+}
+
+function formatIngestCounts(r: IngestResult): string {
+  const parts: string[] = [`${r.upserted} 件 upsert`];
   if (r.unchanged > 0) parts.push(`${r.unchanged} 件 unchanged`);
   if (r.failed > 0) parts.push(`${r.failed} 件 failed`);
-  parts.push(`(${formatDuration(r.durationMs)})`);
   return parts.join(', ');
 }
