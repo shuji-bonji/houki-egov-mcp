@@ -127,12 +127,17 @@ npm test
 全文検索用のローカル DB（SQLite FTS5）は、e-Gov の bulk ダウンロード zip から構築します。MCP server として常駐する通常起動とは別に、フラグ付きで起動すると CLI モードで動作します。
 
 ```bash
-# 全法令 zip (約 290 MB) を DL して DB に取り込む
+# 全法令 zip (約 290 MB) を DL して DB に取り込む (初回)
 npx @shuji-bonji/houki-egov-mcp --bulk-download-everything
+
+# 最終同期日から今日までの日次差分を取り込む (2 回目以降。v0.8.0+)
+npx @shuji-bonji/houki-egov-mcp --sync
 
 # DB の件数と鮮度 (freshness) を表示
 npx @shuji-bonji/houki-egov-mcp --status
 ```
+
+`--sync` は、差分が無い日（土日など）を飛ばし、途中で失敗しても成功した日までを記録して終わります。最終同期から 90 日（`HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS`）を超えて空いているときは、e-Gov の日次差分の公開範囲を超えるので、何もせずに `--bulk-download-everything` を促します。1 日分は数百 KB〜30 MB、13 日分でおよそ 1〜2 分です。
 
 DB のデフォルト配置は `${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/laws.db`（`HOUKI_EGOV_DB_PATH` で変更可）。
 
@@ -160,7 +165,7 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 
 ## 状態
 
-**v0.6.0 (2026-09-12)**
+**v0.8.0 (2026-09-19)**
 
 - [x] e-Gov 法令API v2 クライアント（`searchLaws` / `getLawData` / `getLawRevisions`）
 - [x] 法令ツリー走査（条/項/号、目次抽出）+ LRU cache
@@ -174,11 +179,13 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 - [x] Trusted Publisher (OIDC) で publish
 - [x] `get_law` の `item` で枝番号の号（`"8の2"`・`"第8号の2"`）を指定（v0.6.0）
 - [x] ツールの引数の型を inputSchema から導き（json-schema-to-ts の `FromSchema`）、未知の引数は `INVALID_ARGUMENT`（v0.6.0）
+- [x] `get_law` の `article` / `item` で漢数字（`"第三十条の二"`・`"八の二"`）と全角数字を受け付ける（v0.7.0）
+- [x] `--sync` で最終同期日から今日までの日次差分を取り込む。差分が無い日は飛ばし、途中で失敗しても成功した日までを記録（v0.8.0）
 - [x] テストスイート（**287 tests**）
 
 ### 計画中
 
-- [ ] Phase 2-8: 差分同期（`--bulk-download-incremental`）
+- [x] Phase 2-8: 差分同期（`--sync`）— v0.8.0
 - [ ] Phase 2-13: API enrichment（`category` / 改正履歴 / 廃止ステータスの精緻化）
 - [x] 漢数字対応（「第三十条」を 30 に変換）— v0.7.0 で `get_law` の `article` / `item` に対応。`search_fulltext` のキーワード中の「第三十条」は未対応
 - [ ] 大規模法令の応答サイズ対策（民法・会社法）
