@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.9.0] - 2026-09-19
+## [Unreleased]
 
 ### In progress (Phase 2 — 残作業)
 
@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
+
+## [0.9.0] - 2026-09-19
+
+**minor リリース、コードの変更なし** — 0.8.0 の取り込み後に main の履歴を整理した際に版だけが上がった。`--sync` を含む内容は 0.8.0 と同じ。
 
 ## [0.8.0] - 2026-09-19
 
