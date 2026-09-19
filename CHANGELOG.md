@@ -10,12 +10,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### In progress (Phase 2 — 残作業)
 
 - Phase 2-13: API enrichment（`category` / `revisions_meta` / PreviousEnforced・Repeal の精緻化）
-- Phase 2-8: 差分同期 (`--bulk-download-incremental`) の日次ループ
 
 ### Planned (Phase 1 磨き込み — 痛点ログ駆動 / Phase 2 着手前から残置)
 
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
+
+## [0.8.0] - 2026-09-19
+
+**minor リリース** — `--sync` を足し、全件取り込み済みの DB を日次差分で最新化できるようにした（Issue #21、Phase 2-8）。
+
+### Added
+
+- **`--sync`**: `sync_state.last_sync_date` から今日（JST）までの日次差分 zip（`file_section=3`）を日付順に取得して取り込む。差分が無い日は飛ばし、途中で失敗しても成功した日までを `last_sync_date` に記録して終わる。1 日ごとに `[n/N] 日付: 件数 (サイズ, 時間)` を出し、最後に日数・件数・所要時間をまとめる
+  - 開始日は `last_sync_date` **を含める**。e-Gov の日次 zip はその日の 15 時ごろに生成されるので、午前に同期した日の差分を次回に拾い直すため。同じ zip を二度入れても `content_hash` で no-op になる
+  - 差分が無い日は e-Gov が HTTP 500（HTML のエラーページ）を返す（2026-09-19 実測。日曜日・未来の日付・存在しない日付が同じ応答）。障害と区別するため、同期の前に `https://laws.e-gov.go.jp/bulkdownload/` に HEAD で届くことを確かめ、届かなければ何もせず終わる
+  - `last_sync_date` から `HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS`（既定 90 日）を超えて空いていたら何もせず、`--bulk-download-everything` を促して exit 1
+  - `--bulk-download-incremental`（`docs/PHASE2-DESIGN.md` で予定していた名前）も同じ動作
+- `src/services/bulk/sync.ts`: 計画（`planSync`）と進行（`runSync`）を DL / ingest から切り離した。CLI は実 DL / ingest と表示だけを持つ
+- `BulkHttpError`（`BulkFetchError` の派生、`status` を持つ）: 差分 zip が無い日の 500 を呼び出し側が見分けるため
+
+### Changed
+
+- **差分 zip で同じ法令の新しい版が現行として届いたとき、前の版を `PreviousEnforced` に落とす**。これまでは前の版も `CurrentEnforced` のまま残り、`search_fulltext` の revision 重複対策（`CurrentEnforced` に絞る）をすり抜けて同じ法令が 2 度ヒットする経路があった（`--bulk-download-by-date` でも同じ）
+- `source: 'incremental'` の ingest で `sync_state.total_laws` に差分 CSV の行数を書いていたのを、DB の法令数に変えた
+- `ingestZip` に `updateSyncState`（既定 true）を足した。`--sync` は日ごとに自分で `sync_state` を進めるので false を渡す
+- `freshness.warning` と `--status` の案内を `--sync` に変えた（これまでは存在しない `--bulk-download-incremental` を案内していた）
+- `--help` の並びを「全件 → 差分 → 単日（デバッグ用）→ 状態」にし、`HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS` を載せた
+
+### 実測（2026-09-19、`last_sync_date` を 2026-09-13 にした DB で）
+
+7 日分を確認し、5 日に差分あり（234 件 upsert、25 件 unchanged）、2 日（日曜日と当日）は差分なし。全体 1 分 11 秒（うち 9/14〜9/16 の zip が 14〜30 MB）。同じ日に 2 回目を実行すると当日 1 日だけを確認し直し「新たに取り込んだ法令はありません」で exit 0
 
 ## [0.7.0] - 2026-09-19
 

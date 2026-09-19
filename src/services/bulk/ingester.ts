@@ -50,6 +50,11 @@ export interface IngestZipOptions {
   onXmlError?: 'skip' | 'throw';
   /** 1 transaction で commit する law 件数 (default 200) */
   batchSize?: number;
+  /**
+   * ingest 後に sync_state を書き換えるか (default true)。
+   * `--sync` は日ごとに自分で `upsertSyncState` を呼ぶので false を渡す
+   */
+  updateSyncState?: boolean;
 }
 
 /** 進捗イベント */
@@ -117,6 +122,7 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     onProgress,
     onXmlError = 'skip',
     batchSize = 200,
+    updateSyncState = true,
   } = opts;
 
   const start = Date.now();
@@ -202,11 +208,21 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     VALUES (?, ?, ?, ?, ?, ?)
   `);
   const selectExistingHash = db.prepare('SELECT content_hash FROM laws WHERE law_revision_id = ?');
+  // 差分 zip で同じ法令の新しい版 (別の law_revision_id) が現行として届いたとき、
+  // 前の版を PreviousEnforced に落とす。落とさないと search_fulltext の
+  // revision 重複対策 (CurrentEnforced に絞る) をすり抜けて同じ法令が 2 度ヒットする
+  const demotePreviousRevisions = db.prepare(`
+    UPDATE laws SET current_revision_status = 'PreviousEnforced'
+    WHERE law_id = ? AND law_revision_id <> ? AND current_revision_status = 'CurrentEnforced'
+  `);
 
   // 5) batch transaction
   const ingestBatch = db.transaction((items: PreparedItem[]) => {
     for (const item of items) {
       upsertLaw.run(item.lawRow);
+      if (item.lawRow.current_revision_status === 'CurrentEnforced') {
+        demotePreviousRevisions.run(item.lawRow.law_id, item.lawRow.law_revision_id);
+      }
       // articles 全置換
       deleteArticles.run(item.lawRow.law_revision_id);
       let ord = 1;
@@ -303,13 +319,15 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     });
   }
 
-  // 7) sync_state を更新
-  upsertSyncState(db, {
-    last_sync_date: isoDateOnly(nowIso),
-    last_full_dl_at: source === 'all_xml' ? nowIso : null,
-    total_laws: csvRows.length,
-    bulk_source: source,
-  });
+  // 7) sync_state を更新 (差分 zip の CSV は当日更新分だけなので total_laws は DB の件数を使う)
+  if (updateSyncState) {
+    upsertSyncState(db, {
+      last_sync_date: isoDateOnly(nowIso),
+      last_full_dl_at: source === 'all_xml' ? nowIso : null,
+      total_laws: source === 'all_xml' ? csvRows.length : countLaws(db),
+      bulk_source: source,
+    });
+  }
 
   await zip.close();
 
@@ -434,8 +452,16 @@ function guessLawTypeFromLabel(label: string): string {
   return map[label] ?? 'Act'; // 不明時は Act にフォールバック
 }
 
-/** sync_state を upsert (single-row, id=1) */
-function upsertSyncState(
+/** laws の行数 (差分 ingest 後の sync_state.total_laws 用) */
+export function countLaws(db: DatabaseT.Database): number {
+  return (db.prepare('SELECT count(*) AS c FROM laws').get() as { c: number }).c;
+}
+
+/**
+ * sync_state を upsert (single-row, id=1)。
+ * `last_full_dl_at` に null を渡すと既存の値を保つ (差分 ingest 用)
+ */
+export function upsertSyncState(
   db: DatabaseT.Database,
   args: {
     last_sync_date: string;

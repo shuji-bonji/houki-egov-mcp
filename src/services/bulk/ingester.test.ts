@@ -448,6 +448,166 @@ describe('ingestZip', () => {
     expect(ss.bulk_source).toBe('incremental');
   });
 
+  it('source=incremental の total_laws は差分 CSV の行数ではなく DB の法令数', async () => {
+    await ingestZip({
+      db,
+      zip: createMemoryZip([
+        { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI, CSV_YOKIN]) },
+        {
+          path: '105DF0000000337_18721109_000000000000000/105DF0000000337_18721109_000000000000000.xml',
+          content: XML_KAIREKI,
+        },
+        {
+          path: '346AC0000000034_19710401_000000000000000/346AC0000000034_19710401_000000000000000.xml',
+          content: XML_YOKIN,
+        },
+      ]),
+      nowIso: '2026-05-08T15:00:00+09:00',
+      source: 'all_xml',
+    });
+    // 差分は 1 件だけ
+    await ingestZip({
+      db,
+      zip: createMemoryZip([
+        { path: 'R080509.csv', content: buildCsv([CSV_KAIREKI]) },
+        {
+          path: '105DF0000000337_18721109_000000000000000/105DF0000000337_18721109_000000000000000.xml',
+          content: XML_KAIREKI,
+        },
+      ]),
+      nowIso: '2026-05-09T06:00:00+09:00',
+      source: 'incremental',
+    });
+    const ss = db.prepare('SELECT total_laws FROM sync_state WHERE id = 1').get() as {
+      total_laws: number;
+    };
+    expect(ss.total_laws).toBe(2);
+  });
+
+  it('updateSyncState=false なら sync_state を触らない', async () => {
+    await ingestZip({
+      db,
+      zip: createMemoryZip([
+        { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI]) },
+        {
+          path: '105DF0000000337_18721109_000000000000000/105DF0000000337_18721109_000000000000000.xml',
+          content: XML_KAIREKI,
+        },
+      ]),
+      nowIso: '2026-05-08T15:00:00+09:00',
+      source: 'all_xml',
+    });
+    await ingestZip({
+      db,
+      zip: createMemoryZip([
+        { path: 'R080509.csv', content: buildCsv([CSV_KAIREKI]) },
+        {
+          path: '105DF0000000337_18721109_000000000000000/105DF0000000337_18721109_000000000000000.xml',
+          content: XML_KAIREKI,
+        },
+      ]),
+      nowIso: '2026-05-09T06:00:00+09:00',
+      source: 'incremental',
+      updateSyncState: false,
+    });
+    const ss = db.prepare('SELECT * FROM sync_state WHERE id = 1').get() as Record<string, unknown>;
+    expect(ss.last_sync_date).toBe('2026-05-08');
+    expect(ss.bulk_source).toBe('all_xml');
+  });
+
+  it('同じ法令の新しい版が現行として届いたら、前の版を PreviousEnforced に落とす', async () => {
+    // 全件: 預金保険法の初版 (19710401)
+    await ingestZip({
+      db,
+      zip: createMemoryZip([
+        { path: 'all_law_list.csv', content: buildCsv([CSV_YOKIN]) },
+        {
+          path: '346AC0000000034_19710401_000000000000000/346AC0000000034_19710401_000000000000000.xml',
+          content: XML_YOKIN,
+        },
+      ]),
+      nowIso: '2026-05-08T15:00:00+09:00',
+      source: 'all_xml',
+    });
+    // 差分: 同じ法令の改正後の版 (別の law_revision_id、未施行フラグなし = 現行)
+    const csvNewRev = CSV_YOKIN.replace(
+      '19710401_000000000000000',
+      '20260601_508AC0000000010'
+    ).replace(
+      ',昭和四十六年四月一日,昭和四十六年四月一日,,',
+      ',昭和四十六年四月一日,令和八年六月一日,,'
+    );
+    await ingestZip({
+      db,
+      zip: createMemoryZip([
+        { path: 'R080601.csv', content: buildCsv([csvNewRev]) },
+        {
+          path: '346AC0000000034_20260601_508AC0000000010/346AC0000000034_20260601_508AC0000000010.xml',
+          content: XML_YOKIN.replace('（目的）', '（目的・改正後）'),
+        },
+      ]),
+      nowIso: '2026-06-01T06:00:00+09:00',
+      source: 'incremental',
+    });
+
+    const rows = db
+      .prepare(
+        'SELECT law_revision_id, current_revision_status FROM laws WHERE law_id = ? ORDER BY law_revision_id'
+      )
+      .all('346AC0000000034') as { law_revision_id: string; current_revision_status: string }[];
+    expect(rows).toEqual([
+      {
+        law_revision_id: '346AC0000000034_19710401_000000000000000',
+        current_revision_status: 'PreviousEnforced',
+      },
+      {
+        law_revision_id: '346AC0000000034_20260601_508AC0000000010',
+        current_revision_status: 'CurrentEnforced',
+      },
+    ]);
+  });
+
+  it('未施行の版が届いても、現行の版はそのまま', async () => {
+    await ingestZip({
+      db,
+      zip: createMemoryZip([
+        { path: 'all_law_list.csv', content: buildCsv([CSV_YOKIN]) },
+        {
+          path: '346AC0000000034_19710401_000000000000000/346AC0000000034_19710401_000000000000000.xml',
+          content: XML_YOKIN,
+        },
+      ]),
+      nowIso: '2026-05-08T15:00:00+09:00',
+      source: 'all_xml',
+    });
+    const csvNewRev = CSV_YOKIN.replace(
+      '19710401_000000000000000',
+      '20270401_508AC0000000010'
+    ).replace(
+      ',昭和四十六年四月一日,昭和四十六年四月一日,,',
+      ',昭和四十六年四月一日,令和九年四月一日,,'
+    );
+    const csvUnenforced = `${csvNewRev}○`;
+    await ingestZip({
+      db,
+      zip: createMemoryZip([
+        { path: 'R080601.csv', content: buildCsv([csvUnenforced]) },
+        {
+          path: '346AC0000000034_20270401_508AC0000000010/346AC0000000034_20270401_508AC0000000010.xml',
+          content: XML_YOKIN,
+        },
+      ]),
+      nowIso: '2026-06-01T06:00:00+09:00',
+      source: 'incremental',
+    });
+    const rows = db
+      .prepare(
+        'SELECT law_revision_id, current_revision_status FROM laws WHERE law_id = ? ORDER BY law_revision_id'
+      )
+      .all('346AC0000000034') as { law_revision_id: string; current_revision_status: string }[];
+    expect(rows.map((r) => r.current_revision_status)).toEqual(['CurrentEnforced', 'UnEnforced']);
+  });
+
   it('progress callback を発火する', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI, CSV_YOKIN, CSV_UNENFORCED]) },
