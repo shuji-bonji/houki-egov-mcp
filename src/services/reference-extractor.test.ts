@@ -200,4 +200,77 @@ describe('extractReferences', () => {
     });
     expect(r).toEqual({ references: [], delegations: [] });
   });
+
+  it('条を書かない項・号が「及び」で直前の参照につながっていれば、直前の条を引き継ぐ（v0.10.1）', () => {
+    // 電帳法施行規則 4 条 1 項の実文（抜粋）
+    const text =
+      '第二条第二項第二号及び第六項第五号の規定は、法第七条に規定する電磁的記録の保存について準用する。';
+    const parent = {
+      title: '電帳法',
+      law_id: '410AC0000000025',
+      law_num: '平成十年法律第二十五号',
+    };
+    const r = extractReferences(text, { resolvedByNum: [], knownLaws: [], parentAct: parent });
+    expect(r.references).toEqual([
+      { kind: 'internal', raw: '第二条第二項第二号', article: '2', paragraph: 2, item: '2' },
+      {
+        kind: 'internal',
+        raw: '第六項第五号',
+        article: '2',
+        paragraph: 6,
+        item: '5',
+        article_from: '第二条第二項第二号',
+      },
+      expect.objectContaining({
+        kind: 'external',
+        raw: '法第七条',
+        law_id: '410AC0000000025',
+        article: '7',
+      }),
+    ]);
+  });
+
+  it('他法令の参照に「又は」でつながる項は、その法令の同じ条として external になる', () => {
+    const text = '法第七条第一項又は第三項の規定により';
+    const parent = { title: '電帳法', law_id: '410AC0000000025' };
+    const r = extractReferences(text, { resolvedByNum: [], knownLaws: [], parentAct: parent });
+    expect(r.references).toEqual([
+      expect.objectContaining({
+        kind: 'external',
+        raw: '法第七条第一項',
+        article: '7',
+        paragraph: 1,
+      }),
+      expect.objectContaining({
+        kind: 'external',
+        raw: '第三項',
+        law_name: '電帳法',
+        law_id: '410AC0000000025',
+        article: '7',
+        paragraph: 3,
+        article_from: '法第七条第一項',
+        resolved: true,
+      }),
+    ]);
+  });
+
+  it('「第六項第四号及び第五号」の後半は条と項を引き継ぐ。つながっていなければ引き継がない', () => {
+    const r1 = extractReferences('第二条第六項第四号及び第五号に掲げる', {
+      resolvedByNum: [],
+      knownLaws: [],
+    });
+    expect(r1.references[1]).toEqual({
+      kind: 'internal',
+      raw: '第五号',
+      article: '2',
+      paragraph: 6,
+      item: '5',
+      article_from: '第二条第六項第四号',
+    });
+    const r2 = extractReferences('第二条の規定にかかわらず、第三項の定めによる。', {
+      resolvedByNum: [],
+      knownLaws: [],
+    });
+    expect(r2.references[1]).toEqual({ kind: 'internal', raw: '第三項', paragraph: 3 });
+  });
 });

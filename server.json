@@ -6,12 +6,12 @@
     "url": "https://github.com/shuji-bonji/houki-egov-mcp",
     "source": "github"
   },
-  "version": "0.10.0",
+  "version": "0.10.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@shuji-bonji/houki-egov-mcp",
-      "version": "0.10.0",
+      "version": "0.10.1",
       "transport": {
         "type": "stdio"
       }

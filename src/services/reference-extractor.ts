@@ -34,6 +34,11 @@ export interface ArticleLocator {
   paragraph?: number;
   /** 号番号。"8の2" のような枝番号を保つため文字列 */
   item?: string;
+  /**
+   * 「第二条第二項第二号及び第六項第五号」の後半のように、条を書かずに直前の参照と「及び」「又は」「、」で
+   * つながっている参照は、直前の参照の条を引き継ぐ。引き継いだときは、その直前の参照の raw をここに入れる（v0.10.1）
+   */
+  article_from?: string;
 }
 
 /** 法令番号の付いた法令名の出現（① の前段。呼び出し側が法令番号で名前を解決する） */
@@ -145,8 +150,12 @@ class Spans {
 
 interface Found {
   index: number;
+  end: number;
   ref: ExtractedReference;
 }
+
+/** 直前の参照と 1 語でつながっていれば、条を引き継ぐ。その 1 語 */
+const CHAIN_CONNECTORS = /^(?:及び|又は|並びに|若しくは|、|から)$/;
 
 /**
  * 本文から参照と委任を取り出す。
@@ -170,6 +179,7 @@ export function extractReferences(text: string, ctx: ExtractContext): ExtractRes
       const loc = parseChain(m[1], m[2], m[3]) ?? {};
       found.push({
         index: start,
+        end,
         ref: {
           kind: 'external',
           raw: m[0],
@@ -194,7 +204,7 @@ export function extractReferences(text: string, ctx: ExtractContext): ExtractRes
       const end = start + m[0].length;
       if (spans.overlaps(start, end)) continue;
       spans.add(start, end);
-      found.push({ index: start, ref: { kind: 'relative', raw: m[0], resolved: false } });
+      found.push({ index: start, end, ref: { kind: 'relative', raw: m[0], resolved: false } });
     }
   }
 
@@ -223,6 +233,7 @@ export function extractReferences(text: string, ctx: ExtractContext): ExtractRes
       spans.add(start, end);
       found.push({
         index: start,
+        end,
         ref: {
           kind: 'external',
           raw: m[0],
@@ -257,6 +268,7 @@ export function extractReferences(text: string, ctx: ExtractContext): ExtractRes
         spans.add(nameStart, end);
         found.push({
           index: nameStart,
+          end,
           ref: {
             kind: 'external',
             raw: `${candidate}${m[0]}`,
@@ -268,7 +280,7 @@ export function extractReferences(text: string, ctx: ExtractContext): ExtractRes
         continue;
       }
       spans.add(start, end);
-      found.push({ index: start, ref: { kind: 'internal', raw: m[0], ...loc } });
+      found.push({ index: start, end, ref: { kind: 'internal', raw: m[0], ...loc } });
     }
   }
 
@@ -293,8 +305,45 @@ export function extractReferences(text: string, ctx: ExtractContext): ExtractRes
   }
 
   found.sort((a, b) => a.index - b.index);
+  inheritArticles(text, found);
   return {
     references: found.map((f) => f.ref),
     delegations: [...delegations.values()],
   };
+}
+
+/**
+ * 条を書かない項・号の参照（「第六項第五号」）が、直前の参照と「及び」「又は」「、」などの 1 語だけでつながっているとき、
+ * 直前の参照の条（他法令なら法令も）を引き継ぐ。「第二条第二項第二号及び第六項第五号」の後半は第二条第六項第五号。
+ * 引き継がなければ、その項・号は「この条の」と読まれ、`get_law` に渡すと違う条を引いてしまう。
+ */
+function inheritArticles(text: string, found: Found[]): void {
+  for (let i = 1; i < found.length; i++) {
+    const cur = found[i].ref;
+    if (cur.kind !== 'internal' || cur.article !== undefined) continue;
+    const prev = found[i - 1];
+    if (prev.ref.kind === 'relative' || prev.ref.article === undefined) continue;
+    const gap = text.slice(prev.end, found[i].index);
+    if (!CHAIN_CONNECTORS.test(gap)) continue;
+    const base: ArticleLocator = { article: prev.ref.article, article_from: prev.ref.raw };
+    // 「第六項第四号及び第五号」の後半は、項も引き継ぐ
+    if (cur.paragraph === undefined && cur.item !== undefined && prev.ref.paragraph !== undefined) {
+      base.paragraph = prev.ref.paragraph;
+    }
+    if (prev.ref.kind === 'external') {
+      found[i].ref = {
+        kind: 'external',
+        raw: cur.raw,
+        law_name: prev.ref.law_name,
+        ...(prev.ref.law_num ? { law_num: prev.ref.law_num } : {}),
+        ...(prev.ref.law_id ? { law_id: prev.ref.law_id } : {}),
+        ...base,
+        ...(cur.paragraph !== undefined ? { paragraph: cur.paragraph } : {}),
+        ...(cur.item !== undefined ? { item: cur.item } : {}),
+        resolved: prev.ref.resolved,
+      };
+    } else {
+      Object.assign(cur, base);
+    }
+  }
 }
