@@ -6,18 +6,20 @@
  * - HTTP / parse / 該当なし のエラーを統一形で返す
  */
 
-import { resolveAbbreviation } from '@shuji-bonji/houki-abbreviations';
+import { listBySourceMcpHint, resolveAbbreviation } from '@shuji-bonji/houki-abbreviations';
 import { CACHE_CONFIG, EGOV_API } from '../config.js';
 import {
   isLawServiceError as _isLawServiceError,
   type LawServiceError,
   makeError,
   NEXT_ACTIONS,
+  type NextAction,
 } from '../errors.js';
 import { formatArticleMarkdown, formatTocMarkdown } from '../formatters/markdown.js';
 import {
   formatArticleLabel,
   formatItemLabel,
+  fromEgovArticleNum,
   toEgovArticleNum,
   toEgovItemNum,
 } from '../utils/article-num.js';
@@ -33,7 +35,14 @@ import {
   searchLaws,
 } from './egov-client.js';
 import {
+  type LawRelation,
+  parentActTitle,
+  RELATED_LAWS_NOTE,
+  relationCandidates,
+} from './law-relations.js';
+import {
   countTocNodes,
+  extractText,
   extractToc,
   findArticle,
   findChildrenByTag,
@@ -44,6 +53,13 @@ import {
   limitTocDepth,
   type TocNode,
 } from './law-tree.js';
+import {
+  type Delegation,
+  type ExtractedReference,
+  extractReferences,
+  findLawNumMentions,
+  type KnownLaw,
+} from './reference-extractor.js';
 
 /**
  * EgovHttpError などの例外を、LLM 可読な LawServiceError に変換する。
@@ -601,4 +617,500 @@ export async function getLawRevisionsByName(opts: { law_name: string; latest?: n
 export function _resetCachesForTest(): void {
   lawDataCache.clear();
   searchCache.clear();
+  exactLookupCache.clear();
+}
+
+// ========================================
+// egov#20: 施行令・施行規則の関連付けと条文内の参照抽出（v0.10.0）
+// ========================================
+
+/** 法令番号・法令名の完全一致で引いた結果のキャッシュ。キーは `num:<法令番号>` / `title:<法令名>` */
+const exactLookupCache = new LRUCache<string, ExactLawHit | null>(
+  CACHE_CONFIG.searchResults.maxSize,
+  'ExactLookupCache'
+);
+
+/** e-Gov `/laws` で完全一致した 1 件 */
+export interface ExactLawHit {
+  law_id: string;
+  title: string;
+  law_num: string;
+  law_type: string;
+}
+
+function toExactHit(l: LawListItem): ExactLawHit {
+  return {
+    law_id: l.law_info.law_id,
+    title: l.revision_info.law_title,
+    law_num: l.law_info.law_num,
+    law_type: l.law_info.law_type,
+  };
+}
+
+/**
+ * 法令名が e-Gov に実在するかを確かめる。`/laws?law_title=` は部分一致なので、
+ * `revision_info.law_title` が完全一致する 1 件だけを返す。無ければ null。
+ * 通信エラーは呼び出し側で扱うため、そのまま投げる。
+ */
+async function findLawByExactTitle(title: string): Promise<ExactLawHit | null> {
+  const key = `title:${title}`;
+  const cached = exactLookupCache.get(key);
+  if (cached !== undefined) return cached;
+  const res = await searchLaws({ law_title: title, limit: 50 });
+  const hit = res.laws.find((l) => l.revision_info.law_title === title);
+  const out = hit ? toExactHit(hit) : null;
+  exactLookupCache.set(key, out);
+  return out;
+}
+
+/** 法令番号（漢数字表記。例: "昭和四十九年法律第百十六号"）で法令を引く。無ければ null */
+async function findLawByNum(lawNum: string): Promise<ExactLawHit | null> {
+  const key = `num:${lawNum}`;
+  const cached = exactLookupCache.get(key);
+  if (cached !== undefined) return cached;
+  const res = await searchLaws({ law_num: lawNum, limit: 5 });
+  const hit = res.laws.find((l) => l.law_info.law_num === lawNum) ?? res.laws[0];
+  const out = hit ? toExactHit(hit) : null;
+  exactLookupCache.set(key, out);
+  return out;
+}
+
+/** `get_related_laws` の応答 */
+export interface RelatedLawsResponse {
+  law: { law_id: string; title: string; law_num?: string };
+  related: Array<ExactLawHit & { relation: LawRelation; abbr?: string; url: string }>;
+  /** 名前を作って e-Gov に問い合わせたが、完全一致する法令が無かった候補 */
+  not_found: Array<{ relation: LawRelation; title: string }>;
+  method: 'law_name_rule';
+  note: string;
+  next_actions: NextAction[];
+  meta: { retrieved_at: string };
+}
+
+/**
+ * get_related_laws ツールの本実装
+ *
+ * 1. law_name を law_id に解決（略称辞書 → e-Gov 検索。既存の resolveLawId）
+ * 2. 法令名の規則で候補を作る（law-relations.ts）
+ * 3. 候補ごとに e-Gov で実在を確かめ、完全一致した 1 件だけを related に入れる
+ */
+export async function getRelatedLaws(opts: {
+  law_name: string;
+}): Promise<LawServiceResult<RelatedLawsResponse>> {
+  const scopeError = checkAbbreviationScope(opts.law_name);
+  if (scopeError) return scopeError;
+
+  const resolved = await resolveLawId(opts.law_name);
+  if (!resolved) {
+    return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
+      hint: '略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください',
+      next_actions: [
+        NEXT_ACTIONS.resolveAbbreviation(opts.law_name),
+        NEXT_ACTIONS.searchLaw(opts.law_name),
+      ],
+    });
+  }
+
+  const related: RelatedLawsResponse['related'] = [];
+  const notFound: RelatedLawsResponse['not_found'] = [];
+  try {
+    for (const cand of relationCandidates(resolved.title)) {
+      const hit = await findLawByExactTitle(cand.title);
+      if (!hit) {
+        notFound.push({ relation: cand.relation, title: cand.title });
+        continue;
+      }
+      const abbr = resolveAbbreviation(hit.title)?.abbr;
+      related.push({
+        relation: cand.relation,
+        ...hit,
+        ...(abbr ? { abbr } : {}),
+        url: EGOV_API.publicLawUrl(hit.law_id),
+      });
+    }
+  } catch (err) {
+    return egovHttpErrorToLawError(err);
+  }
+
+  const next_actions: NextAction[] = related.map((r) => ({
+    action: 'get_toc',
+    reason:
+      r.relation === 'parent_act'
+        ? '親の法律の目次を見て、委任している条を探せます'
+        : `${r.relation === 'enforcement_order' ? '施行令' : '施行規則'}の目次を見て、委任先の条を探せます`,
+    example: { law_name: r.title },
+  }));
+
+  return {
+    law: {
+      law_id: resolved.law_id,
+      title: resolved.title,
+      ...(resolved.law_num ? { law_num: resolved.law_num } : {}),
+    },
+    related,
+    not_found: notFound,
+    method: 'law_name_rule',
+    note: RELATED_LAWS_NOTE,
+    next_actions,
+    meta: { retrieved_at: new Date().toISOString() },
+  };
+}
+
+/** `get_article_references` の応答 */
+export interface ArticleReferencesResponse {
+  meta: ArticleMeta & { article: string; paragraph?: number };
+  references: ExtractedReference[];
+  delegations: Array<
+    Delegation & {
+      target_law?: {
+        relation: LawRelation;
+        law_id: string;
+        title: string;
+        url: string;
+        /** 委任先がこの法令自身（施行令の本文の「政令で定める」）のとき true */
+        self?: true;
+      };
+    }
+  >;
+  coverage: { method: 'regex'; note: string };
+  next_actions: NextAction[];
+}
+
+const ARTICLE_REFERENCES_NOTE =
+  '本文の文字列から正規表現で取れた参照だけを返しています。取れなかった参照があっても検出できません。「前項」「同法」「同条」などは解決していません（resolved: false）。法令名の候補が e-Gov に無かった参照も resolved: false のままです。委任先の条は特定していません（target_law は法令単位）。網羅性は保証しません';
+
+/** 1 回の呼び出しで e-Gov に問い合わせる未解決の法令名候補の上限 */
+const MAX_CANDIDATE_LOOKUPS = 20;
+
+/**
+ * get_article_references ツールの本実装
+ *
+ * 1. 条（と項）を取得（get_law と同じ解決と取得）
+ * 2. 本文の「（法令番号）」を法令番号で解決（e-Gov `/laws?law_num=`）
+ * 3. reference-extractor で参照と委任を取り出す
+ * 4. 名前だけの参照は候補名の完全一致で解決を試みる
+ * 5. 委任には get_related_laws と同じ規則で施行令・施行規則を付ける
+ */
+export async function getArticleReferences(opts: {
+  law_name: string;
+  article: string;
+  paragraph?: number;
+  at?: string;
+}): Promise<LawServiceResult<ArticleReferencesResponse>> {
+  const scopeError = checkAbbreviationScope(opts.law_name);
+  if (scopeError) return scopeError;
+
+  const resolved = await resolveLawId(opts.law_name);
+  if (!resolved) {
+    return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
+      hint: '略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください',
+      next_actions: [
+        NEXT_ACTIONS.resolveAbbreviation(opts.law_name),
+        NEXT_ACTIONS.searchLaw(opts.law_name),
+      ],
+    });
+  }
+
+  let articleNum: string;
+  try {
+    articleNum = toEgovArticleNum(opts.article);
+  } catch (err) {
+    return makeError('INVALID_ARTICLE_NUM', (err as Error).message, {
+      hint: '条番号は "30"、"30の2"、"第三十条"、"第三十条の二" のいずれかの形式で指定してください',
+    });
+  }
+
+  let lawData: EgovLawDataResponse;
+  try {
+    lawData = await fetchLawData(resolved.law_id, opts.at);
+  } catch (err) {
+    return egovHttpErrorToLawError(err);
+  }
+
+  const article = findArticle(lawData.law_full_text, articleNum);
+  if (!article) {
+    return makeError(
+      'ARTICLE_NOT_FOUND',
+      `条文が見つかりません: ${formatArticleLabel(articleNum)} in ${resolved.title}`,
+      {
+        hint: '法令名・条番号を確認してください。get_toc で目次を確認できます',
+        next_actions: [NEXT_ACTIONS.getToc(opts.law_name)],
+      }
+    );
+  }
+  let scope: LawNode = article;
+  if (opts.paragraph !== undefined) {
+    const paragraph = findParagraph(article, opts.paragraph);
+    if (!paragraph) {
+      return makeError(
+        'ARTICLE_NOT_FOUND',
+        `項が見つかりません: ${formatArticleLabel(articleNum)}第${opts.paragraph}項`,
+        {
+          hint: '項番号は 1 始まりで指定してください。条全体が必要なら paragraph を省略してください',
+        }
+      );
+    }
+    scope = paragraph;
+  }
+
+  // 見出し（ArticleCaption / ArticleTitle）は参照の対象外。本文の Sentence だけを、項ごとにつなぐ
+  const segments = collectSentenceSegments(scope, opts.paragraph);
+  const text = segments.map((seg) => seg.text).join('\n');
+
+  try {
+    // 2. 「（法令番号）」を法令番号で解決
+    const resolvedByNum: KnownLaw[] = [];
+    for (const mention of findLawNumMentions(text)) {
+      const hit = await findLawByNum(mention.law_num);
+      if (hit) resolvedByNum.push({ title: hit.title, law_id: hit.law_id, law_num: hit.law_num });
+    }
+
+    // 3. 抽出（項ごとに行い、「第三号」のように条も項も無い参照にはその項の番号を付ける）
+    const parentTitle = parentActTitle(resolved.title);
+    const parentAct = parentTitle ? await findLawByExactTitle(parentTitle) : null;
+    const ctx = {
+      resolvedByNum,
+      knownLaws: dictionaryKnownLaws(),
+      ...(parentAct
+        ? {
+            parentAct: {
+              title: parentAct.title,
+              law_id: parentAct.law_id,
+              law_num: parentAct.law_num,
+            },
+          }
+        : {}),
+    };
+    const extracted: { references: ExtractedReference[]; delegations: Delegation[] } = {
+      references: [],
+      delegations: [],
+    };
+    for (const seg of segments) {
+      const part = extractReferences(seg.text, ctx);
+      for (const ref of part.references) {
+        if (
+          ref.kind === 'internal' &&
+          ref.article === undefined &&
+          ref.paragraph === undefined &&
+          seg.paragraph !== undefined
+        ) {
+          ref.paragraph = seg.paragraph;
+        }
+        extracted.references.push(ref);
+      }
+      for (const d of part.delegations) {
+        const cur = extracted.delegations.find((x) => x.raw === d.raw);
+        if (cur) cur.count += d.count;
+        else extracted.delegations.push({ ...d });
+      }
+    }
+
+    // 4. 名前だけの参照を、候補名の完全一致で解決する（上限あり）
+    const candidates = new Map<string, ExactLawHit | null>();
+    for (const ref of extracted.references) {
+      if (ref.kind !== 'external' || ref.resolved) continue;
+      if (!candidates.has(ref.law_name)) {
+        if (candidates.size >= MAX_CANDIDATE_LOOKUPS) continue;
+        candidates.set(ref.law_name, await findLawByExactTitle(ref.law_name));
+      }
+      const hit = candidates.get(ref.law_name);
+      if (hit) {
+        ref.law_name = hit.title;
+        ref.law_num = hit.law_num;
+        ref.law_id = hit.law_id;
+        ref.resolved = true;
+      }
+    }
+
+    // 5. 委任先（法令単位）
+    const targets = new Map<LawRelation, ExactLawHit | null>();
+    const delegations: ArticleReferencesResponse['delegations'] = [];
+    for (const d of extracted.delegations) {
+      const relation: LawRelation = d.target;
+      if (!targets.has(relation)) {
+        const base = parentTitle ?? resolved.title;
+        const title = relation === 'enforcement_order' ? `${base}施行令` : `${base}施行規則`;
+        targets.set(relation, await findLawByExactTitle(title));
+      }
+      const hit = targets.get(relation);
+      delegations.push({
+        ...d,
+        ...(hit
+          ? {
+              target_law: {
+                relation,
+                law_id: hit.law_id,
+                title: hit.title,
+                url: EGOV_API.publicLawUrl(hit.law_id),
+                // 施行令の本文に出る「政令で定める」は、その施行令自身を指す
+                ...(hit.law_id === resolved.law_id ? { self: true } : {}),
+              },
+            }
+          : {}),
+      });
+    }
+
+    const retrievedAt = new Date().toISOString();
+    return {
+      meta: {
+        law_id: resolved.law_id,
+        title: resolved.title,
+        law_num: resolved.law_num,
+        retrieved_at: retrievedAt,
+        url: EGOV_API.publicLawUrl(resolved.law_id),
+        at: opts.at,
+        article: fromEgovArticleNum(articleNum),
+        ...(opts.paragraph !== undefined ? { paragraph: opts.paragraph } : {}),
+      },
+      references: extracted.references,
+      delegations,
+      coverage: { method: 'regex', note: ARTICLE_REFERENCES_NOTE },
+      next_actions: buildReferenceNextActions(
+        resolved.title,
+        articleNum,
+        extracted.references,
+        delegations
+      ),
+    };
+  } catch (err) {
+    return egovHttpErrorToLawError(err);
+  }
+}
+
+/** 本文の Sentence を項ごとにまとめたもの。paragraph は項番号（条の直下の文など、項に属さないものは undefined） */
+interface SentenceSegment {
+  paragraph?: number;
+  text: string;
+}
+
+/** ノード以下の Sentence の文字列を集める（見出し・条名・項番号・号名は含めない） */
+function collectSentenceText(node: LawNode): string {
+  const parts: string[] = [];
+  const walk = (n: LawNode | string): void => {
+    if (typeof n === 'string') return;
+    if (n.tag === 'Sentence') {
+      parts.push(extractText(n));
+      return;
+    }
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(node);
+  return parts.join('\n');
+}
+
+/**
+ * 条（または項）の本文を、項ごとの segment にする。
+ * 条を渡したときは Paragraph 子要素ごとに 1 つ、項を渡したときは 1 つ。
+ */
+function collectSentenceSegments(scope: LawNode, paragraphNum?: number): SentenceSegment[] {
+  if (scope.tag === 'Paragraph') {
+    const num = paragraphNum ?? Number(scope.attr?.Num);
+    return [
+      { ...(Number.isInteger(num) ? { paragraph: num } : {}), text: collectSentenceText(scope) },
+    ];
+  }
+  const out: SentenceSegment[] = [];
+  for (const c of scope.children ?? []) {
+    if (typeof c === 'string') continue;
+    if (c.tag === 'Paragraph') {
+      const num = Number(c.attr?.Num);
+      const text = collectSentenceText(c);
+      if (text) out.push({ ...(Number.isInteger(num) ? { paragraph: num } : {}), text });
+    } else if (c.tag !== 'ArticleCaption' && c.tag !== 'ArticleTitle') {
+      const text = collectSentenceText(c);
+      if (text) out.push({ text });
+    }
+  }
+  return out;
+}
+
+/** 略称辞書のうち houki-egov 管轄で law_id を持つエントリを、名前照合用の一覧にする（起動中は変わらない） */
+let dictionaryKnownLawsCache: KnownLaw[] | null = null;
+function dictionaryKnownLaws(): KnownLaw[] {
+  if (dictionaryKnownLawsCache) return dictionaryKnownLawsCache;
+  const out: KnownLaw[] = [];
+  const seen = new Set<string>();
+  for (const e of listBySourceMcpHint('houki-egov')) {
+    if (!e.law_id || seen.has(e.formal)) continue;
+    seen.add(e.formal);
+    out.push({ title: e.formal, law_id: e.law_id, ...(e.law_num ? { law_num: e.law_num } : {}) });
+  }
+  dictionaryKnownLawsCache = out;
+  return out;
+}
+
+/** 解決できた参照と委任から、次に呼べる get_law / search_fulltext を組み立てる（重複は除く） */
+function buildReferenceNextActions(
+  selfTitle: string,
+  articleNum: string,
+  references: ExtractedReference[],
+  delegations: ArticleReferencesResponse['delegations']
+): NextAction[] {
+  const out: NextAction[] = [];
+  const seen = new Set<string>();
+  const push = (a: NextAction): void => {
+    const key = JSON.stringify(a.example ?? a);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(a);
+  };
+  for (const ref of references) {
+    if (ref.kind === 'relative') continue;
+    if (ref.kind === 'external' && !ref.resolved) continue;
+    const lawName = ref.kind === 'external' ? ref.law_name : selfTitle;
+    const article = ref.article ?? fromEgovArticleNum(articleNum);
+    push({
+      action: 'get_law',
+      reason: ref.kind === 'external' ? '引用先の条を読めます' : '同一法令内の参照先を読めます',
+      example: {
+        law_name: lawName,
+        article,
+        ...(ref.paragraph !== undefined ? { paragraph: ref.paragraph } : {}),
+        ...(ref.item !== undefined ? { item: ref.item } : {}),
+      },
+    });
+  }
+  // 下位法令の本文は親を「法」（施行令）や「令」（施行規則から見た施行令）と書く
+  const selfLabel = selfTitle.endsWith('施行令')
+    ? '令'
+    : selfTitle.endsWith('施行規則')
+      ? '規則'
+      : '法';
+  for (const d of delegations) {
+    if (!d.target_law || d.target_law.self) continue;
+    push({
+      action: 'search_fulltext',
+      reason: `${d.target_law.title}の中で${formatArticleLabel(articleNum)}を受けている条を探せます（ローカル DB がある場合。無ければ get_toc で目次から探してください）`,
+      example: {
+        keyword: `${d.target_law.title} ${selfLabel}${toKanjiArticleLabel(articleNum)}`,
+      },
+    });
+  }
+  return out;
+}
+
+/** e-Gov 形式の条番号を本文中の表記（「第五十七条の二」）にする。search_fulltext のキーワード用 */
+function toKanjiArticleLabel(num: string): string {
+  const [head, ...branches] = num.split('_');
+  return `第${numberToKanji(Number(head))}条${branches.map((b) => `の${numberToKanji(Number(b))}`).join('')}`;
+}
+
+/** 1〜9999 を位取りの漢数字にする（"57" → "五十七"） */
+function numberToKanji(n: number): string {
+  if (!Number.isInteger(n) || n < 1 || n > 9999) return String(n);
+  const digits = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  const units: Array<[number, string]> = [
+    [1000, '千'],
+    [100, '百'],
+    [10, '十'],
+  ];
+  let rest = n;
+  let out = '';
+  for (const [unit, label] of units) {
+    const d = Math.floor(rest / unit);
+    if (d > 0) out += `${d === 1 ? '' : digits[d]}${label}`;
+    rest %= unit;
+  }
+  if (rest > 0) out += digits[rest];
+  return out;
 }

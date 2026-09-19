@@ -19,15 +19,19 @@ import {
   searchLawsInDb,
 } from '../services/law-search.js';
 import {
+  getArticleReferences,
   getLawArticle,
   getLawRevisionsByName,
   getLawToc,
+  getRelatedLaws,
   searchLawByKeyword,
 } from '../services/law-service.js';
 import type {
   ExplainLawTypeArgs,
+  GetArticleReferencesArgs,
   GetLawArgs,
   GetLawRevisionsArgs,
+  GetRelatedLawsArgs,
   GetTocArgs,
   ResolveAbbreviationArgs,
   SearchFulltextArgs,
@@ -36,8 +40,10 @@ import type {
 import { logger } from '../utils/logger.js';
 import {
   explainLawTypeTool,
+  getArticleReferencesTool,
   getLawRevisionsTool,
   getLawTool,
+  getRelatedLawsTool,
   getTocTool,
   resolveAbbreviationTool,
   searchFulltextTool,
@@ -267,6 +273,25 @@ export async function handleExplainLawType(args: ExplainLawTypeArgs) {
 }
 
 /**
+ * get_related_laws — 法令名の規則で施行令・施行規則（または親の法律）を引く（egov#20）
+ */
+export async function handleGetRelatedLaws(args: GetRelatedLawsArgs) {
+  return getRelatedLaws({ law_name: args.law_name });
+}
+
+/**
+ * get_article_references — 条文本文からの参照抽出（egov#20）
+ */
+export async function handleGetArticleReferences(args: GetArticleReferencesArgs) {
+  return getArticleReferences({
+    law_name: args.law_name,
+    article: args.article,
+    paragraph: args.paragraph,
+    at: args.at,
+  });
+}
+
+/**
  * tools/call の受け口の表。
  *
  * 引数は unknown で受け、`bindTool()` が inputSchema で検証してから型付きで各 handler に渡す
@@ -280,4 +305,6 @@ export const toolHandlers: Record<string, ToolHandler> = {
   search_fulltext: bindTool(searchFulltextTool, (args) => handleSearchFulltext(args)),
   resolve_abbreviation: bindTool(resolveAbbreviationTool, handleResolveAbbreviation),
   explain_law_type: bindTool(explainLawTypeTool, handleExplainLawType),
+  get_related_laws: bindTool(getRelatedLawsTool, handleGetRelatedLaws),
+  get_article_references: bindTool(getArticleReferencesTool, handleGetArticleReferences),
 };

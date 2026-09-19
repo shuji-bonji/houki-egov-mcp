@@ -7,8 +7,10 @@
 
 import type {
   explainLawTypeTool,
+  getArticleReferencesTool,
   getLawRevisionsTool,
   getLawTool,
+  getRelatedLawsTool,
   getTocTool,
   resolveAbbreviationTool,
   searchFulltextTool,
@@ -44,3 +46,9 @@ export type ResolveAbbreviationArgs = ArgsOf<typeof resolveAbbreviationTool.inpu
 
 /** 法令種別の解説引数 */
 export type ExplainLawTypeArgs = ArgsOf<typeof explainLawTypeTool.inputSchema>;
+
+/** 関連法令（施行令・施行規則）取得引数（v0.10.0） */
+export type GetRelatedLawsArgs = ArgsOf<typeof getRelatedLawsTool.inputSchema>;
+
+/** 条文内の参照抽出引数（v0.10.0） */
+export type GetArticleReferencesArgs = ArgsOf<typeof getArticleReferencesTool.inputSchema>;

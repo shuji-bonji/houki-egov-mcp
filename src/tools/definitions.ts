@@ -203,6 +203,55 @@ export const explainLawTypeTool = {
   },
 } as const satisfies ToolSpec;
 
+// ========================================
+// egov#20: 施行令・施行規則の関連付けと条文内の参照抽出（v0.10.0）
+// ========================================
+export const getRelatedLawsTool = {
+  name: 'get_related_laws',
+  description:
+    '法令名の規則で関連する法令を引く。法律なら施行令・施行規則、施行令・施行規則なら親の法律と兄弟を、e-Gov に実在するものだけ返す（law_id 付き）。名前の末尾に「施行令」「施行規則」を付けた（落とした）候補だけを試すので、別の名前の下位法令や告示は返らない。網羅性は主張しない。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      law_name: {
+        type: 'string',
+        description: '法令名または略称。例: "所得税法", "所法", "所得税法施行令"',
+      },
+    },
+    required: ['law_name'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
+export const getArticleReferencesTool = {
+  name: 'get_article_references',
+  description:
+    '条文本文が引用している参照を取り出す。他法令の条（法令名と法令番号から law_id を解決）、同一法令内の条・項・号、「政令で定める」「財務省令で定める」の委任（施行令・施行規則を法令単位で付ける）を返し、各参照に get_law の引数を next_actions で付ける。「前項」「同法」は解決しない。正規表現で取れた範囲だけを返し、網羅性は主張しない。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      law_name: {
+        type: 'string',
+        description: '法令名または略称。例: "所得税法", "所法"',
+      },
+      article: {
+        type: 'string',
+        description: '条番号。例: "57の2", "第57条の2", "第五十七条の二"',
+      },
+      paragraph: {
+        type: 'number',
+        description: '項番号。指定するとその項の本文だけを対象にする。省略時は条全体',
+      },
+      at: {
+        type: 'string',
+        description: '時点指定。YYYY-MM-DD 形式（get_law と同じ）',
+      },
+    },
+    required: ['law_name', 'article'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
 /** tools/list に出すツールの一覧（定義の順） */
 export const tools: Tool[] = [
   searchLawTool,
@@ -212,4 +261,6 @@ export const tools: Tool[] = [
   resolveAbbreviationTool,
   getLawRevisionsTool,
   explainLawTypeTool,
+  getRelatedLawsTool,
+  getArticleReferencesTool,
 ].map(toMcpTool);
