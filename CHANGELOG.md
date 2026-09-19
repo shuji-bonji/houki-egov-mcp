@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **差分 zip で同じ法令の新しい版が現行として届いたとき、前の版を `PreviousEnforced` に落とす**。これまでは前の版も `CurrentEnforced` のまま残り、`search_fulltext` の revision 重複対策（`CurrentEnforced` に絞る）をすり抜けて同じ法令が 2 度ヒットする経路があった（`--bulk-download-by-date` でも同じ）
+- **同じ法令の現行の版を、施行日が最も新しい 1 つだけにする**。差分 zip で新しい版（別の `law_revision_id`）が現行として届いたら施行日がそれより前の版を `PreviousEnforced` に落とし、逆に施行日がより新しい現行の版がすでにあれば届いた版のほうを `PreviousEnforced` にする（1 つの zip に同じ法令の版が複数並ぶ場合の順序に依らない。施行日の無い行は比べない）。これまでは前の版も `CurrentEnforced` のまま残り、`search_fulltext` の revision 重複対策（`CurrentEnforced` に絞る）をすり抜けて同じ法令が 2 度ヒットする経路があった（`--bulk-download-by-date` でも同じ）
 - `source: 'incremental'` の ingest で `sync_state.total_laws` に差分 CSV の行数を書いていたのを、DB の法令数に変えた
 - `ingestZip` に `updateSyncState`（既定 true）を足した。`--sync` は日ごとに自分で `sync_state` を進めるので false を渡す
 - `freshness.warning` と `--status` の案内を `--sync` に変えた（これまでは存在しない `--bulk-download-incremental` を案内していた）

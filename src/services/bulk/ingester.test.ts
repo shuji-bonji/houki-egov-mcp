@@ -567,6 +567,49 @@ describe('ingestZip', () => {
     ]);
   });
 
+  it('1 つの zip に同じ法令の古い版が後から並んでいても、新しい版を落とさない', async () => {
+    // 全件 zip の fixture (law-db-fixture) と同じ並び: 現行 (20231001) の後に旧 (20191001)
+    const csvOld = CSV_YOKIN.replace(
+      '19710401_000000000000000',
+      '20191001_000000000000000'
+    ).replace(
+      ',昭和四十六年四月一日,昭和四十六年四月一日,,',
+      ',昭和四十六年四月一日,令和元年十月一日,,'
+    );
+    const csvNew = CSV_YOKIN.replace(
+      '19710401_000000000000000',
+      '20231001_000000000000000'
+    ).replace(
+      ',昭和四十六年四月一日,昭和四十六年四月一日,,',
+      ',昭和四十六年四月一日,令和五年十月一日,,'
+    );
+    await ingestZip({
+      db,
+      zip: createMemoryZip([
+        { path: 'all_law_list.csv', content: buildCsv([csvNew, csvOld]) },
+        {
+          path: '346AC0000000034_20231001_000000000000000/346AC0000000034_20231001_000000000000000.xml',
+          content: XML_YOKIN,
+        },
+        {
+          path: '346AC0000000034_20191001_000000000000000/346AC0000000034_20191001_000000000000000.xml',
+          content: XML_YOKIN,
+        },
+      ]),
+      nowIso: '2026-05-08T15:00:00+09:00',
+      source: 'all_xml',
+    });
+    const rows = db
+      .prepare(
+        'SELECT law_revision_id, current_revision_status FROM laws WHERE law_id = ? ORDER BY law_revision_id'
+      )
+      .all('346AC0000000034') as { law_revision_id: string; current_revision_status: string }[];
+    expect(rows.map((r) => r.current_revision_status)).toEqual([
+      'PreviousEnforced',
+      'CurrentEnforced',
+    ]);
+  });
+
   it('未施行の版が届いても、現行の版はそのまま', async () => {
     await ingestZip({
       db,

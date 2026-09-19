@@ -208,20 +208,43 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     VALUES (?, ?, ?, ?, ?, ?)
   `);
   const selectExistingHash = db.prepare('SELECT content_hash FROM laws WHERE law_revision_id = ?');
-  // 差分 zip で同じ法令の新しい版 (別の law_revision_id) が現行として届いたとき、
-  // 前の版を PreviousEnforced に落とす。落とさないと search_fulltext の
-  // revision 重複対策 (CurrentEnforced に絞る) をすり抜けて同じ法令が 2 度ヒットする
-  const demotePreviousRevisions = db.prepare(`
+  // 同じ法令の現行の版は、施行日が最も新しい 1 つだけにする。
+  // 差分 zip で新しい版 (別の law_revision_id) が現行として届いたら、施行日がそれより前の版を
+  // PreviousEnforced に落とす。落とさないと search_fulltext の revision 重複対策
+  // (CurrentEnforced に絞る) をすり抜けて同じ法令が 2 度ヒットする。
+  // 逆に、施行日がより新しい現行の版がすでにあるなら、届いた版のほうを PreviousEnforced にする
+  // (1 つの zip に同じ法令の版が複数並ぶ場合の順序に依らないため。施行日の無い行は比べない)
+  const demoteOlderRevisions = db.prepare(`
     UPDATE laws SET current_revision_status = 'PreviousEnforced'
     WHERE law_id = ? AND law_revision_id <> ? AND current_revision_status = 'CurrentEnforced'
+      AND amendment_enforcement_date < ?
+  `);
+  const demoteIfNewerExists = db.prepare(`
+    UPDATE laws SET current_revision_status = 'PreviousEnforced'
+    WHERE law_revision_id = ? AND EXISTS (
+      SELECT 1 FROM laws l2
+      WHERE l2.law_id = ? AND l2.law_revision_id <> ?
+        AND l2.current_revision_status = 'CurrentEnforced'
+        AND l2.amendment_enforcement_date > ?
+    )
   `);
 
   // 5) batch transaction
   const ingestBatch = db.transaction((items: PreparedItem[]) => {
     for (const item of items) {
       upsertLaw.run(item.lawRow);
-      if (item.lawRow.current_revision_status === 'CurrentEnforced') {
-        demotePreviousRevisions.run(item.lawRow.law_id, item.lawRow.law_revision_id);
+      if (
+        item.lawRow.current_revision_status === 'CurrentEnforced' &&
+        item.lawRow.amendment_enforcement_date
+      ) {
+        const { law_id, law_revision_id, amendment_enforcement_date } = item.lawRow;
+        demoteOlderRevisions.run(law_id, law_revision_id, amendment_enforcement_date);
+        demoteIfNewerExists.run(
+          law_revision_id,
+          law_id,
+          law_revision_id,
+          amendment_enforcement_date
+        );
       }
       // articles 全置換
       deleteArticles.run(item.lawRow.law_revision_id);
