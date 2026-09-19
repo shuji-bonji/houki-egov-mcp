@@ -15,7 +15,7 @@ LLM が条文をキーワード・略称・分野で検索したり、特定の�
 
 ## まず試す（ローカル DB なし）
 
-登録するだけで、7 ツールのうち 6 つはそのまま動きます。e-Gov 法令 API v2 をその場で呼ぶためで、事前の取り込みは要りません。
+登録するだけで、9 ツールのうち 8 つはそのまま動きます。e-Gov 法令 API v2 をその場で呼ぶためで、事前の取り込みは要りません。
 
 ```json
 // claude_desktop_config.json
@@ -35,7 +35,7 @@ LLM が条文をキーワード・略称・分野で検索したり、特定の�
 
 | | ローカル DB なし | ローカル DB あり |
 |---|---|---|
-| `search_law` `get_law` `get_toc` `get_law_revisions` `resolve_abbreviation` `explain_law_type` | 動く（e-Gov API をその場で呼ぶ） | 同じ |
+| `search_law` `get_law` `get_toc` `get_law_revisions` `resolve_abbreviation` `explain_law_type` `get_related_laws` `get_article_references` | 動く（e-Gov API をその場で呼ぶ） | 同じ |
 | `search_fulltext` | `search_law` に切り替わる（`source: "api-fallback"`） | 条文本文を横断検索する（`freshness` 付き） |
 
 ## 提供ツール
@@ -49,8 +49,18 @@ LLM が条文をキーワード・略称・分野で検索したり、特定の�
 | `search_fulltext` | 条文本文の横断全文検索（ローカル SQLite FTS5。bulk DB 未構築時は `search_law` にフォールバック） |
 | `resolve_abbreviation` | 略称→正式名解決の診断 |
 | `explain_law_type` | 法令種別（憲法・法律・政令・省令・通達 等）の解説 |
+| `get_related_laws` | 法令名の規則で施行令・施行規則（施行令からは親の法律）を引き、e-Gov に実在するものだけを `law_id` 付きで返す（v0.9.0） |
+| `get_article_references` | 条文本文が引用している他法令の条（`law_id` 付き）・同一法令内の条項号・「政令で定める」の委任先を取り出し、`get_law` の引数を `next_actions` で付ける（v0.9.0） |
 
 略称辞書（174 エントリ・6 分野）は [`@shuji-bonji/houki-abbreviations`](https://github.com/shuji-bonji/houki-abbreviations) を内部で利用しています。
+
+### 施行令・施行規則と条文内の参照（v0.9.0）
+
+`get_related_laws` と `get_article_references` は、法令名の文字列規則と条文本文の正規表現で **決定論的に引ける参照だけ** を返します。同じ入力には同じ出力になり、LLM の判断は挟みません。
+
+- `get_related_laws({ law_name: "所得税法" })` → `related[]` に所得税法施行令（`340CO0000000096`）と所得税法施行規則（`340M50000040011`）。名前の末尾に「施行令」「施行規則」を付けた候補を e-Gov に問い合わせ、`law_title` が完全一致した 1 件だけを採用します。無かった候補は `not_found[]` に残します
+- `get_article_references({ law_name: "所得税法", article: "57の2", paragraph: 2 })` → `references[]` に「雇用保険法（昭和四十九年法律第百十六号）第十条第五項第一号」が `law_id` と条・項・号付きで入り、`delegations[]` に「政令で定める」×N と委任先（所得税法施行令）が入ります。「前項」「同法」は `kind: "relative"` で解決しません
+- どちらの応答にも `note` / `coverage.note` が付き、抽出できた範囲だけを返していること、網羅性を保証しないことを書いています。委任の趣旨の解釈や意味的に近い条の推薦は行いません（houki-hub#8 の法令グラフの担当）
 
 ## インストール
 
@@ -165,11 +175,11 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 
 ## 状態
 
-**v0.8.0 (2026-09-19)**
+**v0.9.0 (2026-09-19)**
 
 - [x] e-Gov 法令API v2 クライアント（`searchLaws` / `getLawData` / `getLawRevisions`）
 - [x] 法令ツリー走査（条/項/号、目次抽出）+ LRU cache
-- [x] 7ツール本実装
+- [x] 9 ツール本実装
 - [x] 略称辞書を [`@shuji-bonji/houki-abbreviations`](https://github.com/shuji-bonji/houki-abbreviations) ^0.4.1 に分離
 - [x] 法令階層ナレッジ（憲法・法律・政令・省令・規則・条例・告示・訓令・通達・通知 の10種別）
 - [x] houki-hub family 共通の error contract（`SOURCE_*` / `OUT_OF_SCOPE`）に準拠
@@ -181,7 +191,8 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 - [x] ツールの引数の型を inputSchema から導き（json-schema-to-ts の `FromSchema`）、未知の引数は `INVALID_ARGUMENT`（v0.6.0）
 - [x] `get_law` の `article` / `item` で漢数字（`"第三十条の二"`・`"八の二"`）と全角数字を受け付ける（v0.7.0）
 - [x] `--sync` で最終同期日から今日までの日次差分を取り込む。差分が無い日は飛ばし、途中で失敗しても成功した日までを記録（v0.8.0）
-- [x] テストスイート（**287 tests**）
+- [x] `get_related_laws` / `get_article_references`: 施行令・施行規則の関連付けと条文内の参照抽出（v0.9.0、Issue #20）
+- [x] テストスイート（**348 tests**）
 
 ### 計画中
 

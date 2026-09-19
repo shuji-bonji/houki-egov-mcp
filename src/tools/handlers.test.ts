@@ -126,10 +126,12 @@ describe('handleExplainLawType', () => {
 });
 
 describe('toolHandlers map', () => {
-  it('registers all expected tools (v0.2.0 — explain_business_law_restriction を削除)', () => {
+  it('registers all expected tools (v0.2.0 — explain_business_law_restriction を削除、v0.9.0 で 2 つ追加)', () => {
     expect(Object.keys(toolHandlers).sort()).toEqual(
       [
         'explain_law_type',
+        'get_article_references',
+        'get_related_laws',
         'get_law',
         'get_law_revisions',
         'get_toc',
@@ -211,5 +213,31 @@ describe('handleSearchFulltext (Phase 2-7)', () => {
     expect(r.note).toContain('--bulk-download-everything');
     expect(r.next_actions[0].action).toBe('bulk_download_everything');
     expect((r.fallback as { code?: string }).code).toBe('INVALID_ARGUMENT');
+  });
+});
+
+describe('egov#20 handlers — inputSchema (no network)', () => {
+  it('toolHandlers に get_related_laws と get_article_references がある', () => {
+    expect(Object.keys(toolHandlers)).toContain('get_related_laws');
+    expect(Object.keys(toolHandlers)).toContain('get_article_references');
+  });
+
+  it('未知の引数は INVALID_ARGUMENT（additionalProperties: false）', async () => {
+    const r = (await toolHandlers.get_related_laws({
+      law_name: '所得税法',
+      mcp: 'houki-egov',
+    })) as {
+      code?: string;
+      detail?: { issues?: Array<{ path: string }> };
+    };
+    expect(r.code).toBe('INVALID_ARGUMENT');
+    expect(r.detail?.issues?.[0]?.path).toBe('mcp');
+  });
+
+  it('get_article_references は article が必須', async () => {
+    const r = (await toolHandlers.get_article_references({ law_name: '所得税法' })) as {
+      code?: string;
+    };
+    expect(r.code).toBe('INVALID_ARGUMENT');
   });
 });
