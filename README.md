@@ -35,7 +35,7 @@ LLM が条文をキーワード・略称・分野で検索したり、特定の�
 
 | | ローカル DB なし | ローカル DB あり |
 |---|---|---|
-| `search_law` `get_law` `get_toc` `get_law_revisions` `resolve_abbreviation` `explain_law_type` `get_related_laws` `get_article_references` | 動く（e-Gov API をその場で呼ぶ） | 同じ |
+| `search_law` `get_law` `get_toc` `get_law_revisions` `resolve_abbreviation` `explain_law_type` `get_related_laws` `get_article_references` `verify_citations` | 動く（e-Gov API をその場で呼ぶ） | 同じ |
 | `search_fulltext` | `search_law` に切り替わる（`source: "api-fallback"`） | 条文本文を横断検索する（`freshness` 付き） |
 
 ## 提供ツール
@@ -51,6 +51,7 @@ LLM が条文をキーワード・略称・分野で検索したり、特定の�
 | `explain_law_type` | 法令種別（憲法・法律・政令・省令・通達 等）の解説 |
 | `get_related_laws` | 法令名の規則で施行令・施行規則（施行令からは親の法律）を引き、e-Gov に実在するものだけを `law_id` 付きで返す（v0.10.0） |
 | `get_article_references` | 条文本文が引用している他法令の条（`law_id` 付き）・同一法令内の条項号・「政令で定める」の委任先を取り出し、`get_law` の引数を `next_actions` で付ける（v0.10.0） |
+| `verify_citations` | 引用のリストをまとめて実在確認し、件ごとに `found` / `not_found` / `ambiguous` を返す（v0.11.0） |
 
 略称辞書（174 エントリ・6 分野）は [`@shuji-bonji/houki-abbreviations`](https://github.com/shuji-bonji/houki-abbreviations) を内部で利用しています。
 
@@ -173,13 +174,34 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 >
 > **検索語の制約**: 索引が trigram のため、条文本文は 3 文字以上の語で引きます。2 文字の語（「保存」「民法」等）は、3 文字以上の語と組み合わせたときは本文の AND 絞り込みに、単独のときは法令名・略称の照合にだけ使われます。「第30条」のような条番号は本文検索には使わず、該当条を上位に寄せる加点にだけ使います（漢数字は未対応）。
 
+### 引用の実在確認（v0.11.0）
+
+`verify_citations` は、回答に添える引用のリストを送り出す前に、**その条（指定があれば項・号）が e-Gov の法令にあるか** を 1 回の呼び出しでまとめて確かめます。存在しない引用が混ざっていてもツール全体はエラーにならず、件ごとに判定が返ります。
+
+```jsonc
+{
+  "citations": [
+    { "law_name": "所法", "article": "9", "paragraph": 1, "item": 1, "label": "所法9①一" },
+    { "law_name": "電子帳簿保存法", "article": "7" },
+    { "law_name": "所得税法", "article": "9999" }
+  ]
+}
+```
+
+- 上の 3 件は順に `found`（条見出し「（非課税所得）」付き）、`found`（`resolved_by: "exact_title"` で `410AC0000000025`）、`not_found`（`code: "ARTICLE_NOT_FOUND"`）になります
+- `summary` に件数の内訳と `all_found` が入るので、「全部実在した」と書いてよいかを 1 つの値で判断できます
+- 法令名が e-Gov の法令名と完全一致しなければ `ambiguous` にし、部分一致の候補を `candidates[]` に最大 5 件返します（例: 「所得税法施行」→ 所得税法施行令・所得税法施行規則）。項が複数ある条で項を書かずに号だけを指定した件も `ambiguous` です
+- 通達など houki-egov の管轄外の引用は `OUT_OF_SCOPE` にし、`next_actions` で `houki-nta` を指します
+- 確かめるのは条文が実在するかどうかだけです。引用した条文が主張を支えるかどうかは判定しません
+- e-Gov に問い合わせられなかったときは、件ごとの判定を返さずツール全体を `SOURCE_*` エラーにします。「聞けなかった」を「存在しない」と書かないためです
+
 ## 状態
 
-**v0.10.0 (2026-09-19)**
+**v0.11.0 (2026-09-20)**
 
 - [x] e-Gov 法令API v2 クライアント（`searchLaws` / `getLawData` / `getLawRevisions`）
 - [x] 法令ツリー走査（条/項/号、目次抽出）+ LRU cache
-- [x] 9 ツール本実装
+- [x] 10 ツール本実装
 - [x] 略称辞書を [`@shuji-bonji/houki-abbreviations`](https://github.com/shuji-bonji/houki-abbreviations) ^0.4.1 に分離
 - [x] 法令階層ナレッジ（憲法・法律・政令・省令・規則・条例・告示・訓令・通達・通知 の10種別）
 - [x] houki-hub family 共通の error contract（`SOURCE_*` / `OUT_OF_SCOPE`）に準拠
@@ -192,7 +214,8 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 - [x] `get_law` の `article` / `item` で漢数字（`"第三十条の二"`・`"八の二"`）と全角数字を受け付ける（v0.7.0）
 - [x] `--sync` で最終同期日から今日までの日次差分を取り込む。差分が無い日は飛ばし、途中で失敗しても成功した日までを記録（v0.8.0）
 - [x] `get_related_laws` / `get_article_references`: 施行令・施行規則の関連付けと条文内の参照抽出（v0.10.0、Issue #20）
-- [x] テストスイート（**351 tests**）
+- [x] `verify_citations`: 引用リストの実在確認（v0.11.0、Issue #18）
+- [x] テストスイート（**360 tests**）
 
 ### 計画中
 
@@ -253,6 +276,12 @@ houki-egov-mcp の [`src/errors.ts`](src/errors.ts) は family 全体の **リ�
 | `SOURCE_UNAVAILABLE` | DNS 失敗 / ECONNREFUSED 等で e-Gov に到達不能 | `true` |
 | `INTERNAL_ERROR` | 内部エラー (バグ・予期せぬ例外) | `false` |
 | `UNKNOWN_TOOL` | 存在しない tool 名が呼ばれた | `false` |
+
+### `verify_citations` の code は件ごとに付きます（v0.11.0）
+
+`verify_citations` は、存在しない引用が混ざっていてもツール全体を `isError` にしません。上の表の `code` は `results[]` の 1 件ごとに付き、`LAW_NOT_FOUND` / `ARTICLE_NOT_FOUND` / `INVALID_ARTICLE_NUM` / `OUT_OF_SCOPE` / `INVALID_ARGUMENT` のいずれかです。法令名が完全一致せず候補が複数あった件は `status: "ambiguous"` と `candidates[]` だけを返し、`code` は付きません。
+
+ツール全体がエラーになるのは、引数の形が壊れているとき（`INVALID_ARGUMENT`）と、e-Gov に問い合わせられなかったとき（`SOURCE_*`）だけです。後者で件ごとの判定を返さないのは、「聞けなかった」を「存在しない」と書かないためです。
 
 ### Migration (v0.2.x → v0.3.0)
 

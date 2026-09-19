@@ -252,6 +252,65 @@ export const getArticleReferencesTool = {
   },
 } as const satisfies ToolSpec;
 
+// ========================================
+// egov#18: 引用の実在確認（v0.11.0）
+// ========================================
+export const verifyCitationsTool = {
+  name: 'verify_citations',
+  description:
+    'LLM が組み立てた法令の引用リストを、1 回の呼び出しでまとめて実在確認する。件ごとに found / not_found / ambiguous を返し、リストの中に存在しない引用が混ざっていてもツール全体はエラーにしない。found の件には正式名称・法令番号・条見出し・law_id・URL を付ける。確かめるのは「その条（指定があれば項・号）が e-Gov の法令にあるか」だけで、引用が主張を支えるかどうかは判定しない。略称は略称辞書で正式名称に直してから照合する。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      citations: {
+        type: 'array',
+        description: `確かめたい引用の配列（最大 ${LIMITS.citationsMax} 件）`,
+        minItems: 1,
+        maxItems: LIMITS.citationsMax,
+        items: {
+          type: 'object',
+          properties: {
+            law_name: {
+              type: 'string',
+              description: '法令名または略称。例: "所得税法", "所法"。law_id を書くなら省略可',
+            },
+            law_id: {
+              type: 'string',
+              description:
+                'e-Gov の law_id。例: "340AC0000000033"。law_name より優先する。law_name と両方省略はできない',
+            },
+            article: {
+              type: 'string',
+              description: '条番号。例: "30", "30の2", "第三十条の二"',
+            },
+            paragraph: {
+              type: 'number',
+              description: '項番号。省略すると条までを確かめる',
+            },
+            item: {
+              type: ['number', 'string'],
+              description:
+                '号番号。数値（8）か文字列（"8"・"8の2"・"八の二"）。項が複数ある条で項を書かずに号だけを指定すると ambiguous になる',
+            },
+            label: {
+              type: 'string',
+              description: '引用元の表示文字列。判定には使わず、そのまま results に返す',
+            },
+          },
+          required: ['article'],
+          additionalProperties: false,
+        },
+      },
+      at: {
+        type: 'string',
+        description: '時点指定。YYYY-MM-DD 形式。全件に同じ時点を適用する',
+      },
+    },
+    required: ['citations'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
 /** tools/list に出すツールの一覧（定義の順） */
 export const tools: Tool[] = [
   searchLawTool,
@@ -263,4 +322,5 @@ export const tools: Tool[] = [
   explainLawTypeTool,
   getRelatedLawsTool,
   getArticleReferencesTool,
+  verifyCitationsTool,
 ].map(toMcpTool);

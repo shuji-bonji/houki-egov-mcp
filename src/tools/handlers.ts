@@ -25,6 +25,7 @@ import {
   getLawToc,
   getRelatedLaws,
   searchLawByKeyword,
+  verifyCitations,
 } from '../services/law-service.js';
 import type {
   ExplainLawTypeArgs,
@@ -36,6 +37,7 @@ import type {
   ResolveAbbreviationArgs,
   SearchFulltextArgs,
   SearchLawArgs,
+  VerifyCitationsArgs,
 } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -48,6 +50,7 @@ import {
   resolveAbbreviationTool,
   searchFulltextTool,
   searchLawTool,
+  verifyCitationsTool,
 } from './definitions.js';
 import { bindTool, type ToolHandler } from './tool-args.js';
 
@@ -292,6 +295,19 @@ export async function handleGetArticleReferences(args: GetArticleReferencesArgs)
 }
 
 /**
+ * verify_citations — 引用リストの実在確認（egov#18）
+ *
+ * 件ごとに found / not_found / ambiguous を返し、リストに存在しない引用が混ざっていても
+ * ツール全体は isError にしない。e-Gov に問い合わせられなかったときだけ全体のエラーを返す。
+ */
+export async function handleVerifyCitations(args: VerifyCitationsArgs) {
+  return verifyCitations({
+    citations: [...args.citations],
+    at: args.at,
+  });
+}
+
+/**
  * tools/call の受け口の表。
  *
  * 引数は unknown で受け、`bindTool()` が inputSchema で検証してから型付きで各 handler に渡す
@@ -307,4 +323,5 @@ export const toolHandlers: Record<string, ToolHandler> = {
   explain_law_type: bindTool(explainLawTypeTool, handleExplainLawType),
   get_related_laws: bindTool(getRelatedLawsTool, handleGetRelatedLaws),
   get_article_references: bindTool(getArticleReferencesTool, handleGetArticleReferences),
+  verify_citations: bindTool(verifyCitationsTool, handleVerifyCitations),
 };

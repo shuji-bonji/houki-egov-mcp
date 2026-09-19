@@ -24,6 +24,8 @@ export const LIMITS = {
   searchMax: 50,
   fulltextDefault: 10,
   fulltextMax: 30,
+  /** verify_citations が 1 回で受け付ける引用の件数（inputSchema の maxItems） */
+  citationsMax: 50,
 } as const;
 
 /** 出力フォーマットの列挙 */
