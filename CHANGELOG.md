@@ -16,9 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.9.1] - 2026-09-19
+
+**patch リリース、コードの変更なし** — 0.9.0 で `server.json` が 0.8.0 のままだったため、npm・公式 MCP Registry・claude-plugins・タグの版を揃え直した版。内容は 0.8.0 と同じ。
+
 ## [0.9.0] - 2026-09-19
 
-**minor リリース、コードの変更なし** — 0.8.0 の取り込み後に main の履歴を整理した際に版だけが上がった。`--sync` を含む内容は 0.8.0 と同じ。
+**コードの変更なし** — 0.8.0 の取り込み後に main の履歴を整理した際に版だけが上がり、npm に publish された。`server.json` は 0.8.0 のままだったので Registry には 0.9.1 で揃える。
 
 ## [0.8.0] - 2026-09-19
 
