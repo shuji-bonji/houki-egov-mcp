@@ -14,8 +14,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Planned (Phase 1 磨き込み — 痛点ログ駆動 / Phase 2 着手前から残置)
 
-- 漢数字対応（「第三十条」を 30 に変換）
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
+- `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
+
+## [0.7.0] - 2026-09-19
+
+**minor リリース** — `get_law` の `article` と `item` で漢数字の条番号・号番号を受け付けるようにした（Issue #17）。受け付ける入力が広がるため minor。
+
+### Added
+
+- **漢数字の条番号・号番号**: `"第三十条"` / `"三十の二"` / `"第三十条の二"` を `article` に、`"八"` / `"八の二"` / `"第八号の二"` を `item` に渡せる。判決文・通達・書籍から引き写した番号をそのまま使える。`src/utils/article-num.ts` に `kanjiToNumber()` を足し、`toEgovArticleNum()` と `toEgovItemNum()` が "の" の区切りごとに算用数字へ直す
+  - 受け付けるのは **位取り形式**（"三十" "百二十三" "千五十" "一千"）。「三〇」「一〇五〇」のような位ごとに並べる形式は `INVALID_ARTICLE_NUM`。位取りとして読めない並び（"三三" "十十"）も同じ
+  - 条番号・号番号の範囲（千の位まで）だけを扱う。万以上は対象にしない
+- **全角数字を半角に直す**: `"３０"` / `"第３０条の２"` を `"30"` / `"30_2"` にする。v0.6.1 までは `findArticle` に届いて `ARTICLE_NOT_FOUND` になっていた
+
+### Changed
+
+- `INVALID_ARTICLE_NUM` の `message` と `hint` を、受け付ける形式の例（"30" / "30の2" / "第三十条" / "第三十条の二"）に変えた。「漢数字には未対応です」の文言は無くなった
+- `tools/list` の `article` / `item` の説明に、漢数字と全角数字を受け付けることを足した
+
+### 対象外（この版では変えていない）
+
+- `search_fulltext` のキーワード中の「第三十条」。`extractArticleNumFromQuery()` は算用数字だけを boost に使う。漢数字の「第三十条」はこれまでどおり本文のトークンとして MATCH に乗る（条文本文は他の条を漢数字で参照するため、ここを boost に回すと本文検索の意味が変わる。別に検討する）
+- `formatArticleLabel()` / `formatItemLabel()` の出力は算用数字のまま
+
 
 ## [0.6.1] - 2026-09-19
 

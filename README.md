@@ -92,6 +92,9 @@ npm test
 「消費税法30条1項を見せて」
   → get_law(law_name="消法", article="30", paragraph=1)
 
+「消費税法第三十条第一項を見せて」（判決文や通達からの引き写し）
+  → get_law(law_name="消法", article="第三十条", paragraph=1)   # 漢数字は v0.7.0 から。項は数値で
+
 「消費税法2条1項8号の2（特定資産の譲渡等）を見せて」
   → get_law(law_name="消法", article="2", paragraph=1, item="8の2")
 
@@ -177,7 +180,7 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 
 - [ ] Phase 2-8: 差分同期（`--bulk-download-incremental`）
 - [ ] Phase 2-13: API enrichment（`category` / 改正履歴 / 廃止ステータスの精緻化）
-- [ ] 漢数字対応（「第三十条」を 30 に変換）
+- [x] 漢数字対応（「第三十条」を 30 に変換）— v0.7.0 で `get_law` の `article` / `item` に対応。`search_fulltext` のキーワード中の「第三十条」は未対応
 - [ ] 大規模法令の応答サイズ対策（民法・会社法）
 
 ## houki-hub MCP family
@@ -222,7 +225,7 @@ houki-egov-mcp の [`src/errors.ts`](src/errors.ts) は family 全体の **リ�
 | code | 用途 | retryable |
 |---|---|---|
 | `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・inputSchema に無い引数。`detail.issues[]` に内訳）、キーワード未指定、`get_law` で項が複数ある条に `paragraph` なしで `item` を指定した 等 | `false` |
-| `INVALID_ARTICLE_NUM` | 条番号・号番号のフォーマットが不正 (例: 未対応の漢数字) | `false` |
+| `INVALID_ARTICLE_NUM` | 条番号・号番号のフォーマットが不正 (例: "30-2"、位ごとに並べた "三〇") | `false` |
 | `OUT_OF_SCOPE` | 通達名で `get_law` を呼んだ等、別 MCP の管轄リソースが要求された | `false` |
 | `LAW_NOT_FOUND` | 略称解決・検索のいずれでも法令が見つからない | `false` |
 | `ARTICLE_NOT_FOUND` | 指定された条/項/号が見つからない | `false` |

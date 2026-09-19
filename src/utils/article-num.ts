@@ -1,35 +1,114 @@
 /**
- * 条番号の表記揺れ吸収
+ * 条番号・号番号の表記揺れ吸収
  *
- * - 利用者入力例: "30", "30の2", "第30条", "第30条の2"
+ * - 利用者入力例: "30", "30の2", "第30条", "第30条の2", "第三十条", "第三十条の二", "３０"
  * - e-Gov API 形式: "30", "30_2"
  *
- * 注意: 漢数字（"三十"等）の変換は v0.1.0 では未サポート。
- *       数字＋"の"の組み合わせのみ対応する。
+ * 漢数字は位取り形式（"三十" "百二十三" "千五十"）を受け付ける（v0.7.0、Issue #17）。
+ * 「一〇五〇」のような位ごとに並べる形式は受け付けない。
+ * 全角数字（"３０"）は半角に直す。
  */
+
+const KANJI_DIGITS: Readonly<Record<string, number>> = {
+  一: 1,
+  二: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+  七: 7,
+  八: 8,
+  九: 9,
+};
+
+const KANJI_UNITS: Readonly<Record<string, number>> = { 十: 10, 百: 100, 千: 1000 };
+
+const KANJI_NUMERAL = /^[一二三四五六七八九十百千]+$/;
+
+/**
+ * 位取り形式の漢数字を数値にする。
+ *
+ * "三十" → 30、"十" → 10、"百二十三" → 123、"千五十" → 1050、"一千" → 1000
+ *
+ * 位取りとして読めない並び（"三三"、"十十"、"五百百"）と、漢数字以外を含む文字列は null。
+ * 条番号・号番号の範囲（千の位まで）だけを扱い、万以上は対象にしない。
+ */
+export function kanjiToNumber(input: string): number | null {
+  if (!KANJI_NUMERAL.test(input)) return null;
+  let total = 0;
+  let current = 0;
+  let lastUnit = Number.POSITIVE_INFINITY;
+  for (const ch of input) {
+    const digit = KANJI_DIGITS[ch];
+    if (digit !== undefined) {
+      if (current !== 0) return null; // "三三" のように数字が続く
+      current = digit;
+      continue;
+    }
+    const unit = KANJI_UNITS[ch];
+    if (unit >= lastUnit) return null; // "十十" や "五百百" のように位が下がらない
+    total += (current === 0 ? 1 : current) * unit;
+    current = 0;
+    lastUnit = unit;
+  }
+  return total + current;
+}
+
+/** 全角数字を半角にする（"３０" → "30"）。ほかの文字は変えない */
+function foldFullWidthDigits(s: string): string {
+  return s.replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0));
+}
+
+/**
+ * 条番号・号番号の 1 区切り（"の" で分けた 1 つ）を算用数字の文字列にする。
+ *
+ * "30" → "30"、"３０" → "30"、"三十" → "30"。読めなければ null。
+ */
+function normalizeNumberSegment(segment: string): string | null {
+  const s = foldFullWidthDigits(segment.trim());
+  if (/^\d+$/.test(s)) return s;
+  const n = kanjiToNumber(s);
+  return n === null ? null : String(n);
+}
+
+/**
+ * "30の2" / "三十の二" のような区切り付きの番号を、区切りごとに算用数字にして "_" で結ぶ。
+ * 1 区切りでも読めなければ null。
+ */
+function normalizeSegmentedNumber(s: string): string | null {
+  const parts = s.split('の');
+  const out: string[] = [];
+  for (const part of parts) {
+    const n = normalizeNumberSegment(part);
+    if (n === null) return null;
+    out.push(n);
+  }
+  return out.join('_');
+}
 
 /**
  * 利用者入力の条番号を e-Gov API 形式に正規化する。
  *
- * "30"        → "30"
- * "30の2"      → "30_2"
- * "第30条"    → "30"
- * "第30条の2" → "30_2"
- * "第三十条"  → throw (kanji not supported in v0.1.0)
+ * "30"          → "30"
+ * "30の2"        → "30_2"
+ * "第30条"      → "30"
+ * "第30条の2"   → "30_2"
+ * "第三十条"    → "30"          （v0.7.0 から）
+ * "第三十条の二" → "30_2"        （v0.7.0 から）
+ * "３０"        → "30"          （v0.7.0 から）
+ * "第三〇条"    → throw（位ごとに並べる形式は受け付けない）
  */
 export function toEgovArticleNum(input: string): string {
   let s = input.trim();
   // 「第」前置・「条」（位置を問わず）を取り除く
   s = s.replace(/^第/, '').replace(/条/g, '');
-  // 漢数字が残っていたらエラー（v0.1.0 では未対応）
-  if (/[一二三四五六七八九十百千]/.test(s)) {
+  const normalized = normalizeSegmentedNumber(s);
+  if (normalized === null) {
     throw new Error(
-      `漢数字の条番号には未対応です（v0.1.0）。アラビア数字でご指定ください: ${input}`
+      `条番号の形式が不正です（例: "30", "30の2", "第三十条", "第三十条の二"）: ${input}`
     );
   }
-  // "の" を "_" に置換
-  s = s.replace(/の/g, '_');
-  return s;
+  return normalized;
 }
 
 /**
@@ -67,7 +146,9 @@ export function formatArticleLabel(num: string): string {
  * "8"         → "8"
  * "8の2"      → "8_2"
  * "第8号の2"  → "8_2"
- * "八"        → throw（条番号と同じく漢数字には未対応）
+ * "八"        → "8"     （v0.7.0 から）
+ * "八の二"    → "8_2"   （v0.7.0 から）
+ * "第八号の二" → "8_2"  （v0.7.0 から）
  *
  * v0.5.4 までは号番号を数値でしか受け付けず、`Num="8_2"` の号（第8号の2）を指定できなかった。
  */
@@ -80,14 +161,11 @@ export function toEgovItemNum(input: number | string): string {
   }
   let s = input.trim();
   s = s.replace(/^第/, '').replace(/号/g, '');
-  if (/[一二三四五六七八九十百千]/.test(s)) {
-    throw new Error(`漢数字の号番号には未対応です。アラビア数字でご指定ください: ${input}`);
+  const normalized = normalizeSegmentedNumber(s);
+  if (normalized === null) {
+    throw new Error(`号番号の形式が不正です（例: 8, "8の2", "第8号の2", "八の二"）: ${input}`);
   }
-  s = s.replace(/の/g, '_');
-  if (!/^\d+(?:_\d+)*$/.test(s)) {
-    throw new Error(`号番号の形式が不正です（例: 8, "8の2", "第8号の2"）: ${input}`);
-  }
-  return s;
+  return normalized;
 }
 
 /**

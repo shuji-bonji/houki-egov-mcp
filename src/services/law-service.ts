@@ -348,7 +348,7 @@ export async function getLawArticle(opts: {
     articleNum = toEgovArticleNum(opts.article);
   } catch (err) {
     return makeError('INVALID_ARTICLE_NUM', (err as Error).message, {
-      hint: '条番号は半角数字（例: "30"）または "30の2" 形式で指定してください',
+      hint: '条番号は "30"、"30の2"、"第三十条"、"第三十条の二" のいずれかの形式で指定してください（位ごとに並べる "三〇" は不可）',
     });
   }
 
@@ -397,7 +397,7 @@ export async function getLawArticle(opts: {
       itemNum = toEgovItemNum(opts.item);
     } catch (err) {
       return makeError('INVALID_ARTICLE_NUM', (err as Error).message, {
-        hint: '号番号は半角数字（例: 8）または "8の2" 形式で指定してください',
+        hint: '号番号は 8、"8の2"、"第8号の2"、"八の二" のいずれかの形式で指定してください',
       });
     }
     item = findItem(paragraph, itemNum);

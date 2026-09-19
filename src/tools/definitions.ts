@@ -57,7 +57,8 @@ export const getLawTool = {
       },
       article: {
         type: 'string',
-        description: '条番号。例: "30", "30の2"。format="toc" の場合は省略可',
+        description:
+          '条番号。例: "30", "30の2", "第30条の2"。漢数字（"第三十条", "三十の二"）と全角数字も可（v0.7.0）。format="toc" の場合は省略可',
       },
       paragraph: {
         type: 'number',
@@ -66,7 +67,7 @@ export const getLawTool = {
       item: {
         type: ['number', 'string'],
         description:
-          '号番号。数値（8）か文字列（"8"・"8の2"・"第8号の2"）。枝番号の号（第8号の2）は文字列で指定する。項が複数ある条では paragraph も指定する（項が 1 つの条では省略可）。省略時は項全体',
+          '号番号。数値（8）か文字列（"8"・"8の2"・"第8号の2"・"八の二"）。枝番号の号（第8号の2）は文字列で指定する。漢数字と全角数字も可（v0.7.0）。項が複数ある条では paragraph も指定する（項が 1 つの条では省略可）。省略時は項全体',
       },
       format: {
         type: 'string',
