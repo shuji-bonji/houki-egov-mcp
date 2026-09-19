@@ -16,6 +16,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.10.0] - 2026-09-19
+
+**minor リリース** — 施行令・施行規則の関連付けと、条文本文からの参照抽出のツールを 2 つ足した（Issue #20、PR #30 の内容を main に載せ直したもの。0.9.0 / 0.9.1 はコードの変更なしの版だったため 0.10.0）。houki-hub#8（法令グラフ）と対象が重なるが、MCP は法令 XML と法令名の規則から決定論的に引ける参照だけを返す、という分担（houki-hub `docs/ROADMAP.md` 2026-09-14 決定）。設計メモは houki-hub `docs/notes/2026-09-19-design-egov-20-references.md`。
+
+### Added
+
+- **`get_related_laws`**: 法令名の末尾に「施行令」「施行規則」を付けた候補（施行令・施行規則からは親の法律と兄弟）を e-Gov `/laws?law_title=` に問い合わせ、`revision_info.law_title` が完全一致した 1 件だけを `related[]` に入れる（`law_id` / `law_num` / `law_type` / `abbr` / `url`）。無かった候補は `not_found[]`。「…の施行に関する省令」など別の名前の下位法令は対象外で、その旨を `note` に書く。成功時に `get_toc` への `next_actions`
+- **`get_article_references`**: 条（または項）の `Sentence` の文字列から、次を取り出す
+  - `external`: 「法令名（法令番号）第N条第N項第N号」は法令番号で e-Gov `/laws?law_num=` を引いて `law_id` を付ける。法令番号の無い名前（辞書の正式名称、同じ本文で解決済みの名前、施行令・施行規則の本文の「法」）と、知らない名前（末尾が法・令・規則・条例）は候補名の完全一致で解決を試み、無ければ `resolved: false` のまま返す
+  - `internal`: 法令名の無い「第N条第N項第N号」。条も項も無い「第N号」には、その文が属する項の番号を付ける（`get_law` が項が複数ある条で `paragraph` を求めるため）
+  - `relative`: 「前項」「次条」「同法第N条」「同条第N項」は解決しない（`resolved: false`）
+  - `delegations[]`: 「政令で定める」「財務省令で定める」を出現回数でまとめ、`get_related_laws` と同じ規則で施行令・施行規則を `target_law` に付ける。施行令の本文の「政令で定める」は自身を指すので `target_law.self: true`。委任先の条は特定しない
+  - `coverage.note` を常に付け、正規表現で取れた範囲だけであること、網羅性を保証しないことを書く
+  - 解決できた参照ごとに `get_law` の引数を、委任ごとに `search_fulltext`（`"所得税法施行令 法第五十七条の二"`）を `next_actions` に入れる。`example` は `mcp` / `tool` を含まず、そのまま渡せる引数だけ
+- `src/services/law-relations.ts`（名前の規則）と `src/services/reference-extractor.ts`（文字列処理。API を呼ばない）を追加
+
+### 実測（2026-09-19）
+
+- `get_related_laws({ law_name: "所得税法" })`: 所得税法施行令 `340CO0000000096`（所令）と所得税法施行規則 `340M50000040011`（所規）。`not_found` は空
+- `get_article_references({ law_name: "所得税法", article: "57の2", paragraph: 2 })`: 雇用保険法 第10条第5項第1号（`349AC0000000116`）、母子及び父子並びに寡婦福祉法 第31条第1号（`339AC0000000129`）、職業能力開発促進法 第30条の3（法令番号なし。候補名の完全一致で `344AC0000000064`）、雇用保険法 第60条の2第1項、同一法令内の第28条第1項。「政令で定める」7 回 → 所得税法施行令、「財務省令で定める」7 回 → 所得税法施行規則
+- `get_article_references({ law_name: "所得税法施行令", article: "167の3" })`: 「法第五十七条の二第二項第一号」が所得税法への `external`、「政令で定める」は `self: true`
+
 ## [0.9.1] - 2026-09-19
 
 **patch リリース、コードの変更なし** — 0.9.0 で `server.json` が 0.8.0 のままだったため、npm・公式 MCP Registry・claude-plugins・タグの版を揃え直した版。内容は 0.8.0 と同じ。
