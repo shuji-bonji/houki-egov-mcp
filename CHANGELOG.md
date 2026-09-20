@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.12.1] - 2026-09-20
+
+**patch リリース** — コードは変えていない。README の 1 行目と npm の `description`、plugin の `description` から「実装する前に」を外し、このサーバーができることだけの 1 行にした。
+
+### Changed
+
+- **README の 1 行目と npm の `description`、`.claude-plugin/plugin.json` の `description`**: 「実装する前に、その仕様が法令のどこに触れるかを条文で確かめる」を外し、「日本の法令（憲法・法律・政令・省令・規則）を e-Gov 法令API v2 から、条・項・号の単位で、法令番号と URL を添えて返す MCP サーバ」にした。「実装する前に」が入っていると、実装の前にしか使えない道具に読めるため
+- `server.json` の `description`（公式 MCP Registry に出る英文）は今回は変えていない。次に Registry へ登録する版のときに合わせる
+
 ## [0.12.0] - 2026-09-20
 
 **minor リリース** — 2 文字の法律用語（「相殺」「時効」「善意」）を渡されたときに何をして結果を出したかを `short_tokens` で明示し、全法令の条本文を走査する `scan_body` を足した（Issue #23）。出典は houki-hub#20 の機能 7 / houki-hub#21。
