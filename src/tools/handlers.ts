@@ -22,6 +22,7 @@ import {
 import {
   getArticleReferences,
   getLawArticle,
+  getLawRange,
   getLawRevisionsByName,
   getLawToc,
   getRelatedLaws,
@@ -33,6 +34,7 @@ import type {
   ExplainLawTypeArgs,
   GetArticleReferencesArgs,
   GetLawArgs,
+  GetLawRangeArgs,
   GetLawRevisionsArgs,
   GetRelatedLawsArgs,
   GetTocArgs,
@@ -45,6 +47,7 @@ import { logger } from '../utils/logger.js';
 import {
   explainLawTypeTool,
   getArticleReferencesTool,
+  getLawRangeTool,
   getLawRevisionsTool,
   getLawTool,
   getRelatedLawsTool,
@@ -100,6 +103,28 @@ export async function handleGetToc(args: GetTocArgs) {
     depth: args.depth,
     suppl: args.suppl as SupplMode | undefined,
     with_amend_titles: args.with_amend_titles,
+  });
+}
+
+/**
+ * get_law_range — 編・章・節（または附則 1 本）を範囲にした条文の取得（egov#22）
+ *
+ * 範囲の指定は「編・章・節の番号」「path」「suppl_index」の 3 通りで、同時には 1 つだけ。
+ * 文字数の上限を超える範囲は条の単位で打ち切り、続きの条番号を返す。
+ */
+export async function handleGetLawRange(args: GetLawRangeArgs) {
+  return getLawRange({
+    law_name: args.law_name,
+    part: args.part,
+    chapter: args.chapter,
+    section: args.section,
+    subsection: args.subsection,
+    division: args.division,
+    path: args.path,
+    suppl_index: args.suppl_index,
+    from_article: args.from_article,
+    max_chars: args.max_chars,
+    at: args.at,
   });
 }
 
@@ -330,6 +355,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   search_law: bindTool(searchLawTool, handleSearchLaw),
   get_law: bindTool(getLawTool, handleGetLaw),
   get_toc: bindTool(getTocTool, handleGetToc),
+  get_law_range: bindTool(getLawRangeTool, handleGetLawRange),
   get_law_revisions: bindTool(getLawRevisionsTool, handleGetLawRevisions),
   search_fulltext: bindTool(searchFulltextTool, (args) => handleSearchFulltext(args)),
   resolve_abbreviation: bindTool(resolveAbbreviationTool, handleResolveAbbreviation),

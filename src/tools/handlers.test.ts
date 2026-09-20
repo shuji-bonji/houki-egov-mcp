@@ -126,13 +126,14 @@ describe('handleExplainLawType', () => {
 });
 
 describe('toolHandlers map', () => {
-  it('registers all expected tools (v0.2.0 — explain_business_law_restriction を削除、v0.10.0 で 2 つ、v0.11.0 で 1 つ追加)', () => {
+  it('registers all expected tools (v0.2.0 — explain_business_law_restriction を削除、v0.10.0 で 2 つ、v0.11.0 と v0.14.0 で 1 つずつ追加)', () => {
     expect(Object.keys(toolHandlers).sort()).toEqual(
       [
         'explain_law_type',
         'get_article_references',
         'get_related_laws',
         'get_law',
+        'get_law_range',
         'get_law_revisions',
         'get_toc',
         'resolve_abbreviation',

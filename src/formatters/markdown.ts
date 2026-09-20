@@ -76,7 +76,7 @@ export function formatArticleMarkdown(opts: FormatArticleOptions): string {
 /**
  * Article 全体を Markdown に整形（全項・全号を含む）。
  */
-function formatArticleBody(article: LawNode): string {
+export function formatArticleBody(article: LawNode): string {
   const paragraphs = findChildrenByTag(article, 'Paragraph');
   return paragraphs.map(formatParagraph).join('\n\n');
 }
@@ -324,7 +324,20 @@ export function formatTocMarkdown(opts: {
 }
 
 /**
- * 附則 1 本の見出し行を作る。
+ * 附則 1 本の呼び名を作る（条数を含まない）。範囲取得（`get_law_range`）の見出しにも使う。
+ *
+ * ```
+ * 附則(1) 制定時（抄）
+ * 附則(2) 平成元年六月二八日法律第三九号（抄）
+ * ```
+ */
+export function formatSupplProvisionLabel(s: SupplProvisionToc): string {
+  const source = s.amend_law_num ?? '制定時';
+  return `${s.label}(${s.index}) ${source}${s.extract ? '（抄）' : ''}`;
+}
+
+/**
+ * 附則 1 本の目次の見出し行を作る（呼び名 + 条数）。
  *
  * ```
  * 附則(1) 制定時（抄） — 条 6 件
@@ -333,11 +346,9 @@ export function formatTocMarkdown(opts: {
  * ```
  */
 export function formatSupplProvisionHeading(s: SupplProvisionToc): string {
-  const source = s.amend_law_num ?? '制定時';
-  const extract = s.extract ? '（抄）' : '';
   const size = s.paragraph_only ? '項のみ' : `条 ${s.article_count} 件`;
   const title = s.amend_law_title ? ` ／ 改正法: ${s.amend_law_title}` : '';
-  return `${s.label}(${s.index}) ${source}${extract} — ${size}${title}`;
+  return `${formatSupplProvisionLabel(s)} — ${size}${title}`;
 }
 
 function appendTocLines(lines: string[], node: TocNode, depth: number): void {
@@ -352,4 +363,58 @@ function appendTocLines(lines: string[], node: TocNode, depth: number): void {
       appendTocLines(lines, c, depth + 1);
     }
   }
+}
+
+// ========================================
+// #22: 章・節単位の範囲取得（v0.14.0）
+// ========================================
+
+/**
+ * 範囲取得で 1 条を Markdown の節にする。
+ *
+ * ```
+ * ## 第521条
+ * （契約の締結及び内容の自由）
+ * （本文）
+ * ```
+ *
+ * 条ごとに文字数を数えて上限で打ち切れるようにするため、条 1 件だけを整形する
+ * （範囲全体の組み立ては `formatRangeMarkdown()`）。
+ */
+export function formatRangeArticleSection(article: LawNode): string {
+  const label = formatArticleLabel(article.attr?.Num ?? '');
+  const caption = getArticleCaption(article);
+  const lines = [`## ${label}`];
+  if (caption) lines.push(caption);
+  lines.push('', formatArticleBody(article));
+  return joinLines(lines);
+}
+
+/**
+ * 範囲取得の応答本文を組み立てる。
+ *
+ * 見出しは `# 民法 第三編　債権 第二章　契約`（附則なら `# 民法 附則(12) …`）。
+ * 出典の前に、何をどこまで返したかの 1 行（`rangeNote`）を置く。
+ */
+export function formatRangeMarkdown(opts: {
+  lawTitle: string;
+  lawId: string;
+  /** 範囲の見出しの連なり。上位から並べる */
+  titles: string[];
+  /** `formatRangeArticleSection()` で整形した条の節 */
+  sections: string[];
+  /** 何をどこまで返したかの 1 行 */
+  rangeNote: string;
+  retrievedAt: string;
+  at?: string;
+}): string {
+  const { lawTitle, lawId, titles, sections, rangeNote, retrievedAt, at } = opts;
+  const heading = [lawTitle, ...titles].filter(Boolean).join(' ');
+  const lines = [`# ${heading}`, ''];
+  lines.push(sections.join('\n\n'));
+  lines.push('', '---', rangeNote, '出典：e-Gov法令検索（デジタル庁）');
+  lines.push(`URL: ${EGOV_API.publicLawUrl(lawId)}`);
+  if (at) lines.push(`時点: ${at}`);
+  lines.push(`取得日時: ${retrievedAt}`);
+  return lines.join('\n');
 }

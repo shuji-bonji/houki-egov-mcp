@@ -13,8 +13,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Planned (Phase 1 磨き込み — 痛点ログ駆動 / Phase 2 着手前から残置)
 
-- 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
+
+## [0.14.0] - 2026-09-20
+
+**minor リリース** — 編・章・節（または附則 1 本）を範囲にして条を本文ごと取得する `get_law_range` を追加した（Issue #22）。出典は houki-hub#20 の機能 6（大きな法令の分割取得）/ houki-hub#21。
+
+### Added
+
+- **`get_law_range`（11 本目のツール）**: 編・章・節・款・目のいずれか、または附則 1 本を範囲にして、その中の条を本文ごと返す。`get_law`（1 条ずつ）と `get_toc`（目次だけ）の間を埋める
+- **範囲の指定は 3 通り**（同時に指定できるのは 1 つだけ）
+  - `part` / `chapter` / `section` / `subsection` / `division` — 上位の階層は省略できる。`3` / `"3"` / `"三"` / `"第三編"` / 枝番号の `"2の2"` を受ける
+  - `path` — `get_toc` が返す `toc[].path`（例 `"Part3/Chapter2"`）をそのまま渡せる
+  - `suppl_index` — 附則の並び順（`get_toc` の `suppl_provisions[].index` と同じ番号）
+- **文字数の上限で条の単位で打ち切る**: `max_chars`（既定 30,000 文字、2,000〜120,000）。条の途中では切らないため、1 条目だけは上限を超えても返す。打ち切ったときは `range.truncated` / `range.next_from_article` と `range.next_actions` を返し、`from_article` にその値を渡すと続きから返す
+- **応答の `range`**: 返した範囲の内訳。`path` / `suppl_index` / `titles`（範囲の見出しの連なり）/ `tag` / `article_count`（範囲が持つ条の数）/ `returned_count` / `skipped_count` / `first_article` / `last_article` / `truncated` / `body_chars` / `max_chars` / `next_from_article` と、何をどこまで返したかを書いた `note`
+- **応答の `articles`**: 返した条の番号・表示用ラベル・条見出しの一覧
+- **`get_toc` の `toc[].path`**: 本則の構造ノードに範囲のパス（`Part3/Chapter2`）が付く。`get_law_range` の `path` にそのまま渡せる
+- **`RANGE_NOT_FOUND`（エラーコード）**: 指定された編・章・節、または附則の番号が見つからないとき。範囲が複数の章に当たったとき（民法の `chapter: "2"` は 5 つの編にある）は候補のパスを付けた `INVALID_ARGUMENT` を返す
+- **`toEgovStructureNum()`（`src/utils/article-num.ts`）**: 編・章・節の番号を e-Gov 形式にする（`"第二章の二"` → `"2_2"`）
+- **`findRanges()` / `findRangeByPath()` / `collectArticlesInRange()` / `findSupplProvisionByIndex()` / `formatRangePath()` / `parseRangePath()`（`src/services/law-tree.ts`）**
+- **`formatRangeMarkdown()` / `formatRangeArticleSection()` / `formatSupplProvisionLabel()`（`src/formatters/markdown.ts`）**
+
+### Changed
+
+- `get_law` の description に「章・節をまとめて取るときは `get_law_range`」を、`get_toc` の description に「`toc[].path` は `get_law_range` にそのまま渡せる」を足した
+- `formatSupplProvisionHeading()` は附則の呼び名（`formatSupplProvisionLabel()`）と条数に分けた。目次の見出しの文字列は v0.13.0 と同じ
+
+### なぜ新しいツールにしたか
+
+`get_law` に範囲の引数を足す案と比べました。`get_law` は 1 条（項・号）を返すツールで、`article` 未指定のときは目次を返す振る舞いも持っています。ここに範囲の引数を足すと、`article` との排他、`format: "toc"` との関係、上限で打ち切ったときの応答が 1 つのツールの説明に混ざります。範囲取得は応答の形（`range` / `articles` / 打ち切り）も違うため、別のツールにしました。
+
+### 実測（2026-09-20、e-Gov 法令API v2 の `law_full_text`）
+
+条本文のバイト数（UTF-8 の日本語は 1 文字 3 バイト）。
+
+| 法令 | 最上位 | 章（中央値 / 最大） | 節（中央値 / 最大） |
+|---|---|---|---|
+| 民法 | 編 5（54〜193 KB） | 6.2 KB / 98.2 KB | 3.7 KB / 34.3 KB |
+| 会社法 | 編 8（最大 702 KB） | 17.9 KB / 207.6 KB | 5.5 KB / 55.0 KB |
+| 所得税法 | 編 6（最大 434 KB） | 10.8 KB / 229.1 KB | 10.4 KB / 167.3 KB |
+| 消費税法 | 章 6（階層は章のみ） | 59.5 KB / 102.4 KB | — |
+| 労働基準法 | 章 14 | 4.9 KB / 44.7 KB | — |
+
+`Chapter@Num` は編ごとに振り直されます（民法には `Chapter1` が 5 つ、`Section1` が 19 あります）。番号だけでは範囲が一つに決まらないため、上位の階層と組み合わせるか `path` で指定します。
+
+### Tests
+
+- 432 件（新規 34 件）。範囲の解決とパス（`law-tree`）、範囲取得と打ち切り・附則（`law-service.range`）、編・章・節の番号の正規化（`article-num`）
 
 ## [0.13.0] - 2026-09-20
 

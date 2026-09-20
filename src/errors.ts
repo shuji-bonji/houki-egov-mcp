@@ -33,6 +33,8 @@ export type LawErrorCode =
   | 'LAW_NOT_FOUND'
   /** 条/項/号が見つからなかった */
   | 'ARTICLE_NOT_FOUND'
+  /** 指定された編・章・節（または附則の番号）が見つからなかった（#22、v0.14.0） */
+  | 'RANGE_NOT_FOUND'
   /** 略称辞書に該当なし */
   | 'ABBREVIATION_NOT_FOUND'
   // --- 外部ソース由来 (family 共通) ---

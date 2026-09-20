@@ -35,7 +35,7 @@ LLM が条文をキーワード・略称・分野で検索したり、特定の�
 
 | | ローカル DB なし | ローカル DB あり |
 |---|---|---|
-| `search_law` `get_law` `get_toc` `get_law_revisions` `resolve_abbreviation` `explain_law_type` `get_related_laws` `get_article_references` `verify_citations` | 動く（e-Gov API をその場で呼ぶ） | 同じ |
+| `search_law` `get_law` `get_toc` `get_law_range` `get_law_revisions` `resolve_abbreviation` `explain_law_type` `get_related_laws` `get_article_references` `verify_citations` | 動く（e-Gov API をその場で呼ぶ） | 同じ |
 | `search_fulltext` | `search_law` に切り替わる（`source: "api-fallback"`） | 条文本文を横断検索する（`freshness` 付き） |
 
 ## 提供ツール
@@ -45,6 +45,7 @@ LLM が条文をキーワード・略称・分野で検索したり、特定の�
 | `search_law` | 法令タイトルでキーワード検索（略称→正式名解決済み） |
 | `get_law` | 条/項/号レベルで本文取得（Markdown / JSON / TOC） |
 | `get_toc` | 目次のみ取得（トークン節約）。本則と附則を分け、附則は改正法ごとにまとめる（v0.13.0） |
+| `get_law_range` | 編・章・節・款・目のいずれか、または附則 1 本を範囲にして条を本文ごと取得。上限を超える範囲は条の単位で打ち切り、続きの条番号を返す（v0.14.0） |
 | `get_law_revisions` | 改正履歴を取得（公布日・施行日・状態） |
 | `search_fulltext` | 条文本文の横断全文検索（ローカル SQLite FTS5。bulk DB 未構築時は `search_law` にフォールバック） |
 | `resolve_abbreviation` | 略称→正式名解決の診断 |
@@ -56,6 +57,8 @@ LLM が条文をキーワード・略称・分野で検索したり、特定の�
 `search_fulltext` は、2 文字の語（「相殺」「時効」）を渡されたときに何をして結果を出したかを `short_tokens` で返します（v0.12.0）。索引が trigram で 3 文字以上の語しか載せないため、既定では条の本文を引かず、法令名を添える形と `scan_body: true` で走査する形を `next_actions` で示します。詳しくは[2 文字の語の検索](#2-文字の語の検索v0120)をご覧ください。
 
 `get_toc` は、本則を `toc`、附則を改正法ごとに `suppl_provisions` へ分けて返します（v0.13.0）。既定では附則は見出しと条数だけで、`suppl: "full"` で附則の中の条まで返します。詳しくは[本則と附則の分け方](#本則と附則の分け方v0130)をご覧ください。
+
+`get_law_range` は、`get_law`（1 条ずつ）と `get_toc`（目次だけ）の間を埋めます（v0.14.0）。民法の「第三編第二章 契約」のように章・節を指定すると、その中の条を本文ごと返し、長い範囲は条の単位で打ち切って続きの条番号を返します。詳しくは[章・節単位の取得](#章節単位の取得v0140)をご覧ください。
 
 略称辞書（174 エントリ・6 分野）は [`@shuji-bonji/houki-abbreviations`](https://github.com/shuji-bonji/houki-abbreviations) を内部で利用しています。
 
@@ -115,6 +118,13 @@ npm test
 
 「労働基準法の目次を取得」
   → get_toc(law_name="労基法")
+
+「民法の契約の章をまとめて読みたい」
+  → get_law_range(law_name="民法", part=3, chapter=2)
+  → 第三編 債権 第二章 契約（198 条）を上限（既定 30,000 文字）まで返し、続きは from_article で取る
+
+「会社法の設立の章を見せて」
+  → get_law_range(law_name="会社法", path="Part2/Chapter1")   # get_toc の toc[].path をそのまま渡せる
 
 「個人情報保護法の改正履歴を最新5件」
   → get_law_revisions(law_name="個情法", latest=5)
@@ -177,6 +187,51 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 > **v0.5.0 以前に構築した DB について**: v0.5.0 で本文の正規化を投入時に行うようになり（スキーマバージョン 2、旧 DB は起動時に自動初期化）、v0.5.1 で編（Part）を持つ法令の本則が取り込まれていなかった不具合を直しました。いずれの場合も `--bulk-download-everything` を再実行してください（v0.5.1 では全件が再 ingest されます）。
 >
 > **検索語の制約**: 索引が trigram のため、条文本文は 3 文字以上の語で索引から引きます。2 文字の語（「相殺」「時効」等）の扱いは v0.12.0 で変わりました（下記）。「第30条」のような条番号は本文検索には使わず、該当条を上位に寄せる加点にだけ使います（漢数字は未対応）。
+
+### 章・節単位の取得（v0.14.0）
+
+`get_law_range` は、編・章・節・款・目のいずれか、または附則 1 本を範囲にして、その中の条を本文ごと返します。`get_law` で 1 条ずつ引くと手数がかかり、法令全体を返すには長すぎる法令（民法・会社法・消費税法）のためのツールです。
+
+範囲の指定は次の 3 通りで、同時に指定できるのは 1 つだけです。
+
+| 指定 | 書き方 |
+|---|---|
+| 編・章・節・款・目の番号 | `part=3, chapter=2`（`"三"`・`"第三編"`・枝番号の `"2の2"` も可） |
+| 範囲のパス | `path="Part3/Chapter2"`（`get_toc` の `toc[].path` をそのまま渡せます） |
+| 附則 | `suppl_index=12`（`get_toc` の `suppl_provisions[].index`。`search_fulltext` が「附則(12) 1」と表示する番号と同じ） |
+
+章番号は編ごとに振り直されます（民法には第一章が 5 つ、第一節が 19 あります）。`chapter` だけを指定して複数の範囲に当たったときは、候補のパスを `hint` と `next_actions` に入れた `INVALID_ARGUMENT` を返します。
+
+大きい範囲は `max_chars`（既定 30,000 文字）で条の単位で打ち切ります。条の途中では切らないため、1 条目だけは上限を超えても返します。2026-09-20 に測った条本文のサイズは次のとおりです（UTF-8 の日本語は 1 文字 3 バイト）。
+
+| 法令 | 章の条本文（中央値 / 最大） | 既定の上限での回数 |
+|---|---|---|
+| 民法 | 6.2 KB / 98.2 KB | ほとんどの章は 1 回。第三編第一章（183 条）は 2 回 |
+| 会社法 | 17.9 KB / 207.6 KB | 大きい章は 2〜3 回 |
+| 所得税法 | 10.8 KB / 229.1 KB | 大きい章は 2〜3 回 |
+| 消費税法 | 59.5 KB / 102.4 KB | 章は 2〜4 回（編が無く章が大きい） |
+
+打ち切ったときの応答の `range` は次の形です。
+
+```jsonc
+{
+  "path": "Part3/Chapter2",
+  "titles": ["第三編　債権", "第二章　契約"],
+  "tag": "Chapter",
+  "article_count": 198,      // 範囲が持つ条の数
+  "returned_count": 186,     // 本文を返した条の数
+  "skipped_count": 0,        // from_article より前で返さなかった条の数
+  "first_article": "第521条",
+  "last_article": "第684条",
+  "truncated": true,
+  "body_chars": 29911,
+  "max_chars": 30000,
+  "next_from_article": "685",
+  "note": "範囲の条 198 件のうち 186 件を返しました（第521条〜第684条）。本文 29,911 文字（上限 30,000 文字）。上限で打ち切りました。続きは from_article: \"685\" を付けて同じ範囲を呼び直してください。"
+}
+```
+
+`from_article` に `next_from_article` の値を渡すと、同じ範囲の続きから返します。条を立てず項だけで書かれた附則（「1 この法律は、公布の日から施行する。」の形）は、範囲の本文をそのまま返します。
 
 ### 本則と附則の分け方（v0.13.0）
 
@@ -255,11 +310,11 @@ v0.13.0 からは、本則を `toc`、附則を `suppl_provisions` に分けて�
 
 ## 状態
 
-**v0.13.0 (2026-09-20)**
+**v0.14.0 (2026-09-20)**
 
 - [x] e-Gov 法令API v2 クライアント（`searchLaws` / `getLawData` / `getLawRevisions`）
 - [x] 法令ツリー走査（条/項/号、目次抽出）+ LRU cache
-- [x] 10 ツール本実装
+- [x] 11 ツール本実装
 - [x] 略称辞書を [`@shuji-bonji/houki-abbreviations`](https://github.com/shuji-bonji/houki-abbreviations) ^0.4.1 に分離
 - [x] 法令階層ナレッジ（憲法・法律・政令・省令・規則・条例・告示・訓令・通達・通知 の10種別）
 - [x] houki-hub family 共通の error contract（`SOURCE_*` / `OUT_OF_SCOPE`）に準拠
@@ -275,14 +330,15 @@ v0.13.0 からは、本則を `toc`、附則を `suppl_provisions` に分けて�
 - [x] `verify_citations`: 引用リストの実在確認（v0.11.0、Issue #18）
 - [x] `search_fulltext` の 2 文字語（「相殺」「時効」）の扱いを `short_tokens` で明示し、`scan_body` で全走査を選べるようにした（v0.12.0、Issue #23）
 - [x] `get_toc` で本則と附則を分け、附則を改正法ごとにまとめた（v0.13.0、Issue #24）
-- [x] テストスイート（**398 tests**）
+- [x] `get_law_range`: 編・章・節（または附則 1 本）を範囲にした条文の取得（v0.14.0、Issue #22）
+- [x] テストスイート（**432 tests**）
 
 ### 計画中
 
 - [x] Phase 2-8: 差分同期（`--sync`）— v0.8.0
 - [ ] Phase 2-13: API enrichment（`category` / 改正履歴 / 廃止ステータスの精緻化）
 - [x] 漢数字対応（「第三十条」を 30 に変換）— v0.7.0 で `get_law` の `article` / `item` に対応。`search_fulltext` のキーワード中の「第三十条」は未対応
-- [ ] 大規模法令の応答サイズ対策（民法・会社法）
+- [x] 大規模法令の応答サイズ対策（民法・会社法）— v0.14.0 の `get_law_range` で章・節単位の取得に対応
 
 ## houki-hub MCP family
 
@@ -325,11 +381,12 @@ houki-egov-mcp の [`src/errors.ts`](src/errors.ts) は family 全体の **リ�
 
 | code | 用途 | retryable |
 |---|---|---|
-| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・inputSchema に無い引数。`detail.issues[]` に内訳）、キーワード未指定、`get_law` で項が複数ある条に `paragraph` なしで `item` を指定した 等 | `false` |
+| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・inputSchema に無い引数。`detail.issues[]` に内訳）、キーワード未指定、`get_law` で項が複数ある条に `paragraph` なしで `item` を指定した、`get_law_range` で範囲の指定が無い・2 通り同時・複数の章に当たった 等 | `false` |
 | `INVALID_ARTICLE_NUM` | 条番号・号番号のフォーマットが不正 (例: "30-2"、位ごとに並べた "三〇") | `false` |
 | `OUT_OF_SCOPE` | 通達名で `get_law` を呼んだ等、別 MCP の管轄リソースが要求された | `false` |
 | `LAW_NOT_FOUND` | 略称解決・検索のいずれでも法令が見つからない | `false` |
-| `ARTICLE_NOT_FOUND` | 指定された条/項/号が見つからない | `false` |
+| `ARTICLE_NOT_FOUND` | 指定された条/項/号が見つからない（`get_law_range` の `from_article` がその範囲に無い場合を含む） | `false` |
+| `RANGE_NOT_FOUND` | `get_law_range` で指定された編・章・節（または附則の番号）が見つからない | `false` |
 | `SOURCE_API_ERROR` | e-Gov API がエラー応答 (4xx/5xx) | 状況による |
 | `SOURCE_TIMEOUT` | e-Gov API がタイムアウト | `true` |
 | `SOURCE_RATE_LIMITED` | e-Gov API がレート制限 (HTTP 429) | `true` |

@@ -8,6 +8,7 @@
 import type {
   explainLawTypeTool,
   getArticleReferencesTool,
+  getLawRangeTool,
   getLawRevisionsTool,
   getLawTool,
   getRelatedLawsTool,
@@ -35,6 +36,9 @@ export type GetLawArgs = ArgsOf<typeof getLawTool.inputSchema>;
 
 /** 目次取得引数 */
 export type GetTocArgs = ArgsOf<typeof getTocTool.inputSchema>;
+
+/** 章・節単位の範囲取得引数（v0.14.0） */
+export type GetLawRangeArgs = ArgsOf<typeof getLawRangeTool.inputSchema>;
 
 /** 全文検索引数（bulk cache モード時のみ有効） */
 export type SearchFulltextArgs = ArgsOf<typeof searchFulltextTool.inputSchema>;
