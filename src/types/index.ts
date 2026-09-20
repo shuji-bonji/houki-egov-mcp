@@ -8,11 +8,14 @@
 import type {
   explainLawTypeTool,
   getArticleReferencesTool,
+  getAttachmentTool,
+  getLawFileTool,
   getLawRangeTool,
   getLawRevisionsTool,
   getLawTool,
   getRelatedLawsTool,
   getTocTool,
+  listAttachmentsTool,
   resolveAbbreviationTool,
   searchFulltextTool,
   searchLawTool,
@@ -60,3 +63,12 @@ export type GetArticleReferencesArgs = ArgsOf<typeof getArticleReferencesTool.in
 
 /** 引用の実在確認引数（v0.11.0） */
 export type VerifyCitationsArgs = ArgsOf<typeof verifyCitationsTool.inputSchema>;
+
+/** 添付ファイル一覧の引数（v0.15.0） */
+export type ListAttachmentsArgs = ArgsOf<typeof listAttachmentsTool.inputSchema>;
+
+/** 添付ファイル取得の引数（v0.15.0） */
+export type GetAttachmentArgs = ArgsOf<typeof getAttachmentTool.inputSchema>;
+
+/** 法令本文ファイル取得の引数（v0.15.0） */
+export type GetLawFileArgs = ArgsOf<typeof getLawFileTool.inputSchema>;

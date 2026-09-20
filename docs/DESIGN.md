@@ -119,6 +119,19 @@ graph TB
 
 起動時に Bulk モードが有効なら、バックグラウンドで月次アーカイブを取得→SQLite にインデックス。Bulk にある条文は Bulk から即返す。
 
+## 添付ファイルと法令本文ファイルの出し方（v0.15.0、Issue #19）
+
+e-Gov 法令API v2 には条文の JSON（`/law_data`）のほかに、添付ファイル（`/attachment/{law_revision_id}?src=`。別表・様式の jpg / pdf）と本文ファイル（`/law_file/{xml|json|html|rtf|docx}/{law_id}`）がある。どちらもバイナリで、MCP の応答にどう載せるかを決めた。
+
+| 案 | 判断 | 理由 |
+|---|---|---|
+| URL だけを返す | **既定** | 認証なしで開ける直リンクなので、pdf-reader-mcp の `read_url` や利用者のブラウザーにそのまま渡せる。応答は小さい |
+| サーバー側の保存先に書いてパスを返す | **`save: true` のときだけ** | ファイルをディスクに置きたい作業（Word で開く、pdf-reader-mcp の `read_text` に渡す）のため。保存先は `${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/files/<law_revision_id>/` に固定し、環境変数 `HOUKI_EGOV_FILES_DIR` だけで変える。**ツールの引数にパスは置かない**（LLM が渡した文字列をパスに使わない） |
+| base64 で応答に入れる | 採らない | 民法の xml は 1.6 MB、消費税法の rtf は 1.8 MB。LLM のコンテキストに入れる意味が無く、画像も MCP の text 応答に base64 で入れても LLM は読めない |
+| MCP の image コンテンツで返す | 今回は採らない | jpg を LLM に直接見せられる利点はあるが、`server.ts` の応答の組み立てを text 以外に広げる変更になる。必要になったら別 Issue |
+
+ツールは 3 本に分けた（`list_attachments` / `get_attachment` / `get_law_file`）。`get_law` に引数を足さなかったのは、応答の形が条文と違うため（`get_law_range` を別ツールにした #22 と同じ判断）。`list_attachments` は e-Gov の `attached_files_info` に無い「別表第一の図か、第十一号様式の図か」を、本文の `Fig` 要素の祖先から付ける。
+
 ## 略称辞書のポリシー
 
 略称辞書は v0.2.0 から `@shuji-bonji/houki-abbreviations` に独立しています。

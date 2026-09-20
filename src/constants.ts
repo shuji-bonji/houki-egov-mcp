@@ -61,3 +61,10 @@ export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
  * `list` = 改正法ごとの見出しと条数だけ、`full` = 附則の中の条まで、`none` = 返さない。
  */
 export const SUPPL_MODES = ['list', 'full', 'none'] as const;
+
+/**
+ * `get_law_file` が受け付けるファイル種別（#19、v0.15.0）。e-Gov 法令API v2 の
+ * `/law_file/{file_type}/…` の `file_type` と同じ並び。
+ */
+export const LAW_FILE_TYPES = ['xml', 'json', 'html', 'rtf', 'docx'] as const;
+export type LawFileType = (typeof LAW_FILE_TYPES)[number];

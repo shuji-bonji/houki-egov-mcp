@@ -35,7 +35,7 @@ LLM が条文をキーワード・略称・分野で検索したり、特定の�
 
 | | ローカル DB なし | ローカル DB あり |
 |---|---|---|
-| `search_law` `get_law` `get_toc` `get_law_range` `get_law_revisions` `resolve_abbreviation` `explain_law_type` `get_related_laws` `get_article_references` `verify_citations` | 動く（e-Gov API をその場で呼ぶ） | 同じ |
+| `search_law` `get_law` `get_toc` `get_law_range` `get_law_revisions` `resolve_abbreviation` `explain_law_type` `get_related_laws` `get_article_references` `verify_citations` `list_attachments` `get_attachment` `get_law_file` | 動く（e-Gov API をその場で呼ぶ） | 同じ |
 | `search_fulltext` | `search_law` に切り替わる（`source: "api-fallback"`） | 条文本文を横断検索する（`freshness` 付き） |
 
 ## 提供ツール
@@ -53,10 +53,15 @@ LLM が条文をキーワード・略称・分野で検索したり、特定の�
 | `get_related_laws` | 法令名の規則で施行令・施行規則（施行令からは親の法律）を引き、e-Gov に実在するものだけを `law_id` 付きで返す（v0.10.0） |
 | `get_article_references` | 条文本文が引用している他法令の条（`law_id` 付き）・同一法令内の条項号・「政令で定める」の委任先を取り出し、`get_law` の引数を `next_actions` で付ける（v0.10.0） |
 | `verify_citations` | 引用のリストをまとめて実在確認し、件ごとに `found` / `not_found` / `ambiguous` を返す（v0.11.0） |
+| `list_attachments` | 法令に付いた添付ファイル（別表・様式・別記の図。jpg / pdf）の一覧。各ファイルに認証なしで開ける URL と、法令の中の置き場所（「別表第一（第一条関係）」など）を付ける（v0.15.0） |
+| `get_attachment` | 添付ファイル 1 件（または zip）。既定は URL とメタ情報だけ、`save: true` でサーバー側の保存先に書いて絶対パスを返す（v0.15.0） |
+| `get_law_file` | 法令本文を xml / json / html / rtf / docx のファイルで。既定は URL だけ、`save: true` で保存（v0.15.0） |
 
 `search_fulltext` は、2 文字の語（「相殺」「時効」）を渡されたときに何をして結果を出したかを `short_tokens` で返します（v0.12.0）。索引が trigram で 3 文字以上の語しか載せないため、既定では条の本文を引かず、法令名を添える形と `scan_body: true` で走査する形を `next_actions` で示します。詳しくは[2 文字の語の検索](#2-文字の語の検索v0120)をご覧ください。
 
 `get_toc` は、本則を `toc`、附則を改正法ごとに `suppl_provisions` へ分けて返します（v0.13.0）。既定では附則は見出しと条数だけで、`suppl: "full"` で附則の中の条まで返します。詳しくは[本則と附則の分け方](#本則と附則の分け方v0130)をご覧ください。
+
+`list_attachments` / `get_attachment` / `get_law_file` は、条文の文字列に入らないもの（別表・様式の図、Word や HTML の本文ファイル）を取る道です（v0.15.0）。ファイルの中身は応答に入れず、認証なしで開ける URL と、`save: true` のときだけ保存先の絶対パスを返します。詳しくは[添付ファイルと法令本文ファイル](#添付ファイルと法令本文ファイルv0150)をご覧ください。
 
 `get_law_range` は、`get_law`（1 条ずつ）と `get_toc`（目次だけ）の間を埋めます（v0.14.0）。民法の「第三編第二章 契約」のように章・節を指定すると、その中の条を本文ごと返し、長い範囲は条の単位で打ち切って続きの条番号を返します。詳しくは[章・節単位の取得](#章節単位の取得v0140)をご覧ください。
 
@@ -188,6 +193,30 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 >
 > **検索語の制約**: 索引が trigram のため、条文本文は 3 文字以上の語で索引から引きます。2 文字の語（「相殺」「時効」等）の扱いは v0.12.0 で変わりました（下記）。「第30条」のような条番号は本文検索には使わず、該当条を上位に寄せる加点にだけ使います（漢数字は未対応）。
 
+### 添付ファイルと法令本文ファイル（v0.15.0）
+
+法令には、条文の文字列に入らないものが付いています。別表・様式・別記の図（e-Gov では jpg か pdf）と、法令全体を 1 つのファイルにした本文（xml / json / html / rtf / docx）です。`get_law` の Markdown には図の中身は入らず、様式の図が要る作業（届書の書式、旗の寸法図）は条文だけでは済みません。v0.15.0 の 3 ツールはそのための道です。
+
+```
+「戸籍法施行規則の出生届の様式を見たい」
+  → list_attachments(law_name="戸籍法施行規則")
+     attachments[] の location.title が「附録第十一号様式」の 1 件（pdf）の url を得る
+  → pdf-reader-mcp の read_url(url=…)                          # URL は認証なしで開ける
+  （またはディスクに置くなら）
+  → get_attachment(law_name="戸籍法施行規則", src="./pict/2FH00000076885.pdf", save=true)
+     → saved.path を pdf-reader-mcp の read_text に渡す
+
+「民法の全文を Word で」
+  → get_law_file(law_name="民法", file_type="docx", save=true)
+     → saved.path（182 KB）。saved.law_revision_id にどの履歴の本文かが入る
+```
+
+- **中身は返しません**。バイナリを base64 にして応答に入れることはせず、URL（`https://laws.e-gov.go.jp/api/2/attachment/<law_revision_id>?src=…`、`…/law_file/<file_type>/<law_id>`）を返します。URL は認証なしで開けるので、pdf-reader-mcp の `read_url` や、利用者のブラウザーにそのまま渡せます
+- **保存先はサーバー側で決めます**。`save: true` のときだけファイルを取得し、`${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/files/<law_revision_id>/<ファイル名>` に書いて `saved.path` を返します。保存先は環境変数 `HOUKI_EGOV_FILES_DIR` で変えられますが、ツールの引数にはありません（LLM が渡した文字列をパスに使わないため）。1 ファイル 50 MB を超えるときは保存せず `INVALID_ARGUMENT` を返します
+- **置き場所を付けます**。`list_attachments` は e-Gov の `attached_files_info`（src と更新日時）と本文の `Fig` 要素を `src` で突き合わせ、各ファイルに `location`（別表・様式の見出しと関係条文、条の中なら条番号、附則の中なら改正法番号）を付けます。一覧にだけあって本文に無いファイルは `location: null` です
+- 添付ファイルは法令履歴ごとに付くので、`at` で時点を変えると一覧も変わります。添付が無い法令は `list_attachments` では `count: 0` の成功応答、`get_attachment` では `ATTACHMENT_NOT_FOUND` です
+- `get_law_file` の `xml` / `json` は法令全体（民法で 1.6 MB）なので、条文を読むだけなら `get_law` / `get_law_range` を使ってください。`docx` / `html` / `rtf` は人が開く版です
+
 ### 章・節単位の取得（v0.14.0）
 
 `get_law_range` は、編・章・節・款・目のいずれか、または附則 1 本を範囲にして、その中の条を本文ごと返します。`get_law` で 1 条ずつ引くと手数がかかり、法令全体を返すには長すぎる法令（民法・会社法・消費税法）のためのツールです。
@@ -312,11 +341,11 @@ v0.13.0 からは、本則を `toc`、附則を `suppl_provisions` に分けて�
 
 ## 状態
 
-**v0.14.1 (2026-09-20)**
+**v0.15.0 (2026-09-20)**
 
-- [x] e-Gov 法令API v2 クライアント（`searchLaws` / `getLawData` / `getLawRevisions`）
+- [x] e-Gov 法令API v2 クライアント（`searchLaws` / `getLawData` / `getLawRevisions` / `getAttachment` / `getLawFile`）
 - [x] 法令ツリー走査（条/項/号、目次抽出）+ LRU cache
-- [x] 11 ツール本実装
+- [x] 14 ツール本実装
 - [x] 略称辞書を [`@shuji-bonji/houki-abbreviations`](https://github.com/shuji-bonji/houki-abbreviations) ^0.4.1 に分離
 - [x] 法令階層ナレッジ（憲法・法律・政令・省令・規則・条例・告示・訓令・通達・通知 の10種別）
 - [x] houki-hub family 共通の error contract（`SOURCE_*` / `OUT_OF_SCOPE`）に準拠
@@ -333,7 +362,8 @@ v0.13.0 からは、本則を `toc`、附則を `suppl_provisions` に分けて�
 - [x] `search_fulltext` の 2 文字語（「相殺」「時効」）の扱いを `short_tokens` で明示し、`scan_body` で全走査を選べるようにした（v0.12.0、Issue #23）
 - [x] `get_toc` で本則と附則を分け、附則を改正法ごとにまとめた（v0.13.0、Issue #24）
 - [x] `get_law_range`: 編・章・節（または附則 1 本）を範囲にした条文の取得（v0.14.0、Issue #22）
-- [x] テストスイート（**436 tests**）
+- [x] `list_attachments` / `get_attachment` / `get_law_file`: 添付ファイル（別表・様式の図）と xml / html / rtf / docx の本文ファイル（v0.15.0、Issue #19）
+- [x] テストスイート（**456 tests**）
 
 ### 計画中
 
@@ -383,12 +413,13 @@ houki-egov-mcp の [`src/errors.ts`](src/errors.ts) は family 全体の **リ�
 
 | code | 用途 | retryable |
 |---|---|---|
-| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・inputSchema に無い引数。`detail.issues[]` に内訳）、キーワード未指定、`get_law` で項が複数ある条に `paragraph` なしで `item` を指定した、`get_law_range` で範囲の指定が無い・2 通り同時・複数の章に当たった 等 | `false` |
+| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・inputSchema に無い引数。`detail.issues[]` に内訳）、キーワード未指定、`get_law` で項が複数ある条に `paragraph` なしで `item` を指定した、`get_law_range` で範囲の指定が無い・2 通り同時・複数の章に当たった、`get_attachment` / `get_law_file` の保存でファイルが 50 MB を超えた 等 | `false` |
 | `INVALID_ARTICLE_NUM` | 条番号・号番号のフォーマットが不正 (例: "30-2"、位ごとに並べた "三〇") | `false` |
 | `OUT_OF_SCOPE` | 通達名で `get_law` を呼んだ等、別 MCP の管轄リソースが要求された | `false` |
 | `LAW_NOT_FOUND` | 略称解決・検索のいずれでも法令が見つからない | `false` |
 | `ARTICLE_NOT_FOUND` | 指定された条/項/号が見つからない（`get_law_range` の `from_article` がその範囲に無い場合を含む） | `false` |
 | `RANGE_NOT_FOUND` | `get_law_range` で指定された編・章・節（または附則の番号）が見つからない | `false` |
+| `ATTACHMENT_NOT_FOUND` | `get_attachment` で指定された `src` がその法令履歴の添付に無い、添付が 1 件も無い、または e-Gov の `/attachment` が「存在しない」（code 404003）を返した | `false` |
 | `SOURCE_API_ERROR` | e-Gov API がエラー応答 (4xx/5xx) | 状況による |
 | `SOURCE_TIMEOUT` | e-Gov API がタイムアウト | `true` |
 | `SOURCE_RATE_LIMITED` | e-Gov API がレート制限 (HTTP 429) | `true` |

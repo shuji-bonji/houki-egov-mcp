@@ -492,3 +492,111 @@ export function findSupplProvisionByIndex(root: LawNode, index: number): LawNode
   collectSupplProvisions(root, nodes);
   return nodes[index - 1] ?? null;
 }
+
+// ========================================
+// egov#19: 添付ファイル（Fig）の位置（v0.15.0）
+// ========================================
+
+/** 図（Fig）を包む別表・様式などの要素。見出しの要素名と組で持つ */
+const APPENDIX_TAGS: Record<string, string> = {
+  AppdxTable: 'AppdxTableTitle',
+  AppdxNote: 'AppdxNoteTitle',
+  AppdxStyle: 'AppdxStyleTitle',
+  AppdxFormat: 'AppdxFormatTitle',
+  AppdxFig: 'AppdxFigTitle',
+  Appdx: 'ArithFormulaNum',
+};
+
+/** 法令の中で図（添付ファイル）が置かれている場所 */
+export interface FigureLocation {
+  /**
+   * 置かれている要素。別表（AppdxTable）・別記（AppdxNote）・様式（AppdxStyle）・書式（AppdxFormat）・
+   * 別図（AppdxFig）・付録（Appdx）・条（Article）・附則の項（SupplProvision）のいずれか。
+   * どれにも当たらなければ "Law"
+   */
+  tag: string;
+  /** 別表・様式などの見出し（例 "別表第一"、"附録第十一号様式"）。条の中の図なら条見出し */
+  title?: string;
+  /** 関係条文（RelatedArticleNum。例 "（第一条関係）"）。別表・様式にだけ付く */
+  related_article?: string;
+  /** 条の中の図なら、その条番号（e-Gov 形式。"30_2" = 第三十条の二） */
+  article?: string;
+  /** 附則の中の図なら、その附則の改正法番号（SupplProvision@AmendLawNum） */
+  amend_law_num?: string;
+}
+
+/** 法令の中の図 1 つ */
+export interface Figure {
+  /** Fig 要素の src 属性。/attachment の src パラメータにそのまま渡す。例 "./pict/H11HO127-001.jpg" */
+  src: string;
+  location: FigureLocation;
+}
+
+/**
+ * Law ツリーから図（Fig 要素）を出現順に取り出し、どの別表・様式・条に置かれているかを付ける。
+ *
+ * 添付ファイルの一覧は /law_data の attached_files_info にもあるが、そちらには src と更新日時しか無く、
+ * 「別表第一の図か、第十一号様式の図か」が分からない。本文の木を歩いて位置を付けるのはそのため。
+ */
+export function extractFigures(root: LawNode): Figure[] {
+  const out: Figure[] = [];
+  walkFigures(root, [], out);
+  return out;
+}
+
+function walkFigures(node: LawNode, ancestors: LawNode[], out: Figure[]): void {
+  if (node.tag === 'Fig') {
+    const src = node.attr?.src;
+    if (src) out.push({ src, location: locateFigure(ancestors) });
+    return;
+  }
+  const next = [...ancestors, node];
+  for (const c of node.children ?? []) {
+    if (typeof c === 'object') walkFigures(c, next, out);
+  }
+}
+
+/** 祖先の並び（根 → 親）から、図の置き場所を決める。いちばん近い別表・様式か条を採る */
+function locateFigure(ancestors: LawNode[]): FigureLocation {
+  let supplAmendLawNum: string | undefined;
+  for (const a of ancestors) {
+    if (a.tag === 'SupplProvision' && a.attr?.AmendLawNum) supplAmendLawNum = a.attr.AmendLawNum;
+  }
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const a = ancestors[i];
+    const titleTag = APPENDIX_TAGS[a.tag];
+    if (titleTag) {
+      const titleNode = findChildByTag(a, titleTag);
+      const related = findChildByTag(a, 'RelatedArticleNum');
+      const loc: FigureLocation = { tag: a.tag };
+      const title = titleNode ? normalizeSpace(extractText(titleNode)) : '';
+      if (title) loc.title = title;
+      const rel = related ? normalizeSpace(extractText(related)) : '';
+      if (rel) loc.related_article = rel;
+      if (supplAmendLawNum) loc.amend_law_num = supplAmendLawNum;
+      return loc;
+    }
+    if (a.tag === 'Article') {
+      const loc: FigureLocation = { tag: 'Article' };
+      if (a.attr?.Num) loc.article = a.attr.Num;
+      const caption = getArticleCaption(a);
+      const title = getArticleTitle(a);
+      const label = normalizeSpace(`${title}${caption}`);
+      if (label) loc.title = label;
+      if (supplAmendLawNum) loc.amend_law_num = supplAmendLawNum;
+      return loc;
+    }
+  }
+  const suppl = ancestors.find((a) => a.tag === 'SupplProvision');
+  if (suppl) {
+    const loc: FigureLocation = { tag: 'SupplProvision' };
+    if (supplAmendLawNum) loc.amend_law_num = supplAmendLawNum;
+    return loc;
+  }
+  return { tag: 'Law' };
+}
+
+/** 全角空白・前後の空白を詰める */
+function normalizeSpace(s: string): string {
+  return s.replace(/[\s　]+/g, ' ').trim();
+}
