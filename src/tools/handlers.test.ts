@@ -198,6 +198,33 @@ describe('handleSearchFulltext (Phase 2-7)', () => {
     expect(r2.count).toBe(1);
   });
 
+  it('2 文字語のときは short_tokens で本文由来か法令名由来かを返す (#23)', async () => {
+    const r = await handleSearchFulltext({ keyword: '控除' }, { dbPath });
+    if (r.source !== 'bulk') throw new Error('expected bulk');
+    expect(r.short_tokens?.tokens).toEqual(['控除']);
+    expect(r.short_tokens?.body_search).toBe('not_searched');
+    expect(r.short_tokens?.hits_by_match_type).toEqual({ article: 0, law_meta: 0 });
+    expect(r.short_tokens?.note).toContain('trigram');
+    expect(r.short_tokens?.next_actions?.[1].example).toEqual({
+      keyword: '控除',
+      scan_body: true,
+    });
+  });
+
+  it('scan_body: true で条本文を走査する (#23)', async () => {
+    const r = await handleSearchFulltext({ keyword: '控除', scan_body: true }, { dbPath });
+    if (r.source !== 'bulk') throw new Error('expected bulk');
+    expect(r.short_tokens?.body_search).toBe('like_all_articles');
+    expect(r.hits[0].match_type).toBe('article');
+    expect(r.hits[0].article_num).toBe('30');
+  });
+
+  it('2 文字語を含まないクエリに short_tokens は付かない (#23)', async () => {
+    const r = await handleSearchFulltext({ keyword: '適格請求書' }, { dbPath });
+    if (r.source !== 'bulk') throw new Error('expected bulk');
+    expect(r.short_tokens).toBeUndefined();
+  });
+
   it('domain は受け付けるが applied=false + note', async () => {
     const r = await handleSearchFulltext({ keyword: '適格請求書', domain: 'tax' }, { dbPath });
     if (r.source !== 'bulk') throw new Error('expected bulk');

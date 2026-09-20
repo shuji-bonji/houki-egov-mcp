@@ -21,6 +21,9 @@
  *  - **law_meta 経路**: 本文が articles に入らない法令 (別表のみ、太政官布告 等) や
  *    「法令名そのもの」で探しているケースを laws_fts で捕捉し `match_type: 'law_meta'` として
  *    マージする。同じ revision が article 経路で既にヒットしていれば law_meta 側は捨てる
+ *  - **2 文字語** (#23): trigram 索引は 3 文字以上の語しか載せないため、「相殺」「時効」のような
+ *    2 文字語だけのクエリは MATCH に乗らない。法令名で絞れているときはその範囲を、絞れていない
+ *    ときは articles 全体を LIKE で走査し、どの経路を通ったかを `short_tokens` で申告する
  *  - re-rank のため FTS からは `min(limit * 3, 150)` 件取り、スコア順に並べ替えてから limit 件返す
  *  - `domain` フィルタは `laws.category` が Phase 2-13 まで全 null のため **本モジュールでは受け付けない**
  *    (handler 側で「未実効」の note を返す)
@@ -28,6 +31,8 @@
 
 import { normalizeSearchQuery, resolveAbbreviation } from '@shuji-bonji/houki-abbreviations';
 import type DatabaseT from 'better-sqlite3';
+import { SCAN_BODY_SECONDS } from '../constants.js';
+import type { NextAction } from '../errors.js';
 import { fromEgovArticleNum } from '../utils/article-num.js';
 import {
   computeLawRelevance,
@@ -41,6 +46,21 @@ const RERANK_MAX_FETCH = 150;
 
 /** snippet() のトークン数 */
 const SNIPPET_TOKENS = 16;
+
+/**
+ * LIKE 経路の snippet。FTS の `snippet()` は MATCH にしか使えないため、
+ * 一致位置の手前 20 文字から 80 文字を `articles.body` (正規化済み本文) から切り出す。
+ * `instr` が 0 (見つからない) のときは本文の先頭から切り出す。
+ */
+const LIKE_SNIPPET_SQL = `substr(a.body, max(1, instr(a.body, ?) - 20), 80)`;
+
+/** LIKE 経路の固定 rank。base score は 1 / (1 + 10 / 5) = 0.33 になる */
+const LIKE_ARTICLE_RANK = -5.0;
+
+/** LIKE パターンに使うメタ文字 (`%` `_` `\\`) をエスケープする */
+function toLikePattern(token: string): string {
+  return `%${token.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+}
 
 /** 1 件のヒット (article / law_meta 共通) */
 export interface LawSearchHit {
@@ -77,6 +97,40 @@ export interface LawSearchOptions {
   lawType?: string;
   /** 略称の OR 展開を無効化 (テスト用) */
   enableAbbreviationExpansion?: boolean;
+  /**
+   * 2 文字語だけのクエリで、法令を絞らずに本文を LIKE で走査するか (#23)。
+   * 既定 false。true にすると全法令の条本文を端から照合するため、実データ
+   * (条 143 万件・本文 588 MB) で 5〜20 秒かかる。
+   */
+  scanBody?: boolean;
+}
+
+/**
+ * 2 文字語 (trigram 索引に載らない語) を本文からどう引いたかの内訳 (#23)。
+ *
+ * `body_search` の 3 つの値は、実際に走った経路の名前:
+ *  - `fts_then_filter`   — 3 文字以上の語で articles_fts を引き、その本文に 2 文字語が
+ *                          含まれるかで絞った (`searchArticleFts` + JS フィルタ)
+ *  - `like_in_law_scope` — 法令名で絞った範囲の本文を LIKE で引いた (`searchArticleLikeInScope`)
+ *  - `like_all_articles` — 法令を絞らず articles の本文を LIKE で走査した
+ *                          (`searchArticleLikeGlobal`。`scan_body: true` のときだけ)
+ *  - `not_searched`      — 本文を引いていない。返したヒットは法令名・略称・番号の照合によるもの
+ */
+export interface ShortTokenSearch {
+  /** クエリ中の 2 文字トークン */
+  tokens: string[];
+  /** articles_fts の trigram が索引する最小文字数 */
+  fts_min_token_length: number;
+  /** 本文をどの経路で引いたか */
+  body_search: 'fts_then_filter' | 'like_in_law_scope' | 'like_all_articles' | 'not_searched';
+  /** LIKE 走査が上限件数に達して打ち切られたか */
+  truncated: boolean;
+  /** 返したヒットの内訳 (article = 条本文由来、law_meta = 法令名・略称・番号由来) */
+  hits_by_match_type: { article: number; law_meta: number };
+  /** 何をして結果を出したかの説明 */
+  note: string;
+  /** 本文を引いていないとき (`not_searched`) に、次に呼べる形を示す */
+  next_actions?: NextAction[];
 }
 
 /** `searchLawsInDb` の戻り値 */
@@ -92,6 +146,8 @@ export interface LawSearchResult {
    * (本文検索は残りの `不法行為` で行い、民法の条に絞る)
    */
   law_scope?: LawScope[];
+  /** クエリに 2 文字トークンが含まれていたときだけ付く (#23) */
+  short_tokens?: ShortTokenSearch;
 }
 
 /** 法令スコープ 1 件 */
@@ -393,9 +449,10 @@ export function searchArticleLikeInScope(
   options: { fetchLimit: number; lawType?: string; scope: LawScope[] }
 ): ArticleRow[] {
   if (tokens.length === 0 || options.scope.length === 0) return [];
-  const params: Array<string | number> = [];
+  // 先頭の ? は SELECT 側の snippet 用 (SQL に現れる順に bind する)
+  const params: Array<string | number> = [tokens[0]];
   const clauses = tokens.map((t) => {
-    params.push(`%${t.replace(/[%_\\]/g, (c) => `\\${c}`)}%`);
+    params.push(toLikePattern(t));
     return `a.body LIKE ? ESCAPE '\\'`;
   });
   const where = statusWhere(options.lawType, params, options.scope);
@@ -404,13 +461,49 @@ export function searchArticleLikeInScope(
     SELECT
       a.law_revision_id, a.article_num, a.caption, a.chapter_path,
       l.law_id, l.law_title, l.law_num, l.law_type, l.abbrev,
-      substr(a.body_raw, 1, 80) AS snippet,
-      -5.0 AS rank,
+      ${LIKE_SNIPPET_SQL} AS snippet,
+      ${LIKE_ARTICLE_RANK} AS rank,
       a.body AS body
     FROM articles a
     JOIN laws l ON l.law_revision_id = a.law_revision_id
     WHERE ${clauses.join(' AND ')}${where}
     ORDER BY a.ord
+    LIMIT ?
+  `;
+  return db.prepare(sql).all(...params) as ArticleRow[];
+}
+
+/**
+ * 法令を絞らずに `articles` の本文を LIKE で走査する (#23)。
+ *
+ * 「相殺」「時効」のように 2 文字語だけのクエリは articles_fts の MATCH に乗らないため、
+ * ここだけは索引を使わずに走査する。`ORDER BY` を付けないのは、SQLite が `LIMIT` に
+ * 達した時点で走査を止められるようにするため (並べ替えると必ず全表を読む)。
+ * そのぶん並び順は関連度順ではなく、呼び出し側が `short_tokens.note` でそれを申告する。
+ */
+export function searchArticleLikeGlobal(
+  db: DatabaseT.Database,
+  tokens: string[],
+  options: { fetchLimit: number; lawType?: string }
+): ArticleRow[] {
+  if (tokens.length === 0) return [];
+  const params: Array<string | number> = [tokens[0]];
+  const clauses = tokens.map((t) => {
+    params.push(toLikePattern(t));
+    return `a.body LIKE ? ESCAPE '\\'`;
+  });
+  const where = statusWhere(options.lawType, params);
+  params.push(options.fetchLimit);
+  const sql = `
+    SELECT
+      a.law_revision_id, a.article_num, a.caption, a.chapter_path,
+      l.law_id, l.law_title, l.law_num, l.law_type, l.abbrev,
+      ${LIKE_SNIPPET_SQL} AS snippet,
+      ${LIKE_ARTICLE_RANK} AS rank,
+      a.body AS body
+    FROM articles a
+    JOIN laws l ON l.law_revision_id = a.law_revision_id
+    WHERE ${clauses.join(' AND ')}${where}
     LIMIT ?
   `;
   return db.prepare(sql).all(...params) as ArticleRow[];
@@ -454,7 +547,7 @@ export function searchLawMetaLike(
   if (tokens.length === 0) return [];
   const params: Array<string | number> = [];
   const clauses = tokens.map((t) => {
-    const like = `%${t.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+    const like = toLikePattern(t);
     params.push(like, like);
     return `(l.law_title LIKE ? ESCAPE '\\' OR l.abbrev LIKE ? ESCAPE '\\')`;
   });
@@ -502,6 +595,65 @@ function toArticleHit(r: ArticleRow, query: string, dictAbbrevs: string[]): LawS
 }
 
 /**
+ * 2 文字語をどう引いたかを `short_tokens` にまとめる (#23)。
+ *
+ * 応答を読んだ側が「本文を引いたのか、法令名だけを引いたのか」を数で判断できるよう、
+ * 経路の名前・打ち切りの有無・match_type ごとの件数を添える。
+ */
+function describeShortTokenSearch(input: {
+  tokens: string[];
+  bodySearch: ShortTokenSearch['body_search'];
+  truncated: boolean;
+  fetchLimit: number;
+  hits: LawSearchHit[];
+}): ShortTokenSearch {
+  const list = input.tokens.map((t) => `「${t}」`).join('・');
+  const head = `${list} は ${FTS_MIN_TOKEN_LENGTH} 文字未満です。条本文の索引 articles_fts は trigram のため ${FTS_MIN_TOKEN_LENGTH} 文字以上の語しか載せません。`;
+  let note: string;
+  let nextActions: NextAction[] | undefined;
+  switch (input.bodySearch) {
+    case 'fts_then_filter':
+      note = `${head}${FTS_MIN_TOKEN_LENGTH} 文字以上の語で索引を引いたうえで、その条の本文に ${list} が含まれるかで絞り込みました。`;
+      break;
+    case 'like_in_law_scope':
+      note = `${head}クエリ中の法令名で対象を絞り、その範囲の条の本文を LIKE で引きました。`;
+      break;
+    case 'like_all_articles':
+      note = `${head}scan_body: true のため、索引を使わずに全法令の条の本文を走査しました。並び順は関連度順ではありません。`;
+      break;
+    default:
+      note = `${head}条の本文は引いていません。返したヒットは法令名・略称・番号の照合によるものです。法令名を添えると、索引でその法令の条本文を引けます。法令名が分からないときは scan_body: true を付けると全法令の条本文を端から照合します (索引を使わないため ${SCAN_BODY_SECONDS}かかります)。`;
+      nextActions = [
+        {
+          action: 'search_fulltext',
+          reason: '法令名を添えると、その法令の条本文を引けます (索引が使えるので速い)',
+          example: { keyword: `民法 ${input.tokens[0]}` },
+        },
+        {
+          action: 'search_fulltext',
+          reason: `法令名が分からないときは全法令の条本文を走査できます (${SCAN_BODY_SECONDS}かかります)`,
+          example: { keyword: input.tokens.join(' '), scan_body: true },
+        },
+      ];
+      break;
+  }
+  if (input.truncated) {
+    note += `走査は ${input.fetchLimit} 件で打ち切っており、該当する条をすべて数えたものではありません。`;
+  }
+  const article = input.hits.filter((h) => h.match_type === 'article').length;
+  const result: ShortTokenSearch = {
+    tokens: input.tokens,
+    fts_min_token_length: FTS_MIN_TOKEN_LENGTH,
+    body_search: input.bodySearch,
+    truncated: input.truncated,
+    hits_by_match_type: { article, law_meta: input.hits.length - article },
+    note,
+  };
+  if (nextActions) result.next_actions = nextActions;
+  return result;
+}
+
+/**
  * 全文検索の本体。article 経路と law_meta 経路をマージし、スコア順に limit 件返す。
  *
  * @param db initSchema 済み DB
@@ -546,15 +698,34 @@ export function searchLawsInDb(
     return [dictEntry.abbr, ...(dictEntry.aliases ?? [])];
   };
 
-  // 2 文字トークンは trigram で引けないので、FTS ヒットの本文に含まれるかで絞り込む (AND 意味論)
-  const articleRows =
-    !built.query && scope.length > 0
-      ? searchArticleLikeInScope(db, shortTokens, { fetchLimit, lawType: options.lawType, scope })
-      : searchArticleFts(db, built.query, {
-          fetchLimit,
-          lawType: options.lawType,
-          scope,
-        }).filter((r) => shortTokens.every((t) => r.body.includes(t)));
+  // 2 文字トークンは trigram で引けないため、本文を引く経路が 3 つに分かれる (#23)
+  let bodySearch: ShortTokenSearch['body_search'] = 'fts_then_filter';
+  let articleRows: ArticleRow[];
+  if (built.query) {
+    // 3 文字以上の語で索引を引き、2 文字語は本文に含まれるかで絞る (AND 意味論)
+    articleRows = searchArticleFts(db, built.query, {
+      fetchLimit,
+      lawType: options.lawType,
+      scope,
+    }).filter((r) => shortTokens.every((t) => r.body.includes(t)));
+  } else if (scope.length > 0) {
+    bodySearch = 'like_in_law_scope';
+    articleRows = searchArticleLikeInScope(db, shortTokens, {
+      fetchLimit,
+      lawType: options.lawType,
+      scope,
+    });
+  } else if (options.scanBody) {
+    bodySearch = 'like_all_articles';
+    articleRows = searchArticleLikeGlobal(db, shortTokens, {
+      fetchLimit,
+      lawType: options.lawType,
+    });
+  } else {
+    // 既定では走査しない。法令名・略称の照合 (law_meta 経路) だけを返し、note で申告する
+    bodySearch = 'not_searched';
+    articleRows = [];
+  }
   const seenRevisions = new Set<string>();
   const hits: LawSearchHit[] = articleRows.map((r) => {
     seenRevisions.add(r.law_revision_id);
@@ -599,6 +770,16 @@ export function searchLawsInDb(
 
   const sorted = sortByScoreDesc(hits).slice(0, limit);
   const result: LawSearchResult = { hits: sorted, fts_query: built.query };
+  if (shortTokens.length > 0) {
+    result.short_tokens = describeShortTokenSearch({
+      tokens: shortTokens,
+      bodySearch,
+      // FTS 経路は索引側で件数が決まるので打ち切り扱いにしない
+      truncated: bodySearch !== 'fts_then_filter' && articleRows.length >= fetchLimit,
+      fetchLimit,
+      hits: sorted,
+    });
+  }
   if (scope.length > 0) result.law_scope = scope;
   if (built.expandedFrom && built.expandedTo) {
     result.expanded = { from: built.expandedFrom, to: built.expandedTo };

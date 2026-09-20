@@ -195,6 +195,67 @@ describe('searchLawsInDb', () => {
     expect(searchLawsInDb(db, '適格請求書 判例').hits).toEqual([]);
   });
 
+  it('2 文字語だけのクエリは既定では本文を引かず、next_actions で 2 つの道を示す (#23)', () => {
+    // 「控除」は消費税法第30条の本文にあるが、trigram に載らないので MATCH 式は空
+    const r = searchLawsInDb(db, '控除');
+    expect(r.fts_query).toBe('');
+    expect(r.hits.every((h) => h.match_type === 'law_meta')).toBe(true);
+    expect(r.short_tokens?.body_search).toBe('not_searched');
+    expect(r.short_tokens?.tokens).toEqual(['控除']);
+    expect(r.short_tokens?.fts_min_token_length).toBe(3);
+    expect(r.short_tokens?.hits_by_match_type.article).toBe(0);
+    expect(r.short_tokens?.note).toContain('条の本文は引いていません');
+    expect(r.short_tokens?.next_actions?.map((a) => a.example)).toEqual([
+      { keyword: '民法 控除' },
+      { keyword: '控除', scan_body: true },
+    ]);
+  });
+
+  it('scan_body: true のときだけ articles の本文を走査する (#23)', () => {
+    const r = searchLawsInDb(db, '控除', { scanBody: true });
+    expect(r.hits.some((h) => h.match_type === 'article' && h.article_num === '30')).toBe(true);
+    expect(r.short_tokens?.body_search).toBe('like_all_articles');
+    expect(r.short_tokens?.truncated).toBe(false);
+    expect(r.short_tokens?.hits_by_match_type.article).toBe(1);
+    expect(r.short_tokens?.next_actions).toBeUndefined();
+  });
+
+  it('走査の snippet は一致位置の前後を切り出す (#23)', () => {
+    const hit = searchLawsInDb(db, '控除', { scanBody: true }).hits.find(
+      (h) => h.match_type === 'article'
+    );
+    expect(hit?.snippet).toContain('控除');
+  });
+
+  it('走査でも PreviousEnforced revision は除外される (#23)', () => {
+    const r = searchLawsInDb(db, '控除', { limit: 30, scanBody: true });
+    expect(new Set(r.hits.map((h) => h.law_revision_id)).size).toBe(1);
+  });
+
+  it('本文に無い 2 文字語は走査しても hits_by_match_type で本文 0 件と分かる (#23)', () => {
+    // 「改暦」は法令名にだけあり、条の本文には無い
+    const r = searchLawsInDb(db, '改暦', { scanBody: true });
+    expect(r.short_tokens?.body_search).toBe('like_all_articles');
+    expect(r.short_tokens?.hits_by_match_type).toEqual({ article: 0, law_meta: 1 });
+    expect(r.short_tokens?.note).toContain('scan_body: true');
+  });
+
+  it('3 文字以上の語があるときは索引を引いてから 2 文字語で絞る (#23)', () => {
+    const r = searchLawsInDb(db, '適格請求書 保存');
+    expect(r.short_tokens?.body_search).toBe('fts_then_filter');
+    expect(r.short_tokens?.tokens).toEqual(['保存']);
+    expect(r.short_tokens?.truncated).toBe(false);
+    // 索引を引ける語があるので scan_body は効かない
+    expect(
+      searchLawsInDb(db, '適格請求書 保存', { scanBody: true }).short_tokens?.body_search
+    ).toBe('fts_then_filter');
+  });
+
+  it('2 文字語を含まないクエリには short_tokens が付かない (#23)', () => {
+    expect(searchLawsInDb(db, '適格請求書').short_tokens).toBeUndefined();
+    expect(searchLawsInDb(db, '税').short_tokens).toBeUndefined();
+  });
+
   it('ヒットには e-Gov URL と score (0〜1) が付く', () => {
     const r = searchLawsInDb(db, '適格請求書');
     for (const h of r.hits) {
@@ -251,6 +312,8 @@ describe('law scope (法令名 + 語 のクエリ)', () => {
     expect(r.hits.length).toBe(1);
     expect(r.hits[0].article_num).toBe('36');
     expect(r.hits[0].law_title).toBe('労働基準法');
+    expect(r.short_tokens?.body_search).toBe('like_in_law_scope');
+    expect(r.short_tokens?.hits_by_match_type).toEqual({ article: 1, law_meta: 0 });
   });
 
   it('「労基法 第36条」は条番号で直接引く (本文検索なし)', () => {

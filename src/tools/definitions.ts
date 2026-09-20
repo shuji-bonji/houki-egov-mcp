@@ -5,7 +5,7 @@
  * すべての inputSchema に `additionalProperties: false` を付け、未知の引数は INVALID_ARGUMENT にする。
  */
 import type { Tool } from '@modelcontextprotocol/server';
-import { DOMAINS, LIMITS, OUTPUT_FORMATS } from '../constants.js';
+import { DOMAINS, LIMITS, OUTPUT_FORMATS, SCAN_BODY_SECONDS } from '../constants.js';
 import { type ToolSpec, toMcpTool } from './tool-args.js';
 
 // ========================================
@@ -116,14 +116,14 @@ export const getTocTool = {
 export const searchFulltextTool = {
   name: 'search_fulltext',
   description:
-    '法令の条文本文をキーワードで横断全文検索する（ローカル SQLite FTS5）。`houki-egov-mcp --bulk-download-everything` で構築した bulk DB を引き、略称は正式名称に OR 展開（例: "消法" → "消費税法"）。各ヒットに条番号・snippet・score・DB の鮮度 (freshness) を付けて返す。bulk DB 未構築時は search_law（法令名のタイトル一致）にフォールバックし、その旨を note で返す。',
+    '法令の条文本文をキーワードで横断全文検索する（ローカル SQLite FTS5）。`houki-egov-mcp --bulk-download-everything` で構築した bulk DB を引き、略称は正式名称に OR 展開（例: "消法" → "消費税法"）。各ヒットに条番号・snippet・score・DB の鮮度 (freshness) を付けて返す。bulk DB 未構築時は search_law（法令名のタイトル一致）にフォールバックし、その旨を note で返す。2 文字の語（「相殺」「時効」）は本文の索引（trigram）に載らないため既定では本文を引かず、何をして結果を出したかを応答の short_tokens に返す。',
   inputSchema: {
     type: 'object',
     properties: {
       keyword: {
         type: 'string',
         description:
-          '検索キーワード。スペース区切りで AND 検索。法令名・略称を含めると（例: "民法 不法行為", "労基法 時間外"）その法令の条に絞って本文を検索する。「第30条」を含めると該当条番号のヒットを上位に寄せ、法令名 + 条番号だけ（例: "民法 第709条"）ならその条を直接返す（漢数字は未対応）',
+          '検索キーワード。スペース区切りで AND 検索。法令名・略称を含めると（例: "民法 不法行為", "労基法 時間外"）その法令の条に絞って本文を検索する。「第30条」を含めると該当条番号のヒットを上位に寄せ、法令名 + 条番号だけ（例: "民法 第709条"）ならその条を直接返す（漢数字は未対応）。2 文字の語だけのとき（例: "相殺"）は索引を引けないため、既定では条本文を引かず法令名の照合だけを返す。法令名か 3 文字以上の語を添えると索引で本文を引ける',
       },
       domain: {
         type: 'string',
@@ -140,6 +140,11 @@ export const searchFulltextTool = {
         type: 'number',
         description: `取得件数（デフォルト: ${LIMITS.fulltextDefault}、最大: ${LIMITS.fulltextMax}）`,
         default: LIMITS.fulltextDefault,
+      },
+      scan_body: {
+        type: 'boolean',
+        description: `2 文字の語だけのクエリ（例: "相殺"）で、索引を使わずに全法令の条本文を端から照合する（デフォルト: false）。索引を引けない語の本文を探す最後の手段で、${SCAN_BODY_SECONDS}かかり、並び順も関連度順にならない。法令名を添えられるなら（例: "民法 相殺"）そちらが速く正確。3 文字以上の語を含むクエリでは索引を引くので、この引数は効かない`,
+        default: false,
       },
     },
     required: ['keyword'],
