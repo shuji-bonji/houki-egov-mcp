@@ -27,6 +27,7 @@ import {
 } from '../utils/article-num.js';
 import { LRUCache } from '../utils/cache.js';
 import { createLimit } from '../utils/concurrency.js';
+import { lawNumMatchKey } from '../utils/law-num.js';
 import { logger } from '../utils/logger.js';
 import {
   EgovHttpError,
@@ -45,6 +46,7 @@ import {
 } from './law-relations.js';
 import {
   countTocNodes,
+  extractSupplProvisions,
   extractText,
   extractToc,
   findArticle,
@@ -55,6 +57,7 @@ import {
   getArticleCaption,
   type LawNode,
   limitTocDepth,
+  type SupplProvisionToc,
   type TocNode,
 } from './law-tree.js';
 import {
@@ -334,10 +337,16 @@ export async function getLawArticle(opts: {
   // toc モード: 目次のみ
   if (opts.format === 'toc' || (!opts.article && opts.format !== 'json')) {
     const toc = extractToc(lawData.law_full_text);
+    // 附則は見出しだけ（#24）。中の条まで要るときは get_toc の suppl: "full" を使う
+    const supplProvisions = extractSupplProvisions(lawData.law_full_text).map((sp) => ({
+      ...sp,
+      children: [],
+    }));
     const markdown = formatTocMarkdown({
       lawTitle: resolved.title,
       lawId: resolved.law_id,
       toc,
+      supplProvisions,
       retrievedAt,
       at: opts.at,
     });
@@ -466,19 +475,58 @@ export async function getLawArticle(opts: {
   return { format: 'markdown', markdown, meta };
 }
 
+/** 附則をどこまで返すか（#24、v0.13.0） */
+export type SupplMode = 'list' | 'full' | 'none';
+
+/** 附則について何を返したかの内訳（#24、v0.13.0） */
+export interface SupplTocSummary {
+  /** 実際に適用した mode */
+  mode: SupplMode;
+  /** この法令が持つ附則の本数（mode に関わらず数える） */
+  count: number;
+  /** 附則の中の条の総数（mode に関わらず数える） */
+  article_count: number;
+  /** 改正法の題名を付けた結果（with_amend_titles を指定したときだけ） */
+  amend_law_titles?: {
+    /** 題名を付けられた附則の数 */
+    matched: number;
+    /** 改正履歴に該当が無く題名を付けられなかった附則の数 */
+    unmatched: number;
+    /** 照合に使った改正履歴の件数 */
+    revisions: number;
+    source: 'law_revisions';
+  };
+  /** 何をして何を返したかの説明。附則を持つ法令にだけ付く */
+  note?: string;
+}
+
 /**
  * get_toc ツールの本実装
  *
+ * - 本則（`toc`）と附則（`suppl_provisions`）を分けて返す（#24）。附則は改正法ごとに
+ *   1 本ずつで、所得税法は 352 本・条 983 件あるため、既定では見出しだけを返す
  * - depth を指定すると上位 N 階層までで打ち切る（民法・会社法のような
  *   大規模法令でレスポンスサイズを抑える用途）
  * - depth=undefined で全階層
  */
-export async function getLawToc(opts: { law_name: string; at?: string; depth?: number }): Promise<
+export async function getLawToc(opts: {
+  law_name: string;
+  at?: string;
+  depth?: number;
+  /** 附則をどこまで返すか。既定は 'list'（見出しと条数だけ） */
+  suppl?: SupplMode;
+  /** 附則に改正法の題名を付ける（改正履歴を 1 回引く） */
+  with_amend_titles?: boolean;
+}): Promise<
   LawServiceResult<{
     markdown: string;
+    /** 本則の目次。附則は含まない */
     toc: TocNode[];
+    /** 附則の目次。改正法ごとに 1 件。mode: 'none' では空配列 */
+    suppl_provisions: SupplProvisionToc[];
+    suppl: SupplTocSummary;
     meta: ArticleMeta;
-    /** TOC ノード総数。トリミング前/後どちらの値かは truncated を見て判断 */
+    /** 本則の TOC ノード総数。トリミング前/後どちらの値かは truncated を見て判断 */
     node_count: number;
     /** depth 指定で枝を刈ったかどうか */
     truncated: boolean;
@@ -508,16 +556,38 @@ export async function getLawToc(opts: { law_name: string; at?: string; depth?: n
   const fullCount = countTocNodes(fullToc);
   const toc = opts.depth && opts.depth > 0 ? limitTocDepth(fullToc, opts.depth) : fullToc;
   const truncated = toc !== fullToc;
+
+  const allSuppl = extractSupplProvisions(lawData.law_full_text);
+  const mode: SupplMode = opts.suppl ?? 'list';
+  const suppl: SupplTocSummary = {
+    mode,
+    count: allSuppl.length,
+    article_count: allSuppl.reduce((a, sp) => a + sp.article_count, 0),
+  };
+  let supplProvisions = selectSupplProvisions(allSuppl, mode, opts.depth);
+  if (allSuppl.length > 0) {
+    suppl.note = SUPPL_NOTES[mode](suppl);
+  }
+  if (opts.with_amend_titles && supplProvisions.length > 0) {
+    const titled = await attachAmendLawTitles(resolved.law_id, supplProvisions);
+    supplProvisions = titled.provisions;
+    if (titled.amend_law_titles) suppl.amend_law_titles = titled.amend_law_titles;
+    if (titled.note) suppl.note = suppl.note ? `${suppl.note}。${titled.note}` : titled.note;
+  }
+
   const markdown = formatTocMarkdown({
     lawTitle: resolved.title,
     lawId: resolved.law_id,
     toc,
+    supplProvisions,
     retrievedAt,
     at: opts.at,
   });
   return {
     markdown,
     toc,
+    suppl_provisions: supplProvisions,
+    suppl,
     meta: {
       law_id: resolved.law_id,
       title: resolved.title,
@@ -528,6 +598,90 @@ export async function getLawToc(opts: { law_name: string; at?: string; depth?: n
     },
     node_count: truncated ? countTocNodes(toc) : fullCount,
     truncated,
+  };
+}
+
+/** mode に応じて附則の中身を落とす。'full' のときだけ depth を附則の中にも適用する */
+function selectSupplProvisions(
+  all: SupplProvisionToc[],
+  mode: SupplMode,
+  depth?: number
+): SupplProvisionToc[] {
+  if (mode === 'none') return [];
+  if (mode === 'list') return all.map((sp) => ({ ...sp, children: [] }));
+  if (depth && depth > 0) {
+    return all.map((sp) => ({ ...sp, children: limitTocDepth(sp.children, depth) }));
+  }
+  return all;
+}
+
+/** 附則について何をして何を返したかの 1 行 */
+const SUPPL_NOTES: Record<SupplMode, (s: SupplTocSummary) => string> = {
+  list: (s) =>
+    `附則 ${s.count} 本の見出しと条数だけを返しました（条は合計 ${s.article_count} 件）。中の条まで要るときは suppl: "full" を指定してください`,
+  full: (s) => `附則 ${s.count} 本の中の条（合計 ${s.article_count} 件）まで返しました`,
+  none: (s) => `附則 ${s.count} 本（条 ${s.article_count} 件）は返していません（suppl: "none"）`,
+};
+
+/**
+ * 附則に改正法の題名を付ける。
+ *
+ * 附則の属性にあるのは法令番号（`令和七年六月二〇日法律第七四号`）だけなので、
+ * 改正履歴（`law_revisions`）を 1 回引き、`amendment_law_num`
+ * （`令和七年法律第七十四号`）と照合して題名を取る。公布の月日と漢数字の書き方が
+ * 違うため、`lawNumMatchKey()` で「元号 + 年 + 種別 + 号数」に正規化してから比べる。
+ *
+ * e-Gov の改正履歴は近年の改正が中心で、附則の本数のほうが多い（2026-09-20 実測:
+ * 消費税法は附則 167 本に対し改正履歴 65 件で、題名が付くのは 28 本）。
+ * 付かなかった件数は `unmatched` で返す。
+ */
+async function attachAmendLawTitles(
+  lawId: string,
+  provisions: SupplProvisionToc[]
+): Promise<{
+  provisions: SupplProvisionToc[];
+  amend_law_titles?: SupplTocSummary['amend_law_titles'];
+  note?: string;
+}> {
+  let res: Awaited<ReturnType<typeof getLawRevisions>>;
+  try {
+    res = await getLawRevisions(lawId);
+  } catch (err) {
+    // 目次そのものは取れているので、題名だけ諦めて理由を note で返す
+    return {
+      provisions,
+      note: `改正法の題名は付けられませんでした（改正履歴の取得に失敗: ${(err as Error).message}）`,
+    };
+  }
+  const revisions = res.revisions ?? [];
+  const titleByKey = new Map<string, string>();
+  for (const r of revisions) {
+    const key = lawNumMatchKey(r.amendment_law_num);
+    if (!key || !r.amendment_law_title) continue;
+    if (!titleByKey.has(key)) titleByKey.set(key, r.amendment_law_title);
+  }
+  let matched = 0;
+  let unmatched = 0;
+  const withTitles = provisions.map((sp) => {
+    // 制定時の附則には改正法が無いので照合しない
+    if (!sp.amend_law_num) return sp;
+    const key = lawNumMatchKey(sp.amend_law_num);
+    const title = key ? titleByKey.get(key) : undefined;
+    if (title) {
+      matched++;
+      return { ...sp, amend_law_title: title };
+    }
+    unmatched++;
+    return sp;
+  });
+  const note =
+    unmatched > 0
+      ? `改正法の題名は ${matched} 本に付きました。残り ${unmatched} 本は e-Gov の改正履歴（${revisions.length} 件）に該当が無く、題名は付いていません`
+      : undefined;
+  return {
+    provisions: withTitles,
+    amend_law_titles: { matched, unmatched, revisions: revisions.length, source: 'law_revisions' },
+    note,
   };
 }
 

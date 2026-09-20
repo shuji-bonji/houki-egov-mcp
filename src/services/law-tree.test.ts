@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { LawNode } from './egov-client.js';
 import {
+  countTocArticles,
   countTocNodes,
+  extractSupplProvisions,
   extractText,
   extractToc,
   findArticle,
@@ -349,5 +351,140 @@ describe('countTocNodes', () => {
 
   it('returns 0 for an empty TOC', () => {
     expect(countTocNodes([])).toBe(0);
+  });
+});
+
+// 附則を持つ法令のフィクスチャ（#24）。消費税法の附則の形を写した
+//   - 1 本目: 制定時の附則（AmendLawNum が無い）。条が 2 本
+//   - 2 本目: 改正法の附則（抄）。条が 1 本
+//   - 3 本目: 条を立てず項だけで書かれた附則
+const supplFixture: LawNode = {
+  tag: 'Law',
+  children: [
+    {
+      tag: 'LawBody',
+      children: [
+        { tag: 'LawTitle', children: ['消費税法'] },
+        {
+          tag: 'MainProvision',
+          children: [
+            {
+              tag: 'Chapter',
+              attr: { Num: '1' },
+              children: [
+                { tag: 'ChapterTitle', children: ['第一章　総則'] },
+                {
+                  tag: 'Article',
+                  attr: { Num: '1' },
+                  children: [{ tag: 'ArticleTitle', children: ['第一条'] }],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          tag: 'SupplProvision',
+          attr: { Extract: 'true' },
+          children: [
+            { tag: 'SupplProvisionLabel', children: ['附　則'] },
+            {
+              tag: 'Article',
+              attr: { Num: '1' },
+              children: [
+                { tag: 'ArticleCaption', children: ['（施行期日）'] },
+                { tag: 'ArticleTitle', children: ['第一条'] },
+              ],
+            },
+            {
+              tag: 'Article',
+              attr: { Num: '2' },
+              children: [{ tag: 'ArticleTitle', children: ['第二条'] }],
+            },
+          ],
+        },
+        {
+          tag: 'SupplProvision',
+          attr: { AmendLawNum: '平成元年六月二八日法律第三九号', Extract: 'true' },
+          children: [
+            { tag: 'SupplProvisionLabel', children: ['附　則'] },
+            {
+              tag: 'Article',
+              attr: { Num: '1' },
+              children: [{ tag: 'ArticleTitle', children: ['第一条'] }],
+            },
+          ],
+        },
+        {
+          tag: 'SupplProvision',
+          attr: { AmendLawNum: '平成二年六月二二日法律第三六号' },
+          children: [
+            { tag: 'SupplProvisionLabel', children: ['附　則'] },
+            {
+              tag: 'Paragraph',
+              attr: { Num: '1' },
+              children: [{ tag: 'ParagraphSentence', children: ['この法律は…から施行する。'] }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+describe('extractToc（附則の扱い）', () => {
+  it('本則だけを返し、附則の条は混ぜない', () => {
+    const toc = extractToc(supplFixture);
+    expect(toc).toHaveLength(1);
+    expect(toc[0].tag).toBe('Chapter');
+    expect(countTocArticles(toc)).toBe(1);
+  });
+});
+
+describe('extractSupplProvisions', () => {
+  it('附則を出現順に返し、index が 1 始まりになる', () => {
+    const suppl = extractSupplProvisions(supplFixture);
+    expect(suppl.map((s) => s.index)).toEqual([1, 2, 3]);
+  });
+
+  it('見出しの全角空白を詰める', () => {
+    expect(extractSupplProvisions(supplFixture)[0].label).toBe('附則');
+  });
+
+  it('制定時の附則には amend_law_num を付けない', () => {
+    const first = extractSupplProvisions(supplFixture)[0];
+    expect(first.amend_law_num).toBeUndefined();
+    expect(first.extract).toBe(true);
+    expect(first.article_count).toBe(2);
+    expect(first.children.map((c) => c.num)).toEqual(['1', '2']);
+    expect(first.children[0].caption).toBe('（施行期日）');
+  });
+
+  it('改正法の附則には AmendLawNum が入る', () => {
+    const second = extractSupplProvisions(supplFixture)[1];
+    expect(second.amend_law_num).toBe('平成元年六月二八日法律第三九号');
+    expect(second.article_count).toBe(1);
+    expect(second.paragraph_only).toBe(false);
+  });
+
+  it('条を立てず項だけの附則は paragraph_only になる', () => {
+    const third = extractSupplProvisions(supplFixture)[2];
+    expect(third.article_count).toBe(0);
+    expect(third.paragraph_only).toBe(true);
+    expect(third.extract).toBe(false);
+    expect(third.children).toEqual([]);
+  });
+
+  it('附則が無い法令では空配列を返す', () => {
+    expect(extractSupplProvisions(fixture)).toEqual([]);
+  });
+});
+
+describe('countTocArticles', () => {
+  it('入れ子の中の条も数える', () => {
+    expect(countTocArticles(extractToc(deepFixture))).toBe(1);
+  });
+
+  it('条が無ければ 0', () => {
+    expect(countTocArticles([])).toBe(0);
   });
 });

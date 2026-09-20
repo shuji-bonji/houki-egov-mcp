@@ -16,6 +16,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.13.0] - 2026-09-20
+
+**minor リリース** — `get_toc` が本則と附則を分けて返すようにし、附則を改正法ごとにまとめた（Issue #24）。出典は houki-hub#20 の機能 8 / houki-hub#21。
+
+### Added
+
+- **`suppl_provisions`**: 附則の目次を改正法ごとに 1 件ずつ返す。件ごとに `index`（LawBody の中での並び順。ローカル DB の条番号 `Suppl{index}_{条番号}` と同じ番号）、`label`、`amend_law_num`（どの改正法の附則か。制定時の附則には付かない）、`extract`（抄）、`article_count`、`paragraph_only`（条を立てず項だけで書かれた附則か）、`children`（附則の中の目次）が入る
+- **`suppl`（引数、既定 `"list"`）**: 附則をどこまで返すか。`"list"` = 改正法ごとの見出しと条数だけ、`"full"` = 附則の中の条まで、`"none"` = 附則を返さない。既定を `"list"` にしたのは、附則の条が目次の大半を占めるため（所得税法は本則 388 ノードに対し附則 352 本・条 983 件）
+- **`suppl`（応答）**: 附則について何を返したかの内訳。`mode` / `count` / `article_count` と、何をしたかを書いた `note`。`count` と `article_count` は `mode: "none"` でも数える
+- **`with_amend_titles`（引数、既定 `false`）**: 附則に改正法の題名を付ける。改正履歴（`get_law_revisions` と同じ e-Gov の応答）を 1 回引き、法令番号で照合する。付いた本数と付かなかった本数は `suppl.amend_law_titles` に入る
+- **`lawNumMatchKey()`（`src/utils/law-num.ts`）**: 法令番号の表記の違いを落として照合キーにする。附則の `AmendLawNum` は `令和七年六月二〇日法律第七四号`、改正履歴の `amendment_law_num` は `令和七年法律第七十四号` で、公布の月日の有無と漢数字の書き方（位ごとに並べる形と十・百・千を使う形）が違う
+- **`extractSupplProvisions()` / `countTocArticles()`（`src/services/law-tree.ts`）**
+
+### Changed
+
+- **`extractToc()` は附則の条を含めない**。v0.12.1 までは附則の条が本則の章の後ろにフラットに並んでいた（消費税法で 425 件、所得税法で 983 件）ため、いま効いている規定と、ある改正法の施行日・経過措置の区別が目次から付かなかった
+- **目次の Markdown**: 附則を返すときは「## 本則」と「## 附則（N 本・条 M 件）」の 2 節に分ける。附則が無い法令と `suppl: "none"` のときは見出しを付けず、v0.12.1 と同じ形で条の箇条書きだけを書く
+- **`get_law` の `format: "toc"`** も本則と附則を分け、附則は見出しだけを返す
+- `node_count` は本則の TOC ノード数になった。附則の本数と条数は `suppl.count` / `suppl.article_count` を見る
+
+### 実測（2026-09-20）
+
+`get_toc` の Markdown の大きさ。`"full"` が v0.12.1 までに返していた量に相当する。
+
+| 法令 | `"list"`（既定） | `"full"` | `"none"` |
+|---|---|---|---|
+| 所得税法（本則 388 ノード・附則 352 本・条 983 件） | 752 行 / 54.5 KB | 1,735 行 / 114.4 KB | 395 行 / 24.6 KB |
+| 消費税法（本則 91 ノード・附則 167 本・条 425 件） | 270 行 / 21.0 KB | 695 行 / 47.0 KB | 98 行 / 6.9 KB |
+| 民法（本則 1,365 ノード・附則 67 本・条 201 件） | 1,444 行 / 79.1 KB | 1,645 行 / 88.4 KB | 1,372 行 / 73.5 KB |
+
+- `with_amend_titles: true` で題名が付く割合は、e-Gov の改正履歴が持つ範囲で決まる。消費税法は附則 167 本・改正履歴 65 件で 28 本、所得税法は附則 352 本・改正履歴 84 件で 29 本、民法は附則 67 本・改正履歴 37 件で 16 本
+- 附則の属性は `AmendLawNum` と `Extract` の 2 つだけで、改正法の題名は入っていない（消費税法・所得税法・民法・会社法・労働基準法・商法・電子帳簿保存法で確認）
+- 附則の中は条（Article）か項（Paragraph）で、上に編・章・節を置く附則は上記 7 法令には無かった。`extractSupplProvisions()` は入れ子があっても走査する
+
 ## [0.12.1] - 2026-09-20
 
 **patch リリース** — コードは変えていない。README の 1 行目と npm の `description`、plugin の `description` から「実装する前に」を外し、このサーバーができることだけの 1 行にした。

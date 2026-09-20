@@ -17,6 +17,7 @@ import {
   findChildByTag,
   findChildrenByTag,
   getArticleCaption,
+  type SupplProvisionToc,
   type TocNode,
 } from '../services/law-tree.js';
 import { formatArticleLabel, formatItemLabel, fromEgovArticleNum } from '../utils/article-num.js';
@@ -285,24 +286,58 @@ function formatRemarksLines(remarks: LawNode): string[] {
 
 /**
  * TOC を Markdown に整形。
+ *
+ * 附則を渡したときは「## 本則」と「## 附則」の 2 節に分ける。附則が無い法令
+ * （または附則を返さないとき）は見出しを付けず、条の箇条書きだけを書く。
  */
 export function formatTocMarkdown(opts: {
   lawTitle: string;
   lawId: string;
   toc: TocNode[];
+  /** 附則の目次（#24）。空配列・省略のときは本則だけを書く */
+  supplProvisions?: SupplProvisionToc[];
   retrievedAt: string;
   at?: string;
 }): string {
   const { lawTitle, lawId, toc, retrievedAt, at } = opts;
+  const suppl = opts.supplProvisions ?? [];
   const lines = [`# ${lawTitle} — 目次`, ''];
+  if (suppl.length > 0) lines.push('## 本則', '');
   for (const node of toc) {
     appendTocLines(lines, node, 0);
+  }
+  if (suppl.length > 0) {
+    const articleTotal = suppl.reduce((a, s) => a + s.article_count, 0);
+    lines.push('', `## 附則（${suppl.length} 本・条 ${articleTotal} 件）`, '');
+    for (const s of suppl) {
+      lines.push(`- ${formatSupplProvisionHeading(s)}`);
+      for (const c of s.children) {
+        appendTocLines(lines, c, 1);
+      }
+    }
   }
   lines.push('', '---', '出典：e-Gov法令検索（デジタル庁）');
   lines.push(`URL: ${EGOV_API.publicLawUrl(lawId)}`);
   if (at) lines.push(`時点: ${at}`);
   lines.push(`取得日時: ${retrievedAt}`);
   return lines.join('\n');
+}
+
+/**
+ * 附則 1 本の見出し行を作る。
+ *
+ * ```
+ * 附則(1) 制定時（抄） — 条 6 件
+ * 附則(2) 平成元年六月二八日法律第三九号（抄） — 条 2 件
+ * 附則(7) 平成二年六月二二日法律第三六号（抄） — 項のみ
+ * ```
+ */
+export function formatSupplProvisionHeading(s: SupplProvisionToc): string {
+  const source = s.amend_law_num ?? '制定時';
+  const extract = s.extract ? '（抄）' : '';
+  const size = s.paragraph_only ? '項のみ' : `条 ${s.article_count} 件`;
+  const title = s.amend_law_title ? ` ／ 改正法: ${s.amend_law_title}` : '';
+  return `${s.label}(${s.index}) ${source}${extract} — ${size}${title}`;
 }
 
 function appendTocLines(lines: string[], node: TocNode, depth: number): void {

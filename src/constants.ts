@@ -40,3 +40,10 @@ export const SCAN_BODY_SECONDS = '5〜20 秒';
 /** 出力フォーマットの列挙 */
 export const OUTPUT_FORMATS = ['markdown', 'json', 'toc'] as const;
 export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
+
+/**
+ * `get_toc` が附則をどこまで返すかの列挙（#24）。
+ *
+ * `list` = 改正法ごとの見出しと条数だけ、`full` = 附則の中の条まで、`none` = 返さない。
+ */
+export const SUPPL_MODES = ['list', 'full', 'none'] as const;

@@ -5,7 +5,7 @@
  * すべての inputSchema に `additionalProperties: false` を付け、未知の引数は INVALID_ARGUMENT にする。
  */
 import type { Tool } from '@modelcontextprotocol/server';
-import { DOMAINS, LIMITS, OUTPUT_FORMATS, SCAN_BODY_SECONDS } from '../constants.js';
+import { DOMAINS, LIMITS, OUTPUT_FORMATS, SCAN_BODY_SECONDS, SUPPL_MODES } from '../constants.js';
 import { type ToolSpec, toMcpTool } from './tool-args.js';
 
 // ========================================
@@ -90,7 +90,7 @@ export const getLawTool = {
 export const getTocTool = {
   name: 'get_toc',
   description:
-    '法令の目次（編・章・節・条の構造）のみを取得する。トークン節約用。depth で階層を浅く打ち切れる（民法・会社法のような大規模法令の概観把握向け）。',
+    '法令の目次（編・章・節・条の構造）のみを取得する。トークン節約用。本則は `toc`、附則は改正法ごとに `suppl_provisions` へ分けて返す（現行の規定と、改正法ごとの施行日・経過措置を混ぜないため）。既定では附則は見出しと条数だけを返し、`suppl: "full"` で附則の中の条まで返す。depth で階層を浅く打ち切れる（民法・会社法のような大規模法令の概観把握向け）。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -106,6 +106,19 @@ export const getTocTool = {
         type: 'number',
         description:
           '構造階層の打ち切り深さ。1=編まで、2=章まで、3=節まで。省略時は全階層。例: 民法を depth=1 で取得すると「第一編 総則」「第二編 物権」のような大区分のみが返る',
+      },
+      suppl: {
+        type: 'string',
+        enum: [...SUPPL_MODES],
+        description:
+          '附則をどこまで返すか。"list"（デフォルト）=改正法ごとの見出しと条数だけ、"full"=附則の中の条まで、"none"=附則を返さない。附則は改正法ごとに積み上がり、所得税法は 352 本・条 983 件あるため、既定では見出しだけを返す',
+        default: 'list',
+      },
+      with_amend_titles: {
+        type: 'boolean',
+        description:
+          '附則に改正法の題名を付ける（デフォルト: false）。附則の属性には法令番号しか無いため、改正履歴（get_law_revisions と同じ e-Gov の応答）を 1 回引いて法令番号で照合する。e-Gov の改正履歴は近年の改正が中心なので、それより古い改正法の題名は付かない（付いた本数と付かなかった本数は応答の suppl.amend_law_titles に入る）',
+        default: false,
       },
     },
     required: ['law_name'],
