@@ -27,6 +27,23 @@ const article = (num: string, caption: string, length = 20): LawNode => ({
   ],
 });
 
+/**
+ * 削除された条をまとめた範囲表記の条（e-Gov の `Article@Num` = "4:5"）。
+ * 条見出しは無く、`ArticleTitle` が「第四条及び第五条」で本文は「削除」。
+ */
+const deletedArticles = (num: string, title: string): LawNode => ({
+  tag: 'Article',
+  attr: { Num: num },
+  children: [
+    { tag: 'ArticleTitle', attr: {}, children: [title] },
+    {
+      tag: 'Paragraph',
+      attr: { Num: '1' },
+      children: [{ tag: 'ParagraphSentence', attr: {}, children: ['削除'] }],
+    },
+  ],
+});
+
 const structural = (tag: string, num: string, title: string, children: LawNode[]): LawNode => ({
   tag,
   attr: { Num: num },
@@ -51,7 +68,11 @@ const LAW_TREE: LawNode = {
                 article('1', '趣旨'),
                 article('2', '定義'),
               ]),
-              structural('Chapter', '2', '第二章　人', [article('3', '権利能力')]),
+              structural('Chapter', '2', '第二章　人', [
+                // 第3条だけで上限（2,000 文字）を超える長さにして、削除条で打ち切らせる
+                article('3', '権利能力', 2500),
+                deletedArticles('4:5', '第四条及び第五条'),
+              ]),
             ]),
             structural('Part', '2', '第二編　物権', [
               structural('Chapter', '1', '第一章　総則', [article('4', '物権の創設')]),
@@ -306,9 +327,26 @@ describe('get_law_range の附則（#22）', () => {
   });
 
   it('本則の範囲には附則の条が入らない', async () => {
-    const r = await ok(getLawRange({ law_name: TITLE, part: 1 }));
-    // 第一編は第1条〜第3条。附則の第1条は入らない
-    expect(r.articles.map((a) => a.num)).toEqual(['1', '2', '3']);
-    expect(r.range.article_count).toBe(3);
+    const r = await ok(getLawRange({ law_name: TITLE, part: 1, max_chars: 120000 }));
+    // 第一編は第1条〜第3条と削除条（第4条及び第5条）。附則の第1条は入らない
+    expect(r.articles.map((a) => a.num)).toEqual(['1', '2', '3', '4:5']);
+    expect(r.range.article_count).toBe(4);
+  });
+
+  it('削除された条をまとめた範囲表記でも続きが取れる（v0.14.1）', async () => {
+    const first = await ok(getLawRange({ law_name: TITLE, part: 1, chapter: 2, max_chars: 2000 }));
+    // 第3条だけで上限を超えるので 1 条返して打ち切り、続きは削除条から
+    expect(first.range.returned_count).toBe(1);
+    expect(first.range.truncated).toBe(true);
+    expect(first.range.next_from_article).toBe('4:5');
+
+    const next = await ok(
+      getLawRange({ law_name: TITLE, part: 1, chapter: 2, from_article: '4:5' })
+    );
+    expect(next.range.skipped_count).toBe(1);
+    expect(next.articles.map((a) => a.label)).toEqual(['第4条及び第5条']);
+    expect(next.range.first_article).toBe('第4条及び第5条');
+    expect(next.markdown).toContain('## 第4条及び第5条');
+    expect(next.markdown).toContain('削除');
   });
 });

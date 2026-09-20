@@ -158,3 +158,23 @@ describe('toEgovStructureNum（#22）', () => {
     expect(() => toEgovStructureNum('三〇')).toThrow();
   });
 });
+
+describe('削除された条をまとめた範囲表記（v0.14.1）', () => {
+  it('隣り合う 2 条は「及び」、3 条以上は「から…まで」', () => {
+    // e-Gov の ArticleTitle と同じ言い方（民法 534:535 / 170:174、商法 32:500）
+    expect(formatArticleLabel('534:535')).toBe('第534条及び第535条');
+    expect(formatArticleLabel('170:174')).toBe('第170条から第174条まで');
+    expect(formatArticleLabel('32:500')).toBe('第32条から第500条まで');
+  });
+
+  it('範囲表記を e-Gov 形式として受ける（from_article で続きを取るため）', () => {
+    expect(toEgovArticleNum('534:535')).toBe('534:535');
+    expect(toEgovArticleNum('五百三十四:五百三十五')).toBe('534:535');
+  });
+
+  it('範囲表記として読めない指定は例外にする', () => {
+    expect(() => toEgovArticleNum('534:')).toThrow();
+    expect(() => toEgovArticleNum('534:535:536')).toThrow();
+    expect(() => toEgovArticleNum(':535')).toThrow();
+  });
+});
