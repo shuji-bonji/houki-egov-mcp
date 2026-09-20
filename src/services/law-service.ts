@@ -8,7 +8,7 @@
 
 import { listBySourceMcpHint, resolveAbbreviation } from '@shuji-bonji/houki-abbreviations';
 import { CACHE_CONFIG, EGOV_API, HTTP_CONFIG } from '../config.js';
-import { LIMITS } from '../constants.js';
+import { LIMITS, RANGE_LIMITS } from '../constants.js';
 import {
   isLawServiceError as _isLawServiceError,
   type LawErrorCode,
@@ -17,13 +17,21 @@ import {
   NEXT_ACTIONS,
   type NextAction,
 } from '../errors.js';
-import { formatArticleMarkdown, formatTocMarkdown } from '../formatters/markdown.js';
+import {
+  formatArticleBody,
+  formatArticleMarkdown,
+  formatRangeArticleSection,
+  formatRangeMarkdown,
+  formatSupplProvisionLabel,
+  formatTocMarkdown,
+} from '../formatters/markdown.js';
 import {
   formatArticleLabel,
   formatItemLabel,
   fromEgovArticleNum,
   toEgovArticleNum,
   toEgovItemNum,
+  toEgovStructureNum,
 } from '../utils/article-num.js';
 import { LRUCache } from '../utils/cache.js';
 import { createLimit } from '../utils/concurrency.js';
@@ -45,6 +53,7 @@ import {
   relationCandidates,
 } from './law-relations.js';
 import {
+  collectArticlesInRange,
   countTocNodes,
   extractSupplProvisions,
   extractText,
@@ -54,9 +63,16 @@ import {
   findItem,
   findParagraph,
   findParagraphForItem,
+  findRangeByPath,
+  findRanges,
+  findSupplProvisionByIndex,
   getArticleCaption,
   type LawNode,
   limitTocDepth,
+  parseRangePath,
+  RANGE_TAGS,
+  type RangeMatch,
+  type RangeTag,
   type SupplProvisionToc,
   type TocNode,
 } from './law-tree.js';
@@ -1705,4 +1721,392 @@ async function resolveLawForVerify(
     candidates: res.laws.slice(0, MAX_CITATION_CANDIDATES).map((l) => toVerifiedLaw(toExactHit(l))),
     next_actions: [NEXT_ACTIONS.searchLaw(name)],
   };
+}
+
+// ========================================
+// #22: 章・節単位の範囲取得（v0.14.0）
+// ========================================
+
+/** 返した範囲の内訳（#22、v0.14.0） */
+export interface LawRangeInfo {
+  /** 本則の範囲のパス（`Part3/Chapter2`）。附則のときは付かない */
+  path?: string;
+  /** 附則を指定したときの並び順（`get_toc` の `suppl_provisions[].index` と同じ） */
+  suppl_index?: number;
+  /** 範囲の見出しの連なり（上位から）。附則は 1 件 */
+  titles: string[];
+  /** 範囲の種類。本則は `Part` / `Chapter` / `Section` / `Subsection` / `Division`、附則は `SupplProvision` */
+  tag: RangeTag | 'SupplProvision';
+  /** 範囲が持つ条の数 */
+  article_count: number;
+  /** 実際に本文を返した条の数 */
+  returned_count: number;
+  /** `from_article` より前にあるため返していない条の数 */
+  skipped_count: number;
+  /** 返した最初の条（例: `第521条`） */
+  first_article?: string;
+  /** 返した最後の条 */
+  last_article?: string;
+  /** 文字数の上限で打ち切ったかどうか */
+  truncated: boolean;
+  /** 返した条本文の文字数（見出しを含む。出典とヘッダは含まない） */
+  body_chars: number;
+  /** 適用した文字数の上限 */
+  max_chars: number;
+  /** 打ち切ったときの続きの条番号。`from_article` にそのまま渡せる */
+  next_from_article?: string;
+  /** 何をどこまで返したかの 1 行 */
+  note: string;
+  /** 続きの取り方（打ち切ったときだけ） */
+  next_actions?: NextAction[];
+}
+
+/** 返した条の一覧（本文は markdown 側） */
+export interface LawRangeArticle {
+  /** e-Gov API 形式の条番号（`521`、枝番号は `548_4`） */
+  num: string;
+  /** 表示用の条番号（`第521条`、`第548条の4`） */
+  label: string;
+  /** 条見出し（`（契約の締結及び内容の自由）`） */
+  caption?: string;
+}
+
+/** `get_law_range` の引数のうち、本則の階層を指す分 */
+const RANGE_ARG_NAMES = {
+  Part: 'part',
+  Chapter: 'chapter',
+  Section: 'section',
+  Subsection: 'subsection',
+  Division: 'division',
+} as const satisfies Record<RangeTag, string>;
+
+/**
+ * get_law_range ツールの本実装（#22）。
+ *
+ * 編・章・節・款・目のいずれか、または附則 1 本を範囲にして、その中の条を本文ごと返す。
+ * 大きな範囲は `max_chars` で条の単位で打ち切り、続きの条番号を `next_from_article` に入れる
+ * （`get_law` の 1 条ずつの取得と、`get_toc` の目次だけの取得の間を埋める）。
+ *
+ * 範囲の指定は 3 通りで、同時には 1 つだけ指定する。
+ *
+ * - `part` / `chapter` / `section` / `subsection` / `division`（上位は省略できる）
+ * - `path`（`get_toc` が返す `toc[].path`。例 `Part3/Chapter2`）
+ * - `suppl_index`（`get_toc` が返す `suppl_provisions[].index`）
+ */
+export async function getLawRange(opts: {
+  law_name: string;
+  part?: string | number;
+  chapter?: string | number;
+  section?: string | number;
+  subsection?: string | number;
+  division?: string | number;
+  path?: string;
+  suppl_index?: number;
+  from_article?: string;
+  max_chars?: number;
+  at?: string;
+}): Promise<
+  LawServiceResult<{
+    markdown: string;
+    range: LawRangeInfo;
+    articles: LawRangeArticle[];
+    meta: ArticleMeta;
+  }>
+> {
+  const scopeError = checkAbbreviationScope(opts.law_name);
+  if (scopeError) return scopeError;
+
+  // 1. 範囲の指定を読む（3 通りのうち 1 つだけ）
+  const selector: Partial<Record<RangeTag, string>> = {};
+  for (const tag of RANGE_TAGS) {
+    const raw = opts[RANGE_ARG_NAMES[tag]];
+    if (raw === undefined) continue;
+    try {
+      selector[tag] = toEgovStructureNum(raw);
+    } catch (err) {
+      return makeError('INVALID_ARGUMENT', (err as Error).message, {
+        hint: `${RANGE_ARG_NAMES[tag]} は "3"・"三"・"第三章"・"2の2" のいずれかの形式で指定してください`,
+      });
+    }
+  }
+  const ways = [
+    Object.keys(selector).length > 0 ? '編・章・節の番号' : null,
+    opts.path !== undefined ? 'path' : null,
+    opts.suppl_index !== undefined ? 'suppl_index' : null,
+  ].filter((w): w is string => w !== null);
+  if (ways.length === 0) {
+    return makeError('INVALID_ARGUMENT', '範囲を指定してください', {
+      hint: 'part / chapter / section / subsection / division のいずれか、path（get_toc の toc[].path）、suppl_index（附則の番号）のうち 1 つを指定してください',
+      next_actions: [NEXT_ACTIONS.getToc(opts.law_name)],
+    });
+  }
+  if (ways.length > 1) {
+    return makeError(
+      'INVALID_ARGUMENT',
+      `範囲の指定は 1 通りにしてください（${ways.join(' と ')} が同時に指定されています）`,
+      {
+        hint: '編・章・節の番号、path、suppl_index は互いに排他です',
+      }
+    );
+  }
+  if (opts.path !== undefined && parseRangePath(opts.path) === null) {
+    return makeError('INVALID_ARGUMENT', `path の形式が不正です: ${opts.path}`, {
+      hint: 'path は `Part3/Chapter2` のように、タグ名と番号を "/" でつなげて書きます（get_toc が返す toc[].path をそのまま渡せます）',
+      next_actions: [NEXT_ACTIONS.getToc(opts.law_name)],
+    });
+  }
+
+  // 2. 法令を引く
+  const resolved = await resolveLawId(opts.law_name);
+  if (!resolved) {
+    return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
+      hint: '略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください',
+      next_actions: [
+        NEXT_ACTIONS.resolveAbbreviation(opts.law_name),
+        NEXT_ACTIONS.searchLaw(opts.law_name),
+      ],
+    });
+  }
+  let lawData: EgovLawDataResponse;
+  try {
+    lawData = await fetchLawData(resolved.law_id, opts.at);
+  } catch (err) {
+    return egovHttpErrorToLawError(err);
+  }
+  const retrievedAt = new Date().toISOString();
+  const root = lawData.law_full_text;
+
+  // 3. 範囲のノードを決める
+  const located = locateRange(root, opts, selector);
+  if (isError(located)) return located;
+  const { node: rangeNode, info: rangeIdent } = located;
+
+  // 4. 範囲の中の条を集め、from_article より前を落とす
+  const allArticles = collectArticlesInRange(rangeNode);
+  let picked = allArticles;
+  let skipped = 0;
+  if (opts.from_article !== undefined) {
+    let fromNum: string;
+    try {
+      fromNum = toEgovArticleNum(opts.from_article);
+    } catch (err) {
+      return makeError('INVALID_ARTICLE_NUM', (err as Error).message, {
+        hint: 'from_article は "561"、"548の4"、"第五百六十一条" のいずれかの形式で指定してください',
+      });
+    }
+    const at = allArticles.findIndex((a) => a.attr?.Num === fromNum);
+    if (at < 0) {
+      const first = allArticles[0]?.attr?.Num;
+      return makeError(
+        'ARTICLE_NOT_FOUND',
+        `${formatArticleLabel(fromNum)}はこの範囲にありません（${rangeIdent.titles.join(' ')}、条 ${allArticles.length} 件）`,
+        {
+          hint: first
+            ? `この範囲は ${formatArticleLabel(first)} から始まります。from_article には前回の応答の next_from_article を渡してください`
+            : 'この範囲は条を持ちません',
+        }
+      );
+    }
+    picked = allArticles.slice(at);
+    skipped = at;
+  }
+
+  // 5. 条ごとに整形し、文字数の上限で打ち切る（条の途中では切らない）
+  const maxChars = Math.min(
+    Math.max(opts.max_chars ?? RANGE_LIMITS.defaultMaxChars, RANGE_LIMITS.minMaxChars),
+    RANGE_LIMITS.maxMaxChars
+  );
+  const sections: string[] = [];
+  const returned: LawNode[] = [];
+  let bodyChars = 0;
+  let truncated = false;
+  let nextFrom: string | undefined;
+  for (const article of picked) {
+    const section = formatRangeArticleSection(article);
+    // 1 条目だけは上限を超えても返す（空の応答を返さないため）
+    if (sections.length > 0 && bodyChars + section.length + 2 > maxChars) {
+      truncated = true;
+      nextFrom = article.attr?.Num;
+      break;
+    }
+    sections.push(section);
+    returned.push(article);
+    bodyChars += section.length + (sections.length > 1 ? 2 : 0);
+  }
+  // 条を持たない範囲（項だけで書かれた附則）は範囲の本文をそのまま出す
+  const paragraphOnly = allArticles.length === 0;
+  if (paragraphOnly) {
+    const body = formatArticleBody(rangeNode);
+    if (body) {
+      sections.push(body);
+      bodyChars = body.length;
+    }
+  }
+
+  const range: LawRangeInfo = {
+    ...rangeIdent,
+    article_count: allArticles.length,
+    returned_count: returned.length,
+    skipped_count: skipped,
+    truncated,
+    body_chars: bodyChars,
+    max_chars: maxChars,
+    note: '',
+  };
+  if (returned.length > 0) {
+    range.first_article = formatArticleLabel(returned[0].attr?.Num ?? '');
+    range.last_article = formatArticleLabel(returned[returned.length - 1].attr?.Num ?? '');
+  }
+  if (nextFrom) {
+    range.next_from_article = nextFrom;
+    range.next_actions = [
+      {
+        action: 'get_law_range',
+        reason: '同じ範囲の続きの条から取れます',
+        example: {
+          law_name: opts.law_name,
+          ...(range.path ? { path: range.path } : {}),
+          ...(range.suppl_index ? { suppl_index: range.suppl_index } : {}),
+          from_article: nextFrom,
+        },
+      },
+    ];
+  }
+  range.note = rangeNote(range, paragraphOnly);
+
+  const markdown = formatRangeMarkdown({
+    lawTitle: resolved.title,
+    lawId: resolved.law_id,
+    titles: range.titles,
+    sections,
+    rangeNote: range.note,
+    retrievedAt,
+    at: opts.at,
+  });
+  return {
+    markdown,
+    range,
+    articles: returned.map((a) => {
+      const num = a.attr?.Num ?? '';
+      const caption = getArticleCaption(a);
+      return { num, label: formatArticleLabel(num), ...(caption ? { caption } : {}) };
+    }),
+    meta: {
+      law_id: resolved.law_id,
+      title: resolved.title,
+      law_num: resolved.law_num,
+      retrieved_at: retrievedAt,
+      url: EGOV_API.publicLawUrl(resolved.law_id),
+      at: opts.at,
+    },
+  };
+}
+
+/** 範囲の見出し・パス・種類（`LawRangeInfo` のうち、条を数える前に決まる分） */
+type RangeIdent = Pick<LawRangeInfo, 'path' | 'suppl_index' | 'titles' | 'tag'>;
+
+/**
+ * 3 通りの指定から範囲のノードを決める。
+ *
+ * 上位を省いた指定（民法の `chapter: "2"` は 5 つの編にある）は複数に当たるので、
+ * そのときは候補のパスを next_actions に入れた INVALID_ARGUMENT を返す。
+ */
+function locateRange(
+  root: LawNode,
+  opts: { law_name: string; path?: string; suppl_index?: number },
+  selector: Partial<Record<RangeTag, string>>
+): LawServiceResult<{ node: LawNode; info: RangeIdent }> {
+  if (opts.suppl_index !== undefined) {
+    const index = opts.suppl_index;
+    const node = findSupplProvisionByIndex(root, index);
+    if (!node) {
+      const all = extractSupplProvisions(root);
+      return makeError('RANGE_NOT_FOUND', `附則(${index}) が見つかりません`, {
+        hint:
+          all.length > 0
+            ? `この法令の附則は ${all.length} 本です（suppl_index は 1〜${all.length}）`
+            : 'この法令に附則はありません',
+        next_actions: [NEXT_ACTIONS.getToc(opts.law_name)],
+      });
+    }
+    const summary = extractSupplProvisions(root)[index - 1];
+    return {
+      node,
+      info: {
+        suppl_index: index,
+        titles: [formatSupplProvisionLabel(summary)],
+        tag: 'SupplProvision',
+      },
+    };
+  }
+
+  const matches: RangeMatch[] =
+    opts.path !== undefined
+      ? [findRangeByPath(root, opts.path)].filter((m): m is RangeMatch => m !== null)
+      : findRanges(root, selector);
+
+  if (matches.length === 0) {
+    const asked =
+      opts.path !== undefined
+        ? `path: ${opts.path}`
+        : RANGE_TAGS.filter((t) => selector[t] !== undefined)
+            .map((t) => `${RANGE_ARG_NAMES[t]}: ${selector[t]}`)
+            .join(', ');
+    return makeError('RANGE_NOT_FOUND', `指定された範囲が見つかりません（${asked}）`, {
+      hint: 'get_toc で編・章・節の番号（toc[].num）とパス（toc[].path）を確認してください。章のみの法令に編を指定した場合も該当なしになります',
+      next_actions: [NEXT_ACTIONS.getToc(opts.law_name)],
+    });
+  }
+  if (matches.length > 1) {
+    return makeError(
+      'INVALID_ARGUMENT',
+      `指定された範囲が ${matches.length} か所あります。上位の階層も指定してください`,
+      {
+        hint: `該当するパス: ${matches.map((m) => m.path).join(', ')}（Chapter@Num は編ごとに振り直されます）`,
+        next_actions: matches.slice(0, 5).map((m) => ({
+          action: 'get_law_range',
+          reason: m.segments.map((s) => s.title).join(' '),
+          example: { law_name: opts.law_name, path: m.path },
+        })),
+      }
+    );
+  }
+  const m = matches[0];
+  return {
+    node: m.node,
+    info: {
+      path: m.path,
+      titles: m.segments.map((s) => s.title).filter(Boolean),
+      tag: m.segments[m.segments.length - 1].tag,
+    },
+  };
+}
+
+/** 何をどこまで返したかの 1 行 */
+function rangeNote(range: LawRangeInfo, paragraphOnly: boolean): string {
+  if (paragraphOnly) {
+    return `この範囲は条を持たず項だけで書かれているため、範囲の本文をそのまま返しました（${range.body_chars.toLocaleString('en-US')} 文字）`;
+  }
+  const parts: string[] = [];
+  const span =
+    range.first_article && range.last_article
+      ? range.first_article === range.last_article
+        ? range.first_article
+        : `${range.first_article}〜${range.last_article}`
+      : '';
+  parts.push(
+    `範囲の条 ${range.article_count} 件のうち ${range.returned_count} 件を返しました${span ? `（${span}）` : ''}`
+  );
+  if (range.skipped_count > 0) {
+    parts.push(`先頭の ${range.skipped_count} 件は from_article より前のため返していません`);
+  }
+  parts.push(
+    `本文 ${range.body_chars.toLocaleString('en-US')} 文字（上限 ${range.max_chars.toLocaleString('en-US')} 文字）`
+  );
+  if (range.next_from_article) {
+    parts.push(
+      `上限で打ち切りました。続きは from_article: "${range.next_from_article}" を付けて同じ範囲を呼び直してください`
+    );
+  }
+  return `${parts.join('。')}。`;
 }

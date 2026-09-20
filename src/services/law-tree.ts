@@ -134,11 +134,26 @@ export interface TocNode {
   title: string;
   /** Article の場合、ArticleCaption（カッコ付き見出し） */
   caption?: string;
+  /**
+   * 本則の構造階層（編・章・節・款・目）に付く範囲のパス。例: `Part3/Chapter2`。
+   * `get_law_range` の `path` にそのまま渡せる（#22、v0.14.0）。
+   * 条（Article）と附則の中のノードには付かない。
+   */
+  path?: string;
   /** 子ノード */
   children: TocNode[];
 }
 
-const STRUCTURAL_TAGS = ['Part', 'Chapter', 'Section', 'Subsection', 'Division'];
+/**
+ * 範囲の指定に使える構造階層のタグ（上位から下位の順）。
+ * `get_law_range` の引数名（`part` / `chapter` / …）とパスの綴り（`Part3/Chapter2`）の元。
+ */
+export const RANGE_TAGS = ['Part', 'Chapter', 'Section', 'Subsection', 'Division'] as const;
+
+/** 範囲の指定に使える構造階層のタグ */
+export type RangeTag = (typeof RANGE_TAGS)[number];
+
+const STRUCTURAL_TAGS: readonly string[] = RANGE_TAGS;
 
 /**
  * Law ツリーから本則の TOC（編・章・節・条の構造）を抽出。
@@ -150,11 +165,15 @@ const STRUCTURAL_TAGS = ['Part', 'Chapter', 'Section', 'Subsection', 'Division']
  */
 export function extractToc(root: LawNode): TocNode[] {
   const result: TocNode[] = [];
-  walkToc(root, result);
+  walkToc(root, result, '');
   return result;
 }
 
-function walkToc(node: LawNode, parent: TocNode[]): void {
+/**
+ * @param parentPath 親の構造ノードまでのパス（`Part3` 等）。`null` を渡すとパスを付けない
+ *   （附則の中の構造ノードは範囲の指定に使わないため）
+ */
+function walkToc(node: LawNode, parent: TocNode[], parentPath: string | null): void {
   if (node.tag === 'SupplProvision') {
     // 附則は extractSupplProvisions() が改正法ごとに別に返す（#24）
     return;
@@ -162,15 +181,20 @@ function walkToc(node: LawNode, parent: TocNode[]): void {
   if (STRUCTURAL_TAGS.includes(node.tag)) {
     const titleTag = `${node.tag}Title`;
     const titleNode = findChildByTag(node, titleTag);
+    const path =
+      parentPath === null
+        ? undefined
+        : `${parentPath ? `${parentPath}/` : ''}${node.tag}${node.attr?.Num ?? ''}`;
     const newNode: TocNode = {
       tag: node.tag,
       num: node.attr?.Num,
       title: titleNode ? extractText(titleNode) : '',
+      ...(path ? { path } : {}),
       children: [],
     };
     parent.push(newNode);
     for (const c of node.children ?? []) {
-      if (typeof c === 'object') walkToc(c, newNode.children);
+      if (typeof c === 'object') walkToc(c, newNode.children, path ?? null);
     }
   } else if (node.tag === 'Article') {
     parent.push({
@@ -182,7 +206,7 @@ function walkToc(node: LawNode, parent: TocNode[]): void {
     });
   } else {
     for (const c of node.children ?? []) {
-      if (typeof c === 'object') walkToc(c, parent);
+      if (typeof c === 'object') walkToc(c, parent, parentPath);
     }
   }
 }
@@ -270,7 +294,7 @@ export function extractSupplProvisions(root: LawNode): SupplProvisionToc[] {
   return nodes.map((sp, i) => {
     const children: TocNode[] = [];
     for (const c of sp.children ?? []) {
-      if (typeof c === 'object' && c.tag !== 'SupplProvisionLabel') walkToc(c, children);
+      if (typeof c === 'object' && c.tag !== 'SupplProvisionLabel') walkToc(c, children, null);
     }
     const labelNode = findChildByTag(sp, 'SupplProvisionLabel');
     const articleCount = countTocArticles(children);
@@ -321,4 +345,150 @@ export function getLawTitle(root: LawNode): string {
   if (!lawBody) return '';
   const titleNode = findChildByTag(lawBody, 'LawTitle');
   return titleNode ? extractText(titleNode) : '';
+}
+
+// ========================================
+// #22: 章・節単位の範囲取得（v0.14.0）
+// ========================================
+
+/** 範囲のパスの 1 区切り。`Chapter2` の内訳と表示用の見出し */
+export interface RangeSegment {
+  tag: RangeTag;
+  /** `attr.Num`。枝番号の章（第四章の二）は `4_2` */
+  num: string;
+  /** `ChapterTitle` 等から取った見出し（例: `第二章　契約`） */
+  title: string;
+}
+
+/** 範囲の探索の結果 1 件 */
+export interface RangeMatch {
+  /** 範囲の根になる構造ノード */
+  node: LawNode;
+  /** 法令の根からこのノードまでの構造階層 */
+  segments: RangeSegment[];
+  /** `Part3/Chapter2` の形にしたパス */
+  path: string;
+}
+
+/** 構造階層の列を `Part3/Chapter2` の形にする */
+export function formatRangePath(segments: ReadonlyArray<{ tag: string; num: string }>): string {
+  return segments.map((s) => `${s.tag}${s.num}`).join('/');
+}
+
+/**
+ * `Part3/Chapter2` を読んで、タグと番号の列にする。
+ *
+ * タグの綴りは大文字小文字を問わない（`part3/chapter2` も読む）。枝番号は `Chapter4_2`。
+ * 読めない区切りが 1 つでもあれば null を返す。
+ */
+export function parseRangePath(path: string): Array<{ tag: RangeTag; num: string }> | null {
+  const parts = path
+    .split('/')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return null;
+  const out: Array<{ tag: RangeTag; num: string }> = [];
+  for (const part of parts) {
+    const m = /^([A-Za-z]+)(\d+(?:_\d+)*)$/.exec(part);
+    if (!m) return null;
+    const tag = RANGE_TAGS.find((t) => t.toLowerCase() === m[1].toLowerCase());
+    if (!tag) return null;
+    out.push({ tag, num: m[2] });
+  }
+  return out;
+}
+
+/** 本則の構造ノードを、根からの階層付きで全て列挙する（出現順） */
+function collectStructuralNodes(node: LawNode, segments: RangeSegment[], out: RangeMatch[]): void {
+  for (const child of node.children ?? []) {
+    if (typeof child !== 'object') continue;
+    // 附則は構造階層に入れない（範囲の指定は suppl_index で行う）
+    if (child.tag === 'SupplProvision') continue;
+    if (RANGE_TAGS.includes(child.tag as RangeTag)) {
+      const titleNode = findChildByTag(child, `${child.tag}Title`);
+      const next: RangeSegment[] = [
+        ...segments,
+        {
+          tag: child.tag as RangeTag,
+          num: child.attr?.Num ?? '',
+          title: titleNode ? extractText(titleNode) : '',
+        },
+      ];
+      out.push({ node: child, segments: next, path: formatRangePath(next) });
+      collectStructuralNodes(child, next, out);
+    } else {
+      collectStructuralNodes(child, segments, out);
+    }
+  }
+}
+
+/**
+ * 編・章・節・款・目の番号で本則の範囲を探す。
+ *
+ * 指定したタグのうち最も下のものを範囲の根として返す。上位のタグは省略でき、省略した分は
+ * 絞り込みに使わない。`Chapter@Num` は編ごとに振り直されるため（民法には `Chapter1` が 5 つ、
+ * `Section1` が 19 ある）、上位を省いた指定は複数の範囲に当たることがある。
+ * 呼び出し側は戻り値の件数を見て、2 件以上なら利用者に上位の指定を求める。
+ *
+ * @param selector タグごとの番号（e-Gov API 形式。`4_2` のような枝番号も可）
+ */
+export function findRanges(
+  root: LawNode,
+  selector: Partial<Record<RangeTag, string>>
+): RangeMatch[] {
+  const specified = RANGE_TAGS.filter((t) => selector[t] !== undefined);
+  if (specified.length === 0) return [];
+  const deepest = specified[specified.length - 1];
+  const all: RangeMatch[] = [];
+  collectStructuralNodes(root, [], all);
+  return all.filter((m) => {
+    if (m.segments[m.segments.length - 1].tag !== deepest) return false;
+    return specified.every((tag) =>
+      m.segments.some((s) => s.tag === tag && s.num === selector[tag])
+    );
+  });
+}
+
+/**
+ * `Part3/Chapter2` のパスに完全に一致する範囲を探す（`get_toc` が返す `path` の受け口）。
+ */
+export function findRangeByPath(root: LawNode, path: string): RangeMatch | null {
+  const parsed = parseRangePath(path);
+  if (!parsed) return null;
+  const wanted = formatRangePath(parsed);
+  const all: RangeMatch[] = [];
+  collectStructuralNodes(root, [], all);
+  return all.find((m) => m.path === wanted) ?? null;
+}
+
+/**
+ * 範囲の中の条（Article）を出現順に集める。
+ *
+ * 途中に附則（SupplProvision）があれば入らない。ただし附則そのものを渡したときは、
+ * その附則の中の条を集める（`suppl_index` で附則 1 本を範囲にする場合）。
+ */
+export function collectArticlesInRange(node: LawNode): LawNode[] {
+  const out: LawNode[] = [];
+  const walk = (n: LawNode): void => {
+    for (const c of n.children ?? []) {
+      if (typeof c !== 'object') continue;
+      if (c.tag === 'Article') {
+        out.push(c);
+        continue;
+      }
+      if (c.tag === 'SupplProvision') continue;
+      walk(c);
+    }
+  };
+  walk(node);
+  return out;
+}
+
+/**
+ * 附則を並び順（1 始まり）で 1 本取り出す。番号は `extractSupplProvisions()` の `index` と同じ。
+ */
+export function findSupplProvisionByIndex(root: LawNode, index: number): LawNode | null {
+  const nodes: LawNode[] = [];
+  collectSupplProvisions(root, nodes);
+  return nodes[index - 1] ?? null;
 }

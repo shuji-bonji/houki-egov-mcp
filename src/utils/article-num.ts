@@ -180,3 +180,35 @@ export function formatItemLabel(num: string): string {
   const [head, ...branches] = s.replace(/の/g, '_').split('_');
   return `第${head}号${branches.map((b) => `の${b}`).join('')}`;
 }
+
+/**
+ * 編・章・節・款・目の番号を e-Gov API 形式（構造タグの `Num` 属性）に正規化する（#22、v0.14.0）。
+ *
+ * 3          → "3"
+ * "3"        → "3"
+ * "三"       → "3"
+ * "第三章"   → "3"
+ * "2の2"     → "2_2"
+ * "第二章の二" → "2_2"   （枝番号の章。所得税法・会社法にある）
+ *
+ * 「編」「章」「節」「款」「目」の文字と前置の「第」は落とす。読めなければ例外を投げる。
+ */
+export function toEgovStructureNum(input: number | string): string {
+  if (typeof input === 'number') {
+    if (!Number.isInteger(input) || input < 1) {
+      throw new Error(`編・章・節の番号は 1 以上の整数で指定してください: ${input}`);
+    }
+    return String(input);
+  }
+  const s = input
+    .trim()
+    .replace(/^第/, '')
+    .replace(/[編章節款目]/g, '');
+  const normalized = normalizeSegmentedNumber(s);
+  if (normalized === null) {
+    throw new Error(
+      `編・章・節の番号の形式が不正です（例: "3", "三", "第三章", "2の2", "第二章の二"）: ${input}`
+    );
+  }
+  return normalized;
+}

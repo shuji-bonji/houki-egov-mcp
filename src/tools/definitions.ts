@@ -5,7 +5,14 @@
  * すべての inputSchema に `additionalProperties: false` を付け、未知の引数は INVALID_ARGUMENT にする。
  */
 import type { Tool } from '@modelcontextprotocol/server';
-import { DOMAINS, LIMITS, OUTPUT_FORMATS, SCAN_BODY_SECONDS, SUPPL_MODES } from '../constants.js';
+import {
+  DOMAINS,
+  LIMITS,
+  OUTPUT_FORMATS,
+  RANGE_LIMITS,
+  SCAN_BODY_SECONDS,
+  SUPPL_MODES,
+} from '../constants.js';
 import { type ToolSpec, toMcpTool } from './tool-args.js';
 
 // ========================================
@@ -47,7 +54,7 @@ export const searchLawTool = {
 export const getLawTool = {
   name: 'get_law',
   description:
-    '日本の法令から条文を取得する。略称（消法・所法・労基法 等）対応。条/項/号レベル指定可能。',
+    '日本の法令から条文を取得する。略称（消法・所法・労基法 等）対応。条/項/号レベル指定可能。章・節をまとめて取るときは get_law_range を使う。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -90,7 +97,7 @@ export const getLawTool = {
 export const getTocTool = {
   name: 'get_toc',
   description:
-    '法令の目次（編・章・節・条の構造）のみを取得する。トークン節約用。本則は `toc`、附則は改正法ごとに `suppl_provisions` へ分けて返す（現行の規定と、改正法ごとの施行日・経過措置を混ぜないため）。既定では附則は見出しと条数だけを返し、`suppl: "full"` で附則の中の条まで返す。depth で階層を浅く打ち切れる（民法・会社法のような大規模法令の概観把握向け）。',
+    '法令の目次（編・章・節・条の構造）のみを取得する。トークン節約用。本則は `toc`、附則は改正法ごとに `suppl_provisions` へ分けて返す（現行の規定と、改正法ごとの施行日・経過措置を混ぜないため）。既定では附則は見出しと条数だけを返し、`suppl: "full"` で附則の中の条まで返す。depth で階層を浅く打ち切れる（民法・会社法のような大規模法令の概観把握向け）。応答の toc[].path（例 "Part3/Chapter2"）は get_law_range にそのまま渡せる。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -329,11 +336,80 @@ export const verifyCitationsTool = {
   },
 } as const satisfies ToolSpec;
 
+// ========================================
+// egov#22: 章・節単位の分割取得（v0.14.0）
+// ========================================
+export const getLawRangeTool = {
+  name: 'get_law_range',
+  description:
+    '法令の編・章・節・款・目のいずれか、または附則 1 本を範囲にして、その中の条を本文ごと取得する。1 条ずつ引く get_law と、目次だけを返す get_toc の間を埋める（民法・会社法・消費税法のように get_law で 1 条ずつ引くと手数がかかり、法令全体では長すぎる場合に使う）。範囲は条の単位で文字数の上限まで返し、入り切らなかったときは truncated と続きの条番号（next_from_article）を返す。返した範囲（パス・見出し・条の数・最初と最後の条）は応答の range に入る。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      law_name: {
+        type: 'string',
+        description: '法令名または略称。例: "民法", "会社法", "消法"',
+      },
+      part: {
+        type: ['string', 'number'],
+        description:
+          '編の番号。"3" / 3 / "三" / "第三編" / 枝番号は "2の2"。上位の階層は無いので単独で指定できる',
+      },
+      chapter: {
+        type: ['string', 'number'],
+        description:
+          '章の番号。章番号は編ごとに振り直されるため（民法には第一章が 5 つある）、編を持つ法令では part も指定する。指定が複数の範囲に当たるときは、候補のパスを付けた INVALID_ARGUMENT を返す',
+      },
+      section: {
+        type: ['string', 'number'],
+        description: '節の番号。上位の part / chapter も指定すると範囲が一つに決まる',
+      },
+      subsection: {
+        type: ['string', 'number'],
+        description: '款の番号',
+      },
+      division: {
+        type: ['string', 'number'],
+        description: '目の番号',
+      },
+      path: {
+        type: 'string',
+        description:
+          '範囲のパス。get_toc が返す toc[].path をそのまま渡せる。例: "Part3/Chapter2"（民法第三編第二章）、"Chapter2/Section1/Subsection2"。編・章・節の番号との同時指定はできない',
+      },
+      suppl_index: {
+        type: 'number',
+        description:
+          '附則の番号（1 始まり）。get_toc が返す suppl_provisions[].index と同じ番号で、search_fulltext が「附則(3) 1」と表示する番号でもある。条を持たず項だけで書かれた附則は、範囲の本文をそのまま返す',
+      },
+      from_article: {
+        type: 'string',
+        description:
+          '範囲の中のこの条から返す。前の応答が truncated だったときに next_from_article の値を渡して続きを取る。例: "561", "548の4", "第五百六十一条"',
+      },
+      max_chars: {
+        type: 'number',
+        description: `返す条本文の文字数の上限（デフォルト: ${RANGE_LIMITS.defaultMaxChars}、${RANGE_LIMITS.minMaxChars}〜${RANGE_LIMITS.maxMaxChars}）。条の途中では切らないため、1 条目だけは上限を超えても返す`,
+        minimum: RANGE_LIMITS.minMaxChars,
+        maximum: RANGE_LIMITS.maxMaxChars,
+        default: RANGE_LIMITS.defaultMaxChars,
+      },
+      at: {
+        type: 'string',
+        description: '時点指定。YYYY-MM-DD 形式（get_law と同じ）',
+      },
+    },
+    required: ['law_name'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
 /** tools/list に出すツールの一覧（定義の順） */
 export const tools: Tool[] = [
   searchLawTool,
   getLawTool,
   getTocTool,
+  getLawRangeTool,
   searchFulltextTool,
   resolveAbbreviationTool,
   getLawRevisionsTool,

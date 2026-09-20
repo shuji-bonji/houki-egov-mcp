@@ -37,6 +37,20 @@ export const LIMITS = {
  */
 export const SCAN_BODY_SECONDS = '5〜20 秒';
 
+/**
+ * `get_law_range` が 1 回で返す条本文の文字数の上限（#22、v0.14.0）。
+ *
+ * 2026-09-20 に e-Gov 法令API v2 の `law_full_text` で測った条本文のバイト数は、民法の章が
+ * 中央値 6.2 KB・最大 98.2 KB、会社法の章が中央値 17.9 KB・最大 207.6 KB、消費税法の章が
+ * 中央値 59.5 KB でした（UTF-8 の日本語は 1 文字 3 バイト）。既定の 30,000 文字（約 88 KB）は、
+ * 民法の章がほぼ 1 回で収まり、会社法・所得税法の大きい章は 2〜3 回に分かれる量です。
+ */
+export const RANGE_LIMITS = {
+  defaultMaxChars: 30000,
+  minMaxChars: 2000,
+  maxMaxChars: 120000,
+} as const;
+
 /** 出力フォーマットの列挙 */
 export const OUTPUT_FORMATS = ['markdown', 'json', 'toc'] as const;
 export type OutputFormat = (typeof OUTPUT_FORMATS)[number];

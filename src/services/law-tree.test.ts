@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LawNode } from './egov-client.js';
 import {
+  collectArticlesInRange,
   countTocArticles,
   countTocNodes,
   extractSupplProvisions,
@@ -12,10 +13,15 @@ import {
   findItem,
   findParagraph,
   findParagraphForItem,
+  findRangeByPath,
+  findRanges,
+  findSupplProvisionByIndex,
+  formatRangePath,
   getArticleCaption,
   getArticleTitle,
   getLawTitle,
   limitTocDepth,
+  parseRangePath,
 } from './law-tree.js';
 
 // 消費税法 第30条第1項 を簡略化したフィクスチャ
@@ -486,5 +492,199 @@ describe('countTocArticles', () => {
 
   it('条が無ければ 0', () => {
     expect(countTocArticles([])).toBe(0);
+  });
+});
+
+// ========================================
+// #22: 範囲の解決とパス（v0.14.0）
+// ========================================
+
+/** 編を 2 つ持ち、どちらの編にも第一章・第二章がある木（章番号は編ごとに振り直される） */
+const rangeFixture: LawNode = {
+  tag: 'Law',
+  children: [
+    {
+      tag: 'LawBody',
+      children: [
+        { tag: 'LawTitle', children: ['テスト法'] },
+        {
+          tag: 'MainProvision',
+          children: [
+            {
+              tag: 'Part',
+              attr: { Num: '1' },
+              children: [
+                { tag: 'PartTitle', children: ['第一編　総則'] },
+                {
+                  tag: 'Chapter',
+                  attr: { Num: '1' },
+                  children: [
+                    { tag: 'ChapterTitle', children: ['第一章　通則'] },
+                    { tag: 'Article', attr: { Num: '1' }, children: [] },
+                  ],
+                },
+                {
+                  tag: 'Chapter',
+                  attr: { Num: '2' },
+                  children: [
+                    { tag: 'ChapterTitle', children: ['第二章　人'] },
+                    { tag: 'Article', attr: { Num: '2' }, children: [] },
+                  ],
+                },
+              ],
+            },
+            {
+              tag: 'Part',
+              attr: { Num: '2' },
+              children: [
+                { tag: 'PartTitle', children: ['第二編　物権'] },
+                {
+                  tag: 'Chapter',
+                  attr: { Num: '2' },
+                  children: [
+                    { tag: 'ChapterTitle', children: ['第二章　占有権'] },
+                    {
+                      tag: 'Section',
+                      attr: { Num: '1_2' },
+                      children: [
+                        { tag: 'SectionTitle', children: ['第一節の二　占有権の取得'] },
+                        { tag: 'Article', attr: { Num: '3' }, children: [] },
+                        { tag: 'Article', attr: { Num: '4_2' }, children: [] },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          tag: 'SupplProvision',
+          attr: { Extract: 'true' },
+          children: [
+            { tag: 'SupplProvisionLabel', children: ['附　則'] },
+            { tag: 'Article', attr: { Num: '1' }, children: [] },
+          ],
+        },
+        {
+          tag: 'SupplProvision',
+          attr: { AmendLawNum: '平成二年六月二二日法律第三六号' },
+          children: [
+            { tag: 'SupplProvisionLabel', children: ['附　則'] },
+            { tag: 'Article', attr: { Num: '1' }, children: [] },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+describe('extractToc の path（#22）', () => {
+  it('本則の構造ノードに Part3/Chapter2 形式のパスを付ける', () => {
+    const toc = extractToc(rangeFixture);
+    expect(toc[0].path).toBe('Part1');
+    expect(toc[0].children[1].path).toBe('Part1/Chapter2');
+    expect(toc[1].children[0].children[0].path).toBe('Part2/Chapter2/Section1_2');
+  });
+
+  it('条にはパスを付けない', () => {
+    const toc = extractToc(rangeFixture);
+    const firstArticle = toc[0].children[0].children[0];
+    expect(firstArticle.tag).toBe('Article');
+    expect(firstArticle.path).toBeUndefined();
+  });
+
+  it('附則の中のノードにはパスを付けない（範囲の指定は suppl_index で行う）', () => {
+    const suppl = extractSupplProvisions(rangeFixture);
+    expect(suppl[0].children.every((c) => c.path === undefined)).toBe(true);
+  });
+});
+
+describe('範囲のパスの読み書き（#22）', () => {
+  it('タグと番号を "/" でつなぐ', () => {
+    expect(
+      formatRangePath([
+        { tag: 'Part', num: '3' },
+        { tag: 'Chapter', num: '2' },
+      ])
+    ).toBe('Part3/Chapter2');
+  });
+
+  it('枝番号と大文字小文字の違いを読む', () => {
+    expect(parseRangePath('Part3/Chapter4_2')).toEqual([
+      { tag: 'Part', num: '3' },
+      { tag: 'Chapter', num: '4_2' },
+    ]);
+    expect(parseRangePath('part3/chapter2')).toEqual([
+      { tag: 'Part', num: '3' },
+      { tag: 'Chapter', num: '2' },
+    ]);
+  });
+
+  it('知らないタグ・番号の無い区切り・空文字は読まない', () => {
+    expect(parseRangePath('Book3')).toBeNull();
+    expect(parseRangePath('Part')).toBeNull();
+    expect(parseRangePath('第三編/第二章')).toBeNull();
+    expect(parseRangePath('')).toBeNull();
+  });
+});
+
+describe('findRanges / findRangeByPath（#22）', () => {
+  it('編と章を指定すると章のノードを 1 つ返す', () => {
+    const found = findRanges(rangeFixture, { Part: '1', Chapter: '2' });
+    expect(found).toHaveLength(1);
+    expect(found[0].path).toBe('Part1/Chapter2');
+    expect(found[0].segments.map((s) => s.title)).toEqual(['第一編　総則', '第二章　人']);
+  });
+
+  it('章だけの指定は編ごとの章に当たる（民法の Chapter2 が複数あるのと同じ）', () => {
+    const found = findRanges(rangeFixture, { Chapter: '2' });
+    expect(found.map((m) => m.path)).toEqual(['Part1/Chapter2', 'Part2/Chapter2']);
+  });
+
+  it('最も下に指定したタグのノードを返す', () => {
+    const found = findRanges(rangeFixture, { Chapter: '2', Section: '1_2' });
+    expect(found).toHaveLength(1);
+    expect(found[0].node.tag).toBe('Section');
+    expect(found[0].path).toBe('Part2/Chapter2/Section1_2');
+  });
+
+  it('該当が無ければ空配列、指定が無ければ空配列', () => {
+    expect(findRanges(rangeFixture, { Part: '9' })).toEqual([]);
+    expect(findRanges(rangeFixture, {})).toEqual([]);
+  });
+
+  it('パスの完全一致で探す', () => {
+    expect(findRangeByPath(rangeFixture, 'Part2/Chapter2')?.node.tag).toBe('Chapter');
+    // 上位を省いたパスは一致しない
+    expect(findRangeByPath(rangeFixture, 'Chapter2')).toBeNull();
+    expect(findRangeByPath(rangeFixture, 'Part2/Chapter9')).toBeNull();
+  });
+});
+
+describe('collectArticlesInRange / findSupplProvisionByIndex（#22）', () => {
+  it('範囲の中の条を出現順に集める', () => {
+    const range = findRanges(rangeFixture, { Part: '2' })[0];
+    expect(collectArticlesInRange(range.node).map((a) => a.attr?.Num)).toEqual(['3', '4_2']);
+  });
+
+  it('本則の範囲に附則の条は入らない', () => {
+    const lawBody = findChildByTag(rangeFixture, 'LawBody');
+    if (!lawBody) throw new Error('LawBody が無い');
+    expect(collectArticlesInRange(lawBody).map((a) => a.attr?.Num)).toEqual(['1', '2', '3', '4_2']);
+  });
+
+  it('附則そのものを渡したときは、その附則の中の条を集める', () => {
+    const suppl = findSupplProvisionByIndex(rangeFixture, 1);
+    if (!suppl) throw new Error('附則が無い');
+    expect(collectArticlesInRange(suppl).map((a) => a.attr?.Num)).toEqual(['1']);
+  });
+
+  it('附則は並び順（1 始まり）で取り出し、範囲外は null', () => {
+    expect(findSupplProvisionByIndex(rangeFixture, 2)?.attr?.AmendLawNum).toBe(
+      '平成二年六月二二日法律第三六号'
+    );
+    expect(findSupplProvisionByIndex(rangeFixture, 0)).toBeNull();
+    expect(findSupplProvisionByIndex(rangeFixture, 3)).toBeNull();
   });
 });

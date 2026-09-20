@@ -6,6 +6,7 @@ import {
   kanjiToNumber,
   toEgovArticleNum,
   toEgovItemNum,
+  toEgovStructureNum,
 } from './article-num.js';
 
 describe('toEgovArticleNum', () => {
@@ -132,5 +133,28 @@ describe('kanjiToNumber (v0.7.0, #17)', () => {
     expect(kanjiToNumber('三〇')).toBeNull(); // 〇 は扱わない
     expect(kanjiToNumber('30')).toBeNull();
     expect(kanjiToNumber('')).toBeNull();
+  });
+});
+
+describe('toEgovStructureNum（#22）', () => {
+  it('編・章・節の番号を e-Gov 形式にする', () => {
+    expect(toEgovStructureNum(3)).toBe('3');
+    expect(toEgovStructureNum('3')).toBe('3');
+    expect(toEgovStructureNum('三')).toBe('3');
+    expect(toEgovStructureNum('第三編')).toBe('3');
+    expect(toEgovStructureNum('第十二章')).toBe('12');
+    expect(toEgovStructureNum('２')).toBe('2');
+  });
+
+  it('枝番号の章・節を読む', () => {
+    expect(toEgovStructureNum('2の2')).toBe('2_2');
+    expect(toEgovStructureNum('第二章の二')).toBe('2_2');
+    expect(toEgovStructureNum('第一節の二')).toBe('1_2');
+  });
+
+  it('読めない指定は例外にする', () => {
+    expect(() => toEgovStructureNum('総則')).toThrow();
+    expect(() => toEgovStructureNum(0)).toThrow();
+    expect(() => toEgovStructureNum('三〇')).toThrow();
   });
 });
