@@ -16,6 +16,7 @@ import {
   hasAnyArticle,
   type LawScope,
   type LawSearchHit,
+  type ShortTokenSearch,
   searchLawsInDb,
 } from '../services/law-search.js';
 import {
@@ -100,6 +101,8 @@ export async function handleGetToc(args: GetTocArgs) {
 /** search_fulltext の bulk DB 応答 */
 export interface SearchFulltextBulkResponse {
   keyword: string;
+  /** 2 文字語 (trigram 索引に載らない語) を本文からどう引いたか (#23)。含まれないときは付かない */
+  short_tokens?: ShortTokenSearch;
   /** 略称辞書で OR 展開した場合の元と先 */
   expanded_keywords?: { from: string; to: string };
   /** クエリ中の法令名を検索対象の法令として解釈した結果 (「民法 不法行為」の「民法」) */
@@ -159,7 +162,11 @@ export async function handleSearchFulltext(
       return searchFulltextFallback(args, keyword, limit, 'bulk DL 未実行のため');
     }
 
-    const result = searchLawsInDb(db, keyword, { limit, lawType: args.law_type });
+    const result = searchLawsInDb(db, keyword, {
+      limit,
+      lawType: args.law_type,
+      scanBody: args.scan_body === true,
+    });
     const freshness = summarizeFreshness(db);
 
     const response: SearchFulltextBulkResponse = {
@@ -177,6 +184,7 @@ export async function handleSearchFulltext(
         },
       },
     };
+    if (result.short_tokens) response.short_tokens = result.short_tokens;
     if (result.expanded) response.expanded_keywords = result.expanded;
     if (result.law_scope) response.law_scope = result.law_scope;
     return response;

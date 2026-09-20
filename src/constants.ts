@@ -28,6 +28,15 @@ export const LIMITS = {
   citationsMax: 50,
 } as const;
 
+/**
+ * `search_fulltext` の `scan_body: true` の所要時間。inputSchema の説明と
+ * `short_tokens.note` で同じ数字を使うための定数。
+ *
+ * 2026-09-20 に実データ（条 1,434,710 件・本文 587,926,852 バイト）で測った値は、
+ * 打ち切りが効く語で 5.4 秒、該当が少なく全表を走り切る語で 22 秒。
+ */
+export const SCAN_BODY_SECONDS = '5〜20 秒';
+
 /** 出力フォーマットの列挙 */
 export const OUTPUT_FORMATS = ['markdown', 'json', 'toc'] as const;
 export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
