@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.15.1] - 2026-09-21
+
+**patch リリース** — コードは変えていない。npm・公式 MCP Registry・GitHub の About に出る説明を揃えた（houki-hub#29 の続き）。
+
+### Changed
+
+- **npm の `description`**（`package.json`）: 日本語の 1 文のあとに英語の 1 文を付けた（日本語 → 英語の順）。npm レジストリは `description` を 255 文字で切り落とすため、0.15.0 では末尾の `houki-hub family.` が `houki-hu` で切れて表示されていた。今回は合計 177 文字
+- **`server.json` の `description`**（公式 MCP Registry に出る英文）: "Check Japanese statutes before you build: …" から呼びかけを外し、npm と同じ英語の 1 文 "Japanese statutes from e-Gov Law API v2 — laws and ordinances per article, with law number and URL."（99 文字。Registry の上限は 100 文字）にした
+- GitHub の About（description・topics）は、リポジトリの設定で同じ日本語 → 英語の文に直す（コードの変更ではないため、ここには記録だけ残す）
+
 ## [0.15.0] - 2026-09-20
 
 **minor リリース** — 添付ファイル（別表・様式・別記の図。jpg / pdf）と、法令本文を 1 つのファイルにした xml / json / html / rtf / docx を取る道を足した（Issue #19、houki-hub#20 の機能 1）。e-Gov 法令API v2 の `GET /attachment/{law_revision_id}` と `GET /law_file/{file_type}/{law_id}` に対応する。ツールは 11 本 → 14 本。

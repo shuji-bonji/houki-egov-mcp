@@ -1,7 +1,7 @@
 {
   "name": "@shuji-bonji/houki-egov-mcp",
-  "version": "0.15.0",
-  "description": "MCP server for Japanese statutes: laws, cabinet orders and ministerial ordinances from the e-Gov Law API v2, returned per article/paragraph/item with law number and URL. 日本の法令（憲法・法律・政令・省令・規則）を e-Gov 法令API v2 から、条・項・号の単位で、法令番号と URL を添えて返す MCP サーバー。houki-hub family.",
+  "version": "0.15.1",
+  "description": "日本の法令（憲法・法律・政令・省令・規則）を e-Gov 法令API v2 から、条・項・号の単位で、法令番号と URL を添えて返す MCP サーバー。Japanese statutes from e-Gov Law API v2 — laws and ordinances per article, with law number and URL.",
   "mcpName": "io.github.shuji-bonji/houki-egov-mcp",
   "keywords": [
     "mcp",
