@@ -12,6 +12,7 @@ import { closeDb, openDb } from '../db/index.js';
 import { NEXT_ACTIONS } from '../errors.js';
 import { findLawHierarchy, listLawHierarchyNames } from '../knowledge/law-hierarchy.js';
 import { type FreshnessInfo, summarizeFreshness } from '../services/freshness.js';
+import { getAttachment, getLawFile, listAttachments } from '../services/law-files.js';
 import {
   hasAnyArticle,
   type LawScope,
@@ -33,11 +34,14 @@ import {
 import type {
   ExplainLawTypeArgs,
   GetArticleReferencesArgs,
+  GetAttachmentArgs,
   GetLawArgs,
+  GetLawFileArgs,
   GetLawRangeArgs,
   GetLawRevisionsArgs,
   GetRelatedLawsArgs,
   GetTocArgs,
+  ListAttachmentsArgs,
   ResolveAbbreviationArgs,
   SearchFulltextArgs,
   SearchLawArgs,
@@ -47,11 +51,14 @@ import { logger } from '../utils/logger.js';
 import {
   explainLawTypeTool,
   getArticleReferencesTool,
+  getAttachmentTool,
+  getLawFileTool,
   getLawRangeTool,
   getLawRevisionsTool,
   getLawTool,
   getRelatedLawsTool,
   getTocTool,
+  listAttachmentsTool,
   resolveAbbreviationTool,
   searchFulltextTool,
   searchLawTool,
@@ -346,6 +353,32 @@ export async function handleVerifyCitations(args: VerifyCitationsArgs) {
 }
 
 /**
+ * list_attachments — 添付ファイルの一覧（egov#19）
+ */
+export async function handleListAttachments(args: ListAttachmentsArgs) {
+  return listAttachments({ law_name: args.law_name, at: args.at });
+}
+
+/**
+ * get_attachment — 添付ファイル 1 件または zip（egov#19）
+ */
+export async function handleGetAttachment(args: GetAttachmentArgs) {
+  return getAttachment({ law_name: args.law_name, src: args.src, at: args.at, save: args.save });
+}
+
+/**
+ * get_law_file — 法令本文ファイル（egov#19）
+ */
+export async function handleGetLawFile(args: GetLawFileArgs) {
+  return getLawFile({
+    law_name: args.law_name,
+    file_type: args.file_type,
+    at: args.at,
+    save: args.save,
+  });
+}
+
+/**
  * tools/call の受け口の表。
  *
  * 引数は unknown で受け、`bindTool()` が inputSchema で検証してから型付きで各 handler に渡す
@@ -363,4 +396,7 @@ export const toolHandlers: Record<string, ToolHandler> = {
   get_related_laws: bindTool(getRelatedLawsTool, handleGetRelatedLaws),
   get_article_references: bindTool(getArticleReferencesTool, handleGetArticleReferences),
   verify_citations: bindTool(verifyCitationsTool, handleVerifyCitations),
+  list_attachments: bindTool(listAttachmentsTool, handleListAttachments),
+  get_attachment: bindTool(getAttachmentTool, handleGetAttachment),
+  get_law_file: bindTool(getLawFileTool, handleGetLawFile),
 };

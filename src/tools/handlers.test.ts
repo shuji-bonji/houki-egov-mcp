@@ -126,16 +126,19 @@ describe('handleExplainLawType', () => {
 });
 
 describe('toolHandlers map', () => {
-  it('registers all expected tools (v0.2.0 — explain_business_law_restriction を削除、v0.10.0 で 2 つ、v0.11.0 と v0.14.0 で 1 つずつ追加)', () => {
+  it('registers all expected tools (v0.2.0 — explain_business_law_restriction を削除、v0.10.0 で 2 つ、v0.11.0 と v0.14.0 で 1 つずつ、v0.15.0 で 3 つ追加)', () => {
     expect(Object.keys(toolHandlers).sort()).toEqual(
       [
         'explain_law_type',
         'get_article_references',
+        'get_attachment',
         'get_related_laws',
         'get_law',
+        'get_law_file',
         'get_law_range',
         'get_law_revisions',
         'get_toc',
+        'list_attachments',
         'resolve_abbreviation',
         'search_fulltext',
         'search_law',

@@ -92,7 +92,7 @@ import {
  * v0.3.0 で family 共通の `SOURCE_*` 語彙に切替。
  * `EGOV_*` 系は LawErrorCode に残置しているが、本関数からはもう発行しない。
  */
-function egovHttpErrorToLawError(err: unknown): LawServiceError {
+export function egovHttpErrorToLawError(err: unknown): LawServiceError {
   if (err instanceof EgovHttpError) {
     if (err.status === 429) {
       return makeError('SOURCE_RATE_LIMITED', 'e-Gov API がレート制限を返しました（429）', {
@@ -156,7 +156,7 @@ function egovHttpErrorToLawError(err: unknown): LawServiceError {
  *
  * `houki-egov` 管轄、または辞書に未登録の場合は `null` を返し、通常フローに進める。
  */
-function checkAbbreviationScope(name: string): LawServiceError | null {
+export function checkAbbreviationScope(name: string): LawServiceError | null {
   const trimmed = name.trim();
   if (!trimmed) return null;
   const abbr = resolveAbbreviation(trimmed);
@@ -233,7 +233,7 @@ export async function resolveLawId(
 /**
  * 法令本文を取得（キャッシュ経由）
  */
-async function fetchLawData(lawId: string, at?: string): Promise<EgovLawDataResponse> {
+export async function fetchLawData(lawId: string, at?: string): Promise<EgovLawDataResponse> {
   const cacheKey = `${lawId}:${at ?? 'current'}`;
   const cached = lawDataCache.get(cacheKey);
   if (cached) return cached;

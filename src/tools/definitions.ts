@@ -7,6 +7,7 @@
 import type { Tool } from '@modelcontextprotocol/server';
 import {
   DOMAINS,
+  LAW_FILE_TYPES,
   LIMITS,
   OUTPUT_FORMATS,
   RANGE_LIMITS,
@@ -404,6 +405,97 @@ export const getLawRangeTool = {
   },
 } as const satisfies ToolSpec;
 
+// ========================================
+// egov#19: 添付ファイルと法令本文ファイル（v0.15.0）
+// ========================================
+export const listAttachmentsTool = {
+  name: 'list_attachments',
+  description:
+    '法令に付いている添付ファイル（別表・様式・別記の図。jpg / pdf）の一覧を返す。各ファイルに、認証なしで開ける取得 URL と、法令の中の置き場所（「別表第一（第一条関係）」「附録第十一号様式」のような見出しと関係条文、条の中なら条番号）を付ける。get_law の条文には図の中身が入らないので、別表・様式の図が要るときにこのツールで URL を取る。pdf は pdf-reader-mcp の read_url に url を渡して読める。ファイルの中身は返さない。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      law_name: {
+        type: 'string',
+        description: '法令名または略称。例: "戸籍法施行規則", "国旗及び国歌に関する法律"',
+      },
+      at: {
+        type: 'string',
+        description:
+          '時点指定。YYYY-MM-DD 形式（get_law と同じ）。添付ファイルは法令履歴ごとに付くので、時点を変えると一覧も変わる',
+      },
+    },
+    required: ['law_name'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
+export const getAttachmentTool = {
+  name: 'get_attachment',
+  description:
+    '添付ファイル 1 件（src 指定）か、その法令履歴の添付ファイルをまとめた zip（src 省略）を取る。既定では e-Gov からファイルを取らず、URL とメタ情報（ファイル名・種別・置き場所）だけを返す。save: true のときだけファイルを取得してサーバー側の保存先（既定は XDG_CACHE_HOME か ~/.cache の下の houki-egov-mcp/files/。環境変数 HOUKI_EGOV_FILES_DIR で変更）に書き、絶対パスを返す。保存先はツールの引数では指定できない。base64 の中身は返さない。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      law_name: {
+        type: 'string',
+        description: '法令名または略称',
+      },
+      src: {
+        type: 'string',
+        description:
+          'list_attachments が返す attachments[].src（例 "./pict/H11HO127-001.jpg"）。ファイル名だけ（"H11HO127-001.jpg"）でも引ける。省略すると添付ファイル全部の zip',
+      },
+      at: {
+        type: 'string',
+        description: '時点指定。YYYY-MM-DD 形式。list_attachments と同じ時点を渡す',
+      },
+      save: {
+        type: 'boolean',
+        description:
+          'true でファイルを取得してディスクに保存し、応答の saved.path に絶対パスを返す（デフォルト: false）。false のときは URL だけを返し、e-Gov からファイルは取らない',
+        default: false,
+      },
+    },
+    required: ['law_name'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
+export const getLawFileTool = {
+  name: 'get_law_file',
+  description:
+    '法令本文を 1 つのファイル（xml / json / html / rtf / docx）で取る道を返す。既定では認証なしで開ける URL だけを返し、save: true のときだけファイルを取得してサーバー側の保存先（既定は XDG_CACHE_HOME か ~/.cache の下の houki-egov-mcp/files/。環境変数 HOUKI_EGOV_FILES_DIR で変更）に書いて絶対パスを返す。条文を読むだけなら get_law / get_law_range のほうが小さく済む（民法の xml は 1.6 MB、docx は 182 KB）。人が Word や ブラウザーで開く版が要るとき（docx / html / rtf）と、法令 XML をそのまま処理したいとき（xml / json）のためのツール。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      law_name: {
+        type: 'string',
+        description: '法令名または略称。例: "民法", "消法"',
+      },
+      file_type: {
+        type: 'string',
+        enum: [...LAW_FILE_TYPES],
+        description:
+          'ファイル種別。xml = 法令標準 XML、json = e-Gov の JSON、html、rtf、docx（Word）',
+      },
+      at: {
+        type: 'string',
+        description:
+          '時点指定。YYYY-MM-DD 形式。その時点以前で最新の履歴の本文ファイルになる（e-Gov の asof）',
+      },
+      save: {
+        type: 'boolean',
+        description:
+          'true でファイルを取得してディスクに保存し、応答の saved.path に絶対パスを返す（デフォルト: false）。保存すると e-Gov のファイル名から法令履歴 ID（saved.law_revision_id）が分かる',
+        default: false,
+      },
+    },
+    required: ['law_name', 'file_type'],
+    additionalProperties: false,
+  },
+} as const satisfies ToolSpec;
+
 /** tools/list に出すツールの一覧（定義の順） */
 export const tools: Tool[] = [
   searchLawTool,
@@ -417,4 +509,7 @@ export const tools: Tool[] = [
   getRelatedLawsTool,
   getArticleReferencesTool,
   verifyCitationsTool,
+  listAttachmentsTool,
+  getAttachmentTool,
+  getLawFileTool,
 ].map(toMcpTool);

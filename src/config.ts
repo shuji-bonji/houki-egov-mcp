@@ -30,6 +30,21 @@ export const EGOV_API = {
   lawData: (lawId: string) => `https://laws.e-gov.go.jp/api/2/law_data/${lawId}`,
   /** Fetch law revisions list */
   lawRevisions: (lawId: string) => `https://laws.e-gov.go.jp/api/2/law_revisions/${lawId}`,
+  /**
+   * 添付ファイル取得（#19、v0.15.0）。`src` を省くと、その履歴の添付ファイルをまとめた zip を返す。
+   * 認証は要らず、URL をそのまま開くと本文に付いた jpg / pdf が取れる
+   */
+  attachment: (lawRevisionId: string, src?: string) => {
+    const url = new URL(`https://laws.e-gov.go.jp/api/2/attachment/${lawRevisionId}`);
+    if (src) url.searchParams.set('src', src);
+    return url.toString();
+  },
+  /** 法令本文ファイル取得（#19、v0.15.0）。xml / json / html / rtf / docx のいずれか。asof は時点 */
+  lawFile: (fileType: string, lawIdOrRevisionId: string, asof?: string) => {
+    const url = new URL(`https://laws.e-gov.go.jp/api/2/law_file/${fileType}/${lawIdOrRevisionId}`);
+    if (asof) url.searchParams.set('asof', asof);
+    return url.toString();
+  },
   /** Public-facing URL（出典として返却） */
   publicLawUrl: (lawId: string) => `https://laws.e-gov.go.jp/law/${lawId}`,
 } as const;
@@ -77,6 +92,21 @@ export const CACHE_CONFIG = {
   xml: { maxSize: 20, name: 'XMLCache' },
   parsed: { maxSize: 50, name: 'ParseCache' },
   searchResults: { maxSize: 30, name: 'SearchCache' },
+} as const;
+
+/**
+ * `get_attachment` / `get_law_file` が `save: true` のときにファイルを書く場所（#19、v0.15.0）
+ *
+ * - HOUKI_EGOV_FILES_DIR: 保存先ディレクトリの上書き
+ * - 既定は `${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/files/`（bulk DB と同じ親）
+ *
+ * 保存先はサーバー側で決め、ツールの引数では受け取らない（LLM が渡したパスに書かないため）。
+ */
+export const FILES_CONFIG = {
+  /** 保存先を上書きする環境変数の名前。値は file-store.ts が呼ぶたびに読む */
+  dirEnv: 'HOUKI_EGOV_FILES_DIR',
+  /** 1 ファイルの上限（バイト）。e-Gov の添付は数十 KB〜数 MB、法令ファイルは民法の xml で 1.6 MB */
+  maxBytes: 50 * 1024 * 1024,
 } as const;
 
 /**

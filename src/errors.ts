@@ -37,6 +37,8 @@ export type LawErrorCode =
   | 'RANGE_NOT_FOUND'
   /** 略称辞書に該当なし */
   | 'ABBREVIATION_NOT_FOUND'
+  /** 指定された添付ファイル（src）がその法令の履歴に無い。e-Gov の code 404003（#19、v0.15.0） */
+  | 'ATTACHMENT_NOT_FOUND'
   // --- 外部ソース由来 (family 共通) ---
   /** 外部 API (e-Gov) がエラー応答 */
   | 'SOURCE_API_ERROR'

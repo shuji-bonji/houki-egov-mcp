@@ -15,6 +15,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.15.0] - 2026-09-20
+
+**minor リリース** — 添付ファイル（別表・様式・別記の図。jpg / pdf）と、法令本文を 1 つのファイルにした xml / json / html / rtf / docx を取る道を足した（Issue #19、houki-hub#20 の機能 1）。e-Gov 法令API v2 の `GET /attachment/{law_revision_id}` と `GET /law_file/{file_type}/{law_id}` に対応する。ツールは 11 本 → 14 本。
+
+### Added
+
+- **`list_attachments`**: 法令の添付ファイルの一覧。e-Gov の `attached_files_info`（`src` / `updated`）と本文の `Fig` 要素を `src` で突き合わせ、各ファイルに認証なしで開ける `url` と `location`（別表・様式の見出しと関係条文、条の中なら条番号、附則の中なら改正法番号）を付ける。`zip_url`（全部まとめた zip）と、pdf があれば pdf-reader-mcp の `read_url` を勧める `next_actions` も返す。添付が無い法令は `count: 0` の成功応答
+- **`get_attachment`**: 添付ファイル 1 件（`src`。ファイル名だけでも引ける）か zip（`src` 省略）。既定では e-Gov からファイルを取らず URL とメタ情報だけを返し、`save: true` のときだけ取得して保存する
+- **`get_law_file`**: 法令本文ファイル。`file_type` は `xml` / `json` / `html` / `rtf` / `docx`、`at` は e-Gov の `asof`。既定は URL だけ、`save: true` で保存。保存すると e-Gov の `Content-Disposition` のファイル名（`<law_revision_id>.docx`）から `saved.law_revision_id` が分かる
+- **保存先**: `${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/files/<law_revision_id>/<ファイル名>`（環境変数 `HOUKI_EGOV_FILES_DIR` で変更）。ツールの引数にはパスを置かない。ファイル名は `basename` に丸め、1 ファイル 50 MB を超えたら保存せず `INVALID_ARGUMENT`
+- **エラーコード `ATTACHMENT_NOT_FOUND`**: 指定の `src` がその履歴の添付に無い、添付が 1 件も無い、e-Gov の `/attachment` が code `404003` を返した、の 3 つ。houki-research-skill の `docs/ERROR-CODES.md` への追記は別途
+- `egov-client`: `getAttachment()` / `getLawFile()`（バイナリ。retry の条件は JSON と同じ）、`EgovHttpError.body` と `egovErrorCode()`（4xx の応答本文の `code` を読む）、`attached_files_info` の型
+- `law-tree`: `extractFigures()`（`Fig` 要素の `src` と置き場所）
+
+### 決めたこと（設計）
+
+- **中身は返さない**。base64 で応答に入れる形は採らず、URL と（求められたときだけ）保存先のパスを返す。URL は認証なしで開ける直リンクで、pdf-reader-mcp の `read_url` にそのまま渡せる
+- **保存先は LLM に指定させない**。kannkyo/e-gov-law-mcp は OS の一時ディレクトリに書いてパスを返す。本 MCP はキャッシュディレクトリの下に法令履歴 ID ごとに置き、上書きは環境変数だけにした
+- **`get_law` には足さない**。応答の形が条文と違うので、#22 と同じく別ツールにした
+- 設計メモ: houki-hub `docs/notes/2026-09-20-design-egov-19-attachments.md`
+
+### 実測（2026-09-20）
+
+| 法令 | 添付 | 内訳 |
+|---|---|---|
+| 国旗及び国歌に関する法律 | 2 件 | jpg 2（別記第一・別記第二） |
+| 戸籍法施行規則 | 42 件 | jpg 7・pdf 35（別表 7・様式 22・書式 13）。`attached_files_info` と本文の `Fig` は 42 件とも一致 |
+| 民法 | 0 件 | — |
+
+e-Gov は jpg を `image/jpeg`、pdf と法令ファイルを `application/octet-stream` で返す。法令ファイルの `Content-Disposition` は `<law_revision_id>.<拡張子>`。民法は xml 1.6 MB・docx 182 KB、消費税法の rtf は 1.8 MB。添付が無い履歴の `/attachment` は 400 または 404 で `{"code":"404003"}`。
+
 ## [0.14.1] - 2026-09-20
 
 **patch リリース** — 削除された条をまとめた範囲表記（e-Gov の `Article@Num` = `"534:535"`）の表示を直し、その条で打ち切られたときに続きが取れるようにした。v0.14.0 の `get_law_range` を実データで使って見つかった。

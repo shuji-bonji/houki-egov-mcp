@@ -61,7 +61,32 @@ export interface EgovLawDataResponse {
   law_info: LawListItem['law_info'];
   revision_info: LawListItem['revision_info'];
   law_full_text: LawNode;
-  attached_files_info?: unknown;
+  attached_files_info?: AttachedFilesInfo;
+}
+
+/** /law_data の attached_files_info.attached_files[] の 1 件（#19） */
+export interface AttachedFile {
+  law_revision_id: string;
+  /** 法令 XML の Fig 要素の src 属性。例 "./pict/H11HO127-001.jpg" */
+  src: string;
+  /** 正誤等による更新日時 */
+  updated?: string;
+}
+
+/** /law_data の attached_files_info（#19）。image_data は include_attached_file_content=true のときだけ入る */
+export interface AttachedFilesInfo {
+  image_data?: string;
+  attached_files?: AttachedFile[];
+}
+
+/** /attachment と /law_file が返すバイナリ（#19） */
+export interface EgovBinaryResponse {
+  url: string;
+  bytes: Uint8Array;
+  /** 応答の Content-Type。e-Gov は jpg を image/jpeg、pdf と法令ファイルを application/octet-stream で返す */
+  contentType: string | null;
+  /** 応答の Content-Disposition の filename。法令ファイルは "<law_revision_id>.docx" の形で入る */
+  fileName: string | null;
 }
 
 /** /law_revisions/{lawId} の単一改正履歴エントリ */
@@ -121,10 +146,23 @@ export class EgovHttpError extends Error {
   constructor(
     public readonly status: number,
     public readonly url: string,
-    message: string
+    message: string,
+    /** 4xx の応答本文（e-Gov は JSON の {code, message} を返す）。retry した 5xx と JSON 経路では入らない */
+    public readonly body?: string
   ) {
     super(message);
     this.name = 'EgovHttpError';
+  }
+
+  /** e-Gov のエラー応答の code（例 "404003" = 添付ファイルが無い、"400039" = law_revision_id が誤り）。読めなければ null */
+  egovErrorCode(): string | null {
+    if (!this.body) return null;
+    try {
+      const parsed = JSON.parse(this.body) as { code?: unknown };
+      return typeof parsed.code === 'string' ? parsed.code : null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -159,6 +197,98 @@ export async function getLawData(
 export async function getLawRevisions(lawId: string): Promise<EgovLawRevisionsResponse> {
   const url = new URL(EGOV_API.lawRevisions(lawId));
   return limit(() => fetchJsonWithRetry<EgovLawRevisionsResponse>(url.toString()));
+}
+
+/**
+ * /attachment/{law_revision_id}?src= を叩く（添付ファイル 1 件。src 省略で zip）
+ */
+export async function getAttachment(
+  lawRevisionId: string,
+  src?: string
+): Promise<EgovBinaryResponse> {
+  const url = EGOV_API.attachment(lawRevisionId, src);
+  return limit(() => fetchBinaryWithRetry(url));
+}
+
+/**
+ * /law_file/{file_type}/{law_id_or_revision_id}?asof= を叩く（法令本文ファイル）
+ */
+export async function getLawFile(
+  fileType: string,
+  lawIdOrRevisionId: string,
+  asof?: string
+): Promise<EgovBinaryResponse> {
+  const url = EGOV_API.lawFile(fileType, lawIdOrRevisionId, asof);
+  return limit(() => fetchBinaryWithRetry(url));
+}
+
+/**
+ * リトライ付き fetch（バイナリ）。retry の条件は fetchJsonWithRetry と同じ。
+ *
+ * e-Gov は「添付ファイルが無い」を 400 または 404 の JSON（code 404003）で返すので、
+ * 4xx の本文は EgovHttpError.body に残し、呼び出し側が code を読めるようにする。
+ */
+async function fetchBinaryWithRetry(url: string, attempt = 0): Promise<EgovBinaryResponse> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), HTTP_CONFIG.timeout);
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': HTTP_CONFIG.userAgent },
+      signal: controller.signal,
+    });
+
+    if (res.ok) {
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      return {
+        url,
+        bytes,
+        contentType: res.headers.get('content-type'),
+        fileName: parseContentDispositionFileName(res.headers.get('content-disposition')),
+      };
+    }
+
+    const retryable = res.status === 429 || res.status >= 500;
+    if (retryable && attempt < HTTP_CONFIG.maxRetries) {
+      const delay = 500 * 2 ** attempt;
+      logger.warn('egov-client', `${res.status} ${url} — retry in ${delay}ms`);
+      await sleep(delay);
+      return fetchBinaryWithRetry(url, attempt + 1);
+    }
+
+    let body: string | undefined;
+    try {
+      body = await res.text();
+    } catch {
+      body = undefined;
+    }
+    throw new EgovHttpError(res.status, url, `e-Gov API returned ${res.status}`, body);
+  } catch (err) {
+    if (err instanceof EgovHttpError) throw err;
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new EgovHttpError(0, url, `e-Gov API request timeout: ${url}`);
+    }
+    if (attempt < HTTP_CONFIG.maxRetries) {
+      const delay = 500 * 2 ** attempt;
+      logger.warn('egov-client', `network error: ${(err as Error).message} — retry in ${delay}ms`);
+      await sleep(delay);
+      return fetchBinaryWithRetry(url, attempt + 1);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/** Content-Disposition の filename="…" を取り出す。無ければ null */
+export function parseContentDispositionFileName(header: string | null): string | null {
+  if (!header) return null;
+  const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return m[1];
+  }
 }
 
 /**
