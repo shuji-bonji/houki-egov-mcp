@@ -369,6 +369,62 @@ describe('formatTableStructLines', () => {
 });
 
 describe('formatTocMarkdown', () => {
+  it('附則を渡すと本則と附則の 2 節に分ける（#24）', () => {
+    const md = formatTocMarkdown({
+      ...base,
+      lawTitle: '消費税法',
+      toc: [{ tag: 'Article', num: '1', title: '第一条', caption: '（趣旨）', children: [] }],
+      supplProvisions: [
+        {
+          index: 1,
+          label: '附則',
+          extract: true,
+          article_count: 2,
+          paragraph_only: false,
+          children: [],
+        },
+        {
+          index: 2,
+          label: '附則',
+          amend_law_num: '平成元年六月二八日法律第三九号',
+          amend_law_title: '消費税法の一部を改正する法律',
+          extract: true,
+          article_count: 1,
+          paragraph_only: false,
+          children: [{ tag: 'Article', num: '1', title: '第一条', children: [] }],
+        },
+        {
+          index: 3,
+          label: '附則',
+          amend_law_num: '平成二年六月二二日法律第三六号',
+          extract: false,
+          article_count: 0,
+          paragraph_only: true,
+          children: [],
+        },
+      ],
+    });
+    expect(md).toContain('## 本則');
+    expect(md).toContain('## 附則（3 本・条 3 件）');
+    expect(md).toContain('- 附則(1) 制定時（抄） — 条 2 件');
+    expect(md).toContain(
+      '- 附則(2) 平成元年六月二八日法律第三九号（抄） — 条 1 件 ／ 改正法: 消費税法の一部を改正する法律'
+    );
+    expect(md).toContain('- 附則(3) 平成二年六月二二日法律第三六号 — 項のみ');
+    // 附則の中の条は 1 段下げる
+    expect(md).toContain('  - 第1条');
+  });
+
+  it('附則が無ければ見出しを付けない（#24）', () => {
+    const md = formatTocMarkdown({
+      ...base,
+      lawTitle: '消費税法',
+      toc: [{ tag: 'Article', num: '1', title: '第一条', children: [] }],
+    });
+    expect(md).not.toContain('## 本則');
+    expect(md).not.toContain('## 附則');
+  });
+
   it('lists branch-numbered articles as 第N条のM', () => {
     const md = formatTocMarkdown({
       ...base,

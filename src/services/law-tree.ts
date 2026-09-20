@@ -141,8 +141,12 @@ export interface TocNode {
 const STRUCTURAL_TAGS = ['Part', 'Chapter', 'Section', 'Subsection', 'Division'];
 
 /**
- * Law ツリーから TOC（編・章・節・条の構造）を抽出。
+ * Law ツリーから本則の TOC（編・章・節・条の構造）を抽出。
  * 本文（Paragraph 等）は含めない。
+ *
+ * 附則（SupplProvision）の条は含めない。附則は改正法ごとに積み上がるため、
+ * 本則と同じ並びに混ぜると現行の規定がどれか分からなくなる（#24、v0.13.0）。
+ * 附則は `extractSupplProvisions()` で別に取る。
  */
 export function extractToc(root: LawNode): TocNode[] {
   const result: TocNode[] = [];
@@ -151,6 +155,10 @@ export function extractToc(root: LawNode): TocNode[] {
 }
 
 function walkToc(node: LawNode, parent: TocNode[]): void {
+  if (node.tag === 'SupplProvision') {
+    // 附則は extractSupplProvisions() が改正法ごとに別に返す（#24）
+    return;
+  }
   if (STRUCTURAL_TAGS.includes(node.tag)) {
     const titleTag = `${node.tag}Title`;
     const titleNode = findChildByTag(node, titleTag);
@@ -219,6 +227,85 @@ export function countTocNodes(toc: TocNode[]): number {
   const walk = (nodes: TocNode[]) => {
     for (const node of nodes) {
       n++;
+      walk(node.children);
+    }
+  };
+  walk(toc);
+  return n;
+}
+
+/** 附則 1 本の目次（#24、v0.13.0） */
+export interface SupplProvisionToc {
+  /**
+   * LawBody の中での並び順（1 始まり）。ローカル DB の条番号
+   * `Suppl{index}_{条番号}`（`search_fulltext` が `附則(3) 1` と表示する番号）と同じ。
+   */
+  index: number;
+  /** 見出しの文字列（`SupplProvisionLabel`。全角空白を詰めた「附則」） */
+  label: string;
+  /** どの改正法の附則か（`SupplProvision@AmendLawNum`）。制定時の附則には無い */
+  amend_law_num?: string;
+  /** 改正法の題名。改正履歴と照合できたときだけ付く（`with_amend_titles`） */
+  amend_law_title?: string;
+  /** 抄（`SupplProvision@Extract="true"`）。改正法の附則のうち一部だけを載せた形 */
+  extract: boolean;
+  /** この附則が持つ条の数 */
+  article_count: number;
+  /** 条を持たず項だけで書かれた附則か（「1 この法律は…から施行する」の形） */
+  paragraph_only: boolean;
+  /** 附則の中の目次。見出しだけを返すときは空配列 */
+  children: TocNode[];
+}
+
+/**
+ * Law ツリーから附則（SupplProvision）を出現順に取り出す。
+ *
+ * 附則は LawBody の直下に改正法ごとに 1 つずつ並ぶ（所得税法は 352 本）。
+ * 中身は条（Article）か、条を立てずに項（Paragraph）だけを置く形のどちらかで、
+ * どの改正法の附則かは属性 `AmendLawNum` に入っている。
+ */
+export function extractSupplProvisions(root: LawNode): SupplProvisionToc[] {
+  const nodes: LawNode[] = [];
+  collectSupplProvisions(root, nodes);
+  return nodes.map((sp, i) => {
+    const children: TocNode[] = [];
+    for (const c of sp.children ?? []) {
+      if (typeof c === 'object' && c.tag !== 'SupplProvisionLabel') walkToc(c, children);
+    }
+    const labelNode = findChildByTag(sp, 'SupplProvisionLabel');
+    const articleCount = countTocArticles(children);
+    return {
+      index: i + 1,
+      label: (labelNode ? extractText(labelNode) : '').replace(/[\s\u3000]/g, '') || '附則',
+      ...(sp.attr?.AmendLawNum ? { amend_law_num: sp.attr.AmendLawNum } : {}),
+      extract: sp.attr?.Extract === 'true',
+      article_count: articleCount,
+      paragraph_only: articleCount === 0 && findChildByTag(sp, 'Paragraph') !== null,
+      children,
+    };
+  });
+}
+
+function collectSupplProvisions(node: LawNode, out: LawNode[]): void {
+  for (const c of node.children ?? []) {
+    if (typeof c !== 'object') continue;
+    if (c.tag === 'SupplProvision') {
+      // 附則の入れ子は無いので中には降りない
+      out.push(c);
+      continue;
+    }
+    collectSupplProvisions(c, out);
+  }
+}
+
+/**
+ * TOC ツリーの中の条（Article）の数を数える。
+ */
+export function countTocArticles(toc: TocNode[]): number {
+  let n = 0;
+  const walk = (nodes: TocNode[]) => {
+    for (const node of nodes) {
+      if (node.tag === 'Article') n++;
       walk(node.children);
     }
   };

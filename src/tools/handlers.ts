@@ -25,6 +25,7 @@ import {
   getLawRevisionsByName,
   getLawToc,
   getRelatedLaws,
+  type SupplMode,
   searchLawByKeyword,
   verifyCitations,
 } from '../services/law-service.js';
@@ -89,12 +90,16 @@ export async function handleGetLaw(args: GetLawArgs) {
  *
  * depth を指定すると上位 N 階層までで打ち切る。
  * 民法・会社法のような大規模法令で TOC が肥大化する場合のサイズ対策。
+ *
+ * 本則と附則は別に返す（#24）。suppl で附則をどこまで返すかを選ぶ。
  */
 export async function handleGetToc(args: GetTocArgs) {
   return getLawToc({
     law_name: args.law_name,
     at: args.at,
     depth: args.depth,
+    suppl: args.suppl as SupplMode | undefined,
+    with_amend_titles: args.with_amend_titles,
   });
 }
 
