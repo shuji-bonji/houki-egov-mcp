@@ -102,6 +102,15 @@ export function toEgovArticleNum(input: string): string {
   let s = input.trim();
   // 「第」前置・「条」（位置を問わず）を取り除く
   s = s.replace(/^第/, '').replace(/条/g, '');
+  // 削除された条をまとめた範囲表記（e-Gov の `Article@Num` = "534:535"）はそのまま照合に使う。
+  // `get_law_range` の `next_from_article` がこの形を返すので、`from_article` で受け取れるようにする
+  if (s.includes(':')) {
+    const sides = s.split(':').map((part) => normalizeSegmentedNumber(part.trim()));
+    if (sides.length === 2 && sides.every((v) => v !== null)) return sides.join(':');
+    throw new Error(
+      `条番号の形式が不正です（削除された条の範囲表記は "534:535" の形で指定してください）: ${input}`
+    );
+  }
   const normalized = normalizeSegmentedNumber(s);
   if (normalized === null) {
     throw new Error(
@@ -128,6 +137,12 @@ export function fromEgovArticleNum(num: string): string {
  * "70_6"    → "第70条の6"
  * "42_12_4" → "第42条の12の4"
  *
+ * 削除された条をまとめた範囲表記（e-Gov の `Article@Num` = "534:535"）は、e-Gov の
+ * `ArticleTitle` と同じ言い方にする。隣り合う 2 条なら「及び」、3 条以上なら「から…まで」。
+ *
+ * "534:535" → "第534条及び第535条"       （民法。ArticleTitle は「第五百三十四条及び第五百三十五条」）
+ * "170:174" → "第170条から第174条まで"   （民法。ArticleTitle は「第百七十条から第百七十四条まで」）
+ *
  * 利用者入力の "70の6" を渡しても同じ結果になる。
  * `fromEgovArticleNum()` の戻り値を `第${…}条` に埋め込むと「第70の6条」になるため、
  * 見出し・目次・エラーメッセージの条表示はこの関数で組み立てる。
@@ -135,8 +150,27 @@ export function fromEgovArticleNum(num: string): string {
 export function formatArticleLabel(num: string): string {
   const s = num.trim();
   if (!s) return '';
+  if (s.includes(':')) return formatDeletedArticleRangeLabel(s);
   const [head, ...branches] = s.replace(/の/g, '_').split('_');
   return `第${head}条${branches.map((b) => `の${b}`).join('')}`;
+}
+
+/**
+ * 削除された条をまとめた範囲表記のラベル。
+ *
+ * 2026-09-20 に民法・商法・刑法・所得税法・法人税法・消費税法・労働基準法・会社法の
+ * 28 件で確かめたところ、`ArticleTitle` は番号の差が 1 のとき「及び」、2 以上のとき
+ * 「から…まで」で、例外はありませんでした（本文はすべて「削除」）。
+ * 差を数えられない表記（枝番号を含む範囲）は「から…まで」にします。
+ */
+function formatDeletedArticleRangeLabel(num: string): string {
+  const [from, to] = num.split(':');
+  const label = (n: string) => {
+    const [head, ...branches] = n.replace(/の/g, '_').split('_');
+    return `第${head}条${branches.map((b) => `の${b}`).join('')}`;
+  };
+  const adjacent = /^\d+$/.test(from) && /^\d+$/.test(to) && Number(to) - Number(from) === 1;
+  return adjacent ? `${label(from)}及び${label(to)}` : `${label(from)}から${label(to)}まで`;
 }
 
 /**
