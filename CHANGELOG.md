@@ -16,6 +16,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 大規模法令の応答サイズ対策の本格化（章/節単位での部分取得 API）
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.11.0] - 2026-09-20
+
+**minor リリース** — LLM が組み立てた引用リストを 1 回でまとめて実在確認する `verify_citations` を足した（Issue #18）。出典は houki-hub#20 の機能 3 / houki-hub#21。設計メモは houki-hub `docs/notes/2026-09-20-design-egov-18-verify-citations.md`。
+
+### Added
+
+- **`verify_citations`**: 引用の配列（法令名または `law_id`、条番号、任意で項・号）を受け取り、件ごとに `found` / `not_found` / `ambiguous` を返す。リストに存在しない引用が混ざっていてもツール全体は `isError` にしない
+  - `found` の件には `law`（`law_id` / 正式名称 / 法令番号 / 法令種別 / URL）、`article`（e-Gov 形式の条番号・表示ラベル・条見出し）、実在を確かめた `paragraph` / `item` が付く。条文本文は返さない
+  - `not_found` の `code` は、法令名・`law_id` が引けないとき `LAW_NOT_FOUND`、条・項・号が無いとき `ARTICLE_NOT_FOUND`、条番号・号番号の書き方が不正なとき `INVALID_ARTICLE_NUM`、通達など houki-egov の管轄外のとき `OUT_OF_SCOPE`
+  - `ambiguous` は 2 種類。法令名が e-Gov の法令名と完全一致せず部分一致の候補があるとき（`candidates[]` に最大 5 件、`code` は付かない）と、項が複数ある条で項を書かずに号だけを指定したとき（`code: "INVALID_ARGUMENT"`）
+  - 略称は `houki-abbreviations` で正式名称に直してから照合する。辞書に `law_id` があればそれを使い（`resolved_by: "abbreviation"`）、無ければ e-Gov の法令名の完全一致で引く（`resolved_by: "exact_title"`）。`law_id` を直接書いた件は `resolved_by: "law_id"`
+  - `summary` に `total` / `found` / `not_found` / `ambiguous` と、全件が found のときだけ true になる `all_found` を付ける
+  - 1 回に渡せるのは 50 件まで（`inputSchema` の `maxItems`）。同じ法令が並んでも e-Gov への問い合わせは 1 回にまとめる
+  - e-Gov に問い合わせられなかったとき（タイムアウト・接続不能・5xx）は、件ごとの判定を返さずツール全体を `SOURCE_*` エラーにする。「聞けなかった」を「存在しない」と書かないため
+
+### 実測（2026-09-20）
+
+- 12 件（実在 6 件・不存在 4 件・曖昧 2 件）を混ぜたリストで `summary` が `{ total: 12, found: 6, not_found: 4, ambiguous: 2, all_found: false }`
+- 「所法 第9条第1項第1号」は `resolved_by: "abbreviation"`、条見出し「（非課税所得）」付きで `found`
+- 「電子帳簿保存法 第7条」は辞書に `law_id` が無いため `resolved_by: "exact_title"` で `410AC0000000025`、条見出し「（電子取引の取引情報に係る電磁的記録の保存）」
+- 「所得税法 第57条の2第99項」は条まで実在するので `article` を残したまま `ARTICLE_NOT_FOUND`（「項は 5 個」）
+- 「所得税法 第57条の2第1号」（項を書かない）は `ambiguous` + `INVALID_ARGUMENT`、「所得税法施行」は `ambiguous` + 候補 2 件（所得税法施行令・所得税法施行規則）
+- 「消基通」は `OUT_OF_SCOPE` で `next_actions` が `houki-nta` を指す
+
 ## [0.10.1] - 2026-09-19
 
 **patch リリース** — `get_article_references` で、条を書かない項・号の参照が直前の参照の条を引き継ぐようにした。

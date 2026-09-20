@@ -7,9 +7,11 @@
  */
 
 import { listBySourceMcpHint, resolveAbbreviation } from '@shuji-bonji/houki-abbreviations';
-import { CACHE_CONFIG, EGOV_API } from '../config.js';
+import { CACHE_CONFIG, EGOV_API, HTTP_CONFIG } from '../config.js';
+import { LIMITS } from '../constants.js';
 import {
   isLawServiceError as _isLawServiceError,
+  type LawErrorCode,
   type LawServiceError,
   makeError,
   NEXT_ACTIONS,
@@ -24,6 +26,7 @@ import {
   toEgovItemNum,
 } from '../utils/article-num.js';
 import { LRUCache } from '../utils/cache.js';
+import { createLimit } from '../utils/concurrency.js';
 import { logger } from '../utils/logger.js';
 import {
   EgovHttpError,
@@ -49,6 +52,7 @@ import {
   findItem,
   findParagraph,
   findParagraphForItem,
+  getArticleCaption,
   type LawNode,
   limitTocDepth,
   type TocNode,
@@ -1113,4 +1117,438 @@ function numberToKanji(n: number): string {
   }
   if (rest > 0) out += digits[rest];
   return out;
+}
+
+// ========================================
+// egov#18: 引用の実在確認（v0.11.0）
+// ========================================
+
+/** `verify_citations` に渡す引用 1 件 */
+export interface CitationInput {
+  /** 法令名または略称。law_id と両方省略はできない */
+  law_name?: string;
+  /** e-Gov の law_id。law_name より優先する */
+  law_id?: string;
+  /** 条番号。"30" / "30の2" / "第三十条の二" */
+  article: string;
+  /** 項番号 */
+  paragraph?: number;
+  /** 号番号 */
+  item?: number | string;
+  /** 引用元の表示文字列。判定には使わず、そのまま返す */
+  label?: string;
+}
+
+/** 実在が確かめられた法令 */
+export interface VerifiedLaw {
+  law_id: string;
+  title: string;
+  law_num?: string;
+  law_type?: string;
+  url: string;
+}
+
+/** 引用 1 件の判定 */
+export interface CitationVerdict {
+  /** 入力の citations 配列での位置（0 始まり） */
+  index: number;
+  /** 入力をそのまま返す */
+  input: CitationInput;
+  /**
+   * - `found`: 指定された粒度（条、項、号）まで法令に実在した
+   * - `not_found`: 法令名・条・項・号のいずれかが無かった
+   * - `ambiguous`: どの法令・どの項を指すか決まらなかった
+   */
+  status: 'found' | 'not_found' | 'ambiguous';
+  /** 法令が 1 つに決まったときの法令。候補が複数の ambiguous では入らない */
+  law?: VerifiedLaw;
+  /** 法令をどう引いたか */
+  resolved_by?: 'law_id' | 'abbreviation' | 'exact_title';
+  /** 条が実在したときの条番号（e-Gov 形式）・表示ラベル・条見出し */
+  article?: { num: string; label: string; caption?: string };
+  /** 項が実在したときの項番号 */
+  paragraph?: number;
+  /** 号が実在したときの号番号（e-Gov 形式） */
+  item?: string;
+  /** family のエラー語彙で言えるときだけ付く。候補が複数の ambiguous には付かない */
+  code?: LawErrorCode;
+  /** found 以外のときの理由（1 文） */
+  reason?: string;
+  /** 法令名が完全一致しなかったときの部分一致の候補 */
+  candidates?: VerifiedLaw[];
+  /** found 以外のときだけ付く */
+  next_actions?: NextAction[];
+}
+
+/** `verify_citations` の応答 */
+export interface VerifyCitationsResponse {
+  summary: {
+    total: number;
+    found: number;
+    not_found: number;
+    ambiguous: number;
+    /** 全件が found なら true */
+    all_found: boolean;
+  };
+  results: CitationVerdict[];
+  method: 'per_citation_lookup';
+  note: string;
+  meta: { retrieved_at: string; at?: string };
+}
+
+/** ambiguous のときに返す候補の上限 */
+const MAX_CITATION_CANDIDATES = 5;
+
+const VERIFY_CITATIONS_NOTE =
+  '各件について「その条（指定があれば項・号）が e-Gov の法令にあるか」だけを確かめています。引用した条文が主張を支えるかどうかは判定していません。法令名が e-Gov の法令名と完全一致しなかった件は、部分一致の候補があれば ambiguous にし、候補を candidates に入れます（最大 5 件、code は付きません）。e-Gov に問い合わせられなかったときは件ごとの判定を返さず、ツール全体のエラー（SOURCE_*）を返します';
+
+/** 法令の解決結果 */
+type LawResolution =
+  | { kind: 'ok'; law: VerifiedLaw; resolved_by: 'law_id' | 'abbreviation' | 'exact_title' }
+  | { kind: 'not_found'; code: LawErrorCode; reason: string; next_actions: NextAction[] }
+  | { kind: 'ambiguous'; reason: string; candidates: VerifiedLaw[]; next_actions: NextAction[] };
+
+function toVerifiedLaw(hit: {
+  law_id: string;
+  title: string;
+  law_num?: string;
+  law_type?: string;
+}): VerifiedLaw {
+  return {
+    law_id: hit.law_id,
+    title: hit.title,
+    ...(hit.law_num ? { law_num: hit.law_num } : {}),
+    ...(hit.law_type ? { law_type: hit.law_type } : {}),
+    url: EGOV_API.publicLawUrl(hit.law_id),
+  };
+}
+
+/** e-Gov が law_id を知らない（400 / 404）ときだけ true。それ以外の通信エラーは呼び出し側に投げる */
+function isLawIdRejected(err: unknown): boolean {
+  return err instanceof EgovHttpError && (err.status === 400 || err.status === 404);
+}
+
+/**
+ * verify_citations ツールの本実装（egov#18）
+ *
+ * 1. 引数の形だけを先に確かめる（citations が空、law_name と law_id のどちらも無い件）
+ * 2. 引用ごとに法令 → 条 → 項 → 号 の順で実在を確かめる
+ * 3. 件ごとの判定を results に入れ、ツール全体は isError にしない
+ *
+ * e-Gov に問い合わせられなかったとき（タイムアウト・接続不能・5xx）だけ、件ごとの判定ではなく
+ * ツール全体のエラーを返す。「聞けなかった」を「存在しない」と書かないため。
+ */
+export async function verifyCitations(opts: {
+  citations: CitationInput[];
+  at?: string;
+}): Promise<LawServiceResult<VerifyCitationsResponse>> {
+  const citations = opts.citations ?? [];
+  if (citations.length === 0) {
+    return makeError('INVALID_ARGUMENT', 'citations が空です', {
+      hint: '確かめたい引用を 1 件以上入れてください（law_name か law_id と、article）',
+    });
+  }
+
+  const missing = citations
+    .map((c, i) => (!c.law_name?.trim() && !c.law_id?.trim() ? i : -1))
+    .filter((i) => i >= 0);
+  if (missing.length > 0) {
+    return makeError(
+      'INVALID_ARGUMENT',
+      `law_name と law_id のどちらも無い引用があります: ${missing.map((i) => `citations[${i}]`).join(', ')}`,
+      {
+        hint: '引用ごとに law_name（略称も可）か law_id のどちらかを入れてください',
+        detail: {
+          issues: missing.map((i) => ({
+            path: `citations.${i}`,
+            message: 'law_name か law_id のどちらかが要ります',
+          })),
+        },
+      }
+    );
+  }
+
+  const limit = createLimit(HTTP_CONFIG.concurrency);
+  /** 同じ法令を同時に二度引かないための、この呼び出しの中だけの表 */
+  const inFlight = new Map<string, Promise<LawResolution>>();
+  let transportError: LawServiceError | null = null;
+
+  const settled = await Promise.all(
+    citations.map((citation, index) =>
+      limit(async (): Promise<CitationVerdict | null> => {
+        try {
+          return await verifyOneCitation(citation, index, opts.at, inFlight);
+        } catch (err) {
+          transportError ??= egovHttpErrorToLawError(err);
+          return null;
+        }
+      })
+    )
+  );
+  if (transportError) return transportError;
+
+  const results = settled.filter((v): v is CitationVerdict => v !== null);
+  const counts = { found: 0, not_found: 0, ambiguous: 0 };
+  for (const v of results) counts[v.status]++;
+
+  return {
+    summary: {
+      total: results.length,
+      ...counts,
+      all_found: counts.found === results.length,
+    },
+    results,
+    method: 'per_citation_lookup',
+    note: VERIFY_CITATIONS_NOTE,
+    meta: {
+      retrieved_at: new Date().toISOString(),
+      ...(opts.at ? { at: opts.at } : {}),
+    },
+  };
+}
+
+/** 引用 1 件を確かめる。通信エラー（400 / 404 以外）は呼び出し側に投げる */
+async function verifyOneCitation(
+  citation: CitationInput,
+  index: number,
+  at: string | undefined,
+  inFlight: Map<string, Promise<LawResolution>>
+): Promise<CitationVerdict> {
+  const base = { index, input: citation };
+
+  const lawId = citation.law_id?.trim();
+  const lawName = (citation.law_name ?? '').trim();
+  const key = lawId ? `id:${lawId}` : `name:${lawName}`;
+  let pending = inFlight.get(key);
+  if (!pending) {
+    pending = resolveLawForVerify({ law_id: lawId, law_name: lawName }, at);
+    inFlight.set(key, pending);
+  }
+  const resolution = await pending;
+
+  if (resolution.kind === 'not_found') {
+    return {
+      ...base,
+      status: 'not_found',
+      code: resolution.code,
+      reason: resolution.reason,
+      next_actions: resolution.next_actions,
+    };
+  }
+  if (resolution.kind === 'ambiguous') {
+    return {
+      ...base,
+      status: 'ambiguous',
+      reason: resolution.reason,
+      candidates: resolution.candidates,
+      next_actions: resolution.next_actions,
+    };
+  }
+
+  const law = resolution.law;
+  const found: CitationVerdict = {
+    ...base,
+    status: 'found',
+    law,
+    resolved_by: resolution.resolved_by,
+  };
+  const nameForActions = lawName || law.title;
+
+  // 条番号の書き方
+  let articleNum: string;
+  try {
+    articleNum = toEgovArticleNum(citation.article);
+  } catch (err) {
+    return {
+      ...found,
+      status: 'not_found',
+      code: 'INVALID_ARTICLE_NUM',
+      reason: (err as Error).message,
+      next_actions: [NEXT_ACTIONS.getToc(nameForActions)],
+    };
+  }
+
+  // 本文を取る
+  let lawData: EgovLawDataResponse;
+  try {
+    lawData = await fetchLawData(law.law_id, at);
+  } catch (err) {
+    if (!isLawIdRejected(err)) throw err;
+    return {
+      ...base,
+      status: 'not_found',
+      code: 'LAW_NOT_FOUND',
+      reason: `e-Gov に law_id ${law.law_id} の法令がありません`,
+      next_actions: [NEXT_ACTIONS.searchLaw(nameForActions)],
+    };
+  }
+
+  const article = findArticle(lawData.law_full_text, articleNum);
+  if (!article) {
+    return {
+      ...found,
+      status: 'not_found',
+      code: 'ARTICLE_NOT_FOUND',
+      reason: `${law.title}に${formatArticleLabel(articleNum)}はありません`,
+      next_actions: [NEXT_ACTIONS.getToc(nameForActions)],
+    };
+  }
+  const caption = getArticleCaption(article);
+  found.article = {
+    num: articleNum,
+    label: formatArticleLabel(articleNum),
+    ...(caption ? { caption } : {}),
+  };
+  const articleLabel = `${law.title}${formatArticleLabel(articleNum)}`;
+
+  // 項
+  let paragraph: LawNode | null = null;
+  if (citation.paragraph !== undefined) {
+    paragraph = findParagraph(article, citation.paragraph);
+    if (!paragraph) {
+      const count = findChildrenByTag(article, 'Paragraph').length;
+      return {
+        ...found,
+        status: 'not_found',
+        code: 'ARTICLE_NOT_FOUND',
+        reason: `${articleLabel}に第${citation.paragraph}項はありません（項は ${count} 個）`,
+        next_actions: [NEXT_ACTIONS.getToc(nameForActions)],
+      };
+    }
+    found.paragraph = citation.paragraph;
+  } else if (citation.item !== undefined) {
+    // 項が 1 つだけの条は「第14条の3第1号」のように第1項を書かない。項が複数ある条で
+    // 号だけを書いた引用は、どの項の号か決まらないので ambiguous にする
+    paragraph = findParagraphForItem(article);
+    if (!paragraph) {
+      const count = findChildrenByTag(article, 'Paragraph').length;
+      return {
+        ...found,
+        status: 'ambiguous',
+        code: 'INVALID_ARGUMENT',
+        reason: `${articleLabel}は項が ${count} 個あるため、号だけではどの項の号か決まりません`,
+        next_actions: [
+          {
+            action: 'add_paragraph',
+            reason: '同じ引用に paragraph（項番号）を足すと判定できます',
+            example: { law_name: nameForActions, article: citation.article, paragraph: 1 },
+          },
+        ],
+      };
+    }
+    found.paragraph = Number(paragraph.attr?.Num ?? '1');
+  }
+
+  // 号
+  if (citation.item !== undefined && paragraph) {
+    let itemNum: string;
+    try {
+      itemNum = toEgovItemNum(citation.item);
+    } catch (err) {
+      return {
+        ...found,
+        status: 'not_found',
+        code: 'INVALID_ARTICLE_NUM',
+        reason: (err as Error).message,
+        next_actions: [NEXT_ACTIONS.getToc(nameForActions)],
+      };
+    }
+    if (!findItem(paragraph, itemNum)) {
+      const count = findChildrenByTag(paragraph, 'Item').length;
+      return {
+        ...found,
+        status: 'not_found',
+        code: 'ARTICLE_NOT_FOUND',
+        reason: `${articleLabel}第${found.paragraph}項に${formatItemLabel(itemNum)}はありません（号は ${count} 個）`,
+        next_actions: [NEXT_ACTIONS.getToc(nameForActions)],
+      };
+    }
+    found.item = itemNum;
+  }
+
+  return found;
+}
+
+/**
+ * 引用 1 件の法令を決める。
+ *
+ * 1. law_id があれば e-Gov から本文を取り、正式名称・法令番号を添える
+ * 2. 略称辞書が houki-egov 以外の管轄と判定したら OUT_OF_SCOPE
+ * 3. 略称辞書に law_id があればそれを使う
+ * 4. 無ければ e-Gov の部分一致検索を引き、法令名が完全一致した 1 件だけを採る。
+ *    完全一致が無く候補があれば ambiguous、候補も無ければ LAW_NOT_FOUND
+ */
+async function resolveLawForVerify(
+  ref: { law_id?: string; law_name: string },
+  at?: string
+): Promise<LawResolution> {
+  if (ref.law_id) {
+    try {
+      const data = await fetchLawData(ref.law_id, at);
+      return {
+        kind: 'ok',
+        resolved_by: 'law_id',
+        law: toVerifiedLaw({
+          law_id: data.law_info?.law_id ?? ref.law_id,
+          title: data.revision_info?.law_title ?? ref.law_id,
+          law_num: data.law_info?.law_num,
+          law_type: data.law_info?.law_type,
+        }),
+      };
+    } catch (err) {
+      if (!isLawIdRejected(err)) throw err;
+      return {
+        kind: 'not_found',
+        code: 'LAW_NOT_FOUND',
+        reason: `e-Gov に law_id ${ref.law_id} の法令がありません`,
+        next_actions: [NEXT_ACTIONS.searchLaw(ref.law_name || ref.law_id)],
+      };
+    }
+  }
+
+  const name = ref.law_name;
+  const scopeError = checkAbbreviationScope(name);
+  if (scopeError) {
+    return {
+      kind: 'not_found',
+      code: scopeError.code,
+      reason: scopeError.error,
+      next_actions: scopeError.next_actions ?? [],
+    };
+  }
+
+  const abbr = resolveAbbreviation(name);
+  if (abbr?.law_id) {
+    return {
+      kind: 'ok',
+      resolved_by: 'abbreviation',
+      law: toVerifiedLaw({
+        law_id: abbr.law_id,
+        title: abbr.formal,
+        law_num: abbr.law_num,
+        law_type: abbr.law_type,
+      }),
+    };
+  }
+
+  const title = abbr?.formal ?? name;
+  const res = await searchLaws({ law_title: title, limit: LIMITS.searchMax });
+  const exact = res.laws.find((l) => l.revision_info.law_title === title);
+  if (exact) {
+    return { kind: 'ok', resolved_by: 'exact_title', law: toVerifiedLaw(toExactHit(exact)) };
+  }
+  if (res.laws.length === 0) {
+    return {
+      kind: 'not_found',
+      code: 'LAW_NOT_FOUND',
+      reason: `e-Gov に「${title}」という法令名はありません`,
+      next_actions: [NEXT_ACTIONS.resolveAbbreviation(name), NEXT_ACTIONS.searchLaw(name)],
+    };
+  }
+  return {
+    kind: 'ambiguous',
+    reason: `「${title}」に完全一致する法令名が e-Gov に無く、部分一致が ${res.laws.length} 件ありました`,
+    candidates: res.laws.slice(0, MAX_CITATION_CANDIDATES).map((l) => toVerifiedLaw(toExactHit(l))),
+    next_actions: [NEXT_ACTIONS.searchLaw(name)],
+  };
 }

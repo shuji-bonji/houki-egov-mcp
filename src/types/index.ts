@@ -15,6 +15,7 @@ import type {
   resolveAbbreviationTool,
   searchFulltextTool,
   searchLawTool,
+  verifyCitationsTool,
 } from '../tools/definitions.js';
 import type { ArgsOf } from '../tools/tool-args.js';
 
@@ -52,3 +53,6 @@ export type GetRelatedLawsArgs = ArgsOf<typeof getRelatedLawsTool.inputSchema>;
 
 /** 条文内の参照抽出引数（v0.10.0） */
 export type GetArticleReferencesArgs = ArgsOf<typeof getArticleReferencesTool.inputSchema>;
+
+/** 引用の実在確認引数（v0.11.0） */
+export type VerifyCitationsArgs = ArgsOf<typeof verifyCitationsTool.inputSchema>;
