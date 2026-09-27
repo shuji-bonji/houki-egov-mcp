@@ -1,0 +1,5 @@
+{
+  "domain": "EGOV",
+  "dirPrefix": "",
+  "tests": ["src/**/*.test.ts"]
+}
