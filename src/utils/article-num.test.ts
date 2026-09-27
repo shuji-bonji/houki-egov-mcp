@@ -10,21 +10,21 @@ import {
 } from './article-num.js';
 
 describe('toEgovArticleNum', () => {
-  it('handles bare arabic numbers', () => {
+  it('SPEC-EGOV-GET-LAW-004 handles bare arabic numbers', () => {
     expect(toEgovArticleNum('30')).toBe('30');
   });
 
-  it('handles の suffix', () => {
+  it('SPEC-EGOV-GET-LAW-004 handles の suffix', () => {
     expect(toEgovArticleNum('30の2')).toBe('30_2');
     expect(toEgovArticleNum('57の4')).toBe('57_4');
   });
 
-  it('strips 第 / 条', () => {
+  it('SPEC-EGOV-GET-LAW-004 strips 第 / 条', () => {
     expect(toEgovArticleNum('第30条')).toBe('30');
     expect(toEgovArticleNum('第30条の2')).toBe('30_2');
   });
 
-  it('accepts kanji numerals (v0.7.0, #17)', () => {
+  it('SPEC-EGOV-GET-LAW-004 accepts kanji numerals (v0.7.0, #17)', () => {
     expect(toEgovArticleNum('三十')).toBe('30');
     expect(toEgovArticleNum('第三十条')).toBe('30');
     expect(toEgovArticleNum('第三十条の二')).toBe('30_2');
@@ -33,12 +33,12 @@ describe('toEgovArticleNum', () => {
     expect(toEgovArticleNum('第十条')).toBe('10');
   });
 
-  it('folds full-width digits (v0.7.0)', () => {
+  it('SPEC-EGOV-GET-LAW-004 folds full-width digits (v0.7.0)', () => {
     expect(toEgovArticleNum('３０')).toBe('30');
     expect(toEgovArticleNum('第３０条の２')).toBe('30_2');
   });
 
-  it('throws on numerals it cannot read', () => {
+  it('SPEC-EGOV-GET-LAW-005 throws on numerals it cannot read', () => {
     expect(() => toEgovArticleNum('第三〇条')).toThrow(/条番号の形式が不正/); // 位ごとに並べる形式
     expect(() => toEgovArticleNum('三0')).toThrow(); // 漢数字と算用数字の混在
     expect(() => toEgovArticleNum('30-2')).toThrow();
@@ -46,7 +46,7 @@ describe('toEgovArticleNum', () => {
     expect(() => toEgovArticleNum('')).toThrow();
   });
 
-  it('handles whitespace', () => {
+  it('SPEC-EGOV-GET-LAW-004 handles whitespace', () => {
     expect(toEgovArticleNum('  30  ')).toBe('30');
   });
 });
@@ -79,25 +79,25 @@ describe('formatArticleLabel', () => {
 });
 
 describe('toEgovItemNum (v0.6.0)', () => {
-  it('accepts numbers as before', () => {
+  it('SPEC-EGOV-GET-LAW-006 accepts numbers as before', () => {
     expect(toEgovItemNum(8)).toBe('8');
   });
 
-  it('accepts strings with の / 第 / 号', () => {
+  it('SPEC-EGOV-GET-LAW-006 accepts strings with の / 第 / 号', () => {
     expect(toEgovItemNum('8')).toBe('8');
     expect(toEgovItemNum('8の2')).toBe('8_2');
     expect(toEgovItemNum('第8号の2')).toBe('8_2');
     expect(toEgovItemNum(' 12の8 ')).toBe('12_8');
   });
 
-  it('accepts kanji numerals (v0.7.0, #17)', () => {
+  it('SPEC-EGOV-GET-LAW-006 accepts kanji numerals (v0.7.0, #17)', () => {
     expect(toEgovItemNum('八')).toBe('8');
     expect(toEgovItemNum('八の二')).toBe('8_2');
     expect(toEgovItemNum('第八号の二')).toBe('8_2');
     expect(toEgovItemNum('１２の８')).toBe('12_8');
   });
 
-  it('throws on non-integer numbers and malformed strings', () => {
+  it('SPEC-EGOV-GET-LAW-007 throws on non-integer numbers and malformed strings', () => {
     expect(() => toEgovItemNum('八八')).toThrow();
     expect(() => toEgovItemNum(0)).toThrow();
     expect(() => toEgovItemNum(1.5)).toThrow();
@@ -137,7 +137,7 @@ describe('kanjiToNumber (v0.7.0, #17)', () => {
 });
 
 describe('toEgovStructureNum（#22）', () => {
-  it('編・章・節の番号を e-Gov 形式にする', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-002 編・章・節の番号を e-Gov 形式にする', () => {
     expect(toEgovStructureNum(3)).toBe('3');
     expect(toEgovStructureNum('3')).toBe('3');
     expect(toEgovStructureNum('三')).toBe('3');
@@ -146,7 +146,7 @@ describe('toEgovStructureNum（#22）', () => {
     expect(toEgovStructureNum('２')).toBe('2');
   });
 
-  it('枝番号の章・節を読む', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-002 枝番号の章・節を読む', () => {
     expect(toEgovStructureNum('2の2')).toBe('2_2');
     expect(toEgovStructureNum('第二章の二')).toBe('2_2');
     expect(toEgovStructureNum('第一節の二')).toBe('1_2');
@@ -160,14 +160,14 @@ describe('toEgovStructureNum（#22）', () => {
 });
 
 describe('削除された条をまとめた範囲表記（v0.14.1）', () => {
-  it('隣り合う 2 条は「及び」、3 条以上は「から…まで」', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-016 隣り合う 2 条は「及び」、3 条以上は「から…まで」', () => {
     // e-Gov の ArticleTitle と同じ言い方（民法 534:535 / 170:174、商法 32:500）
     expect(formatArticleLabel('534:535')).toBe('第534条及び第535条');
     expect(formatArticleLabel('170:174')).toBe('第170条から第174条まで');
     expect(formatArticleLabel('32:500')).toBe('第32条から第500条まで');
   });
 
-  it('範囲表記を e-Gov 形式として受ける（from_article で続きを取るため）', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-016 範囲表記を e-Gov 形式として受ける（from_article で続きを取るため）', () => {
     expect(toEgovArticleNum('534:535')).toBe('534:535');
     expect(toEgovArticleNum('五百三十四:五百三十五')).toBe('534:535');
   });

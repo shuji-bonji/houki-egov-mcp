@@ -27,7 +27,7 @@ const BOSHI = {
 };
 
 describe('findLawNumMentions', () => {
-  it('「（法令番号）」を法令番号ごとに 1 回ずつ列挙する', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-001 「（法令番号）」を法令番号ごとに 1 回ずつ列挙する', () => {
     const m = findLawNumMentions(P2);
     expect(m.map((x) => x.law_num)).toEqual([
       '昭和四十九年法律第百十六号',
@@ -37,13 +37,13 @@ describe('findLawNumMentions', () => {
     expect(m[0].name_candidate.endsWith('雇用保険法')).toBe(true);
   });
 
-  it('法令番号が無ければ空', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-001 法令番号が無ければ空', () => {
     expect(findLawNumMentions(ITEM1)).toEqual([]);
   });
 });
 
 describe('extractReferences', () => {
-  it('① 法令名（法令番号）+ 条項号 を external で返し、条・項・号を get_law に渡せる形にする', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-001 ① 法令名（法令番号）+ 条項号 を external で返し、条・項・号を get_law に渡せる形にする', () => {
     const r = extractReferences(P2, { resolvedByNum: [KOYO, BOSHI], knownLaws: [] });
     const ext = r.references.filter((x) => x.kind === 'external');
     expect(ext).toEqual([
@@ -65,7 +65,7 @@ describe('extractReferences', () => {
     ]);
   });
 
-  it('② 「同法第三十一条の十」「同号」「前項」は relative で、解決しない', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-007 ② 「同法第三十一条の十」「同号」「前項」は relative で、解決しない', () => {
     const r = extractReferences(P2, { resolvedByNum: [KOYO, BOSHI], knownLaws: [] });
     const rel = r.references.filter((x) => x.kind === 'relative').map((x) => x.raw);
     expect(rel).toEqual(['前項', '同法第三十一条の十', '同号']);
@@ -74,7 +74,7 @@ describe('extractReferences', () => {
     }
   });
 
-  it('④ 法令名の無い「第二十八条第一項」は internal', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-005 ④ 法令名の無い「第二十八条第一項」は internal', () => {
     const r = extractReferences(P2, { resolvedByNum: [KOYO, BOSHI], knownLaws: [] });
     const internal = r.references.filter((x) => x.kind === 'internal');
     expect(internal).toEqual([
@@ -82,7 +82,7 @@ describe('extractReferences', () => {
     ]);
   });
 
-  it('参照は本文の出現順に並ぶ', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-008 参照は本文の出現順に並ぶ', () => {
     const r = extractReferences(P2, { resolvedByNum: [KOYO, BOSHI], knownLaws: [] });
     expect(r.references.map((x) => x.raw)).toEqual([
       '前項',
@@ -94,7 +94,7 @@ describe('extractReferences', () => {
     ]);
   });
 
-  it('③ 既知の法令名 + 条項号（法令番号なし）を external にする。知らない名前は候補付きの未解決', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-002 SPEC-EGOV-GET-ARTICLE-REFERENCES-004 ③ 既知の法令名 + 条項号（法令番号なし）を external にする。知らない名前は候補付きの未解決', () => {
     const r = extractReferences(ITEM4, { resolvedByNum: [KOYO], knownLaws: [] });
     const ext = r.references.filter(
       (x): x is Extract<ExtractedReference, { kind: 'external' }> => x.kind === 'external'
@@ -118,7 +118,7 @@ describe('extractReferences', () => {
     expect(ext[0].law_id).toBeUndefined();
   });
 
-  it('⑤ 「政令で定める」「財務省令で定める」を出現回数つきでまとめ、政令と省令で委任先を分ける', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-012 ⑤ 「政令で定める」「財務省令で定める」を出現回数つきでまとめ、政令と省令で委任先を分ける', () => {
     const r = extractReferences(`${ITEM1}\n${ITEM4}`, { resolvedByNum: [], knownLaws: [] });
     expect(r.delegations).toEqual([
       { kind: 'delegation', raw: '財務省令で定める', count: 2, target: 'enforcement_rule' },
@@ -126,7 +126,7 @@ describe('extractReferences', () => {
     ]);
   });
 
-  it('「同項」「同条第四項」「同条第二項」は relative、「第二十八条第二項」は internal', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-005 SPEC-EGOV-GET-ARTICLE-REFERENCES-007 SPEC-EGOV-GET-ARTICLE-REFERENCES-008 「同項」「同条第四項」「同条第二項」は relative、「第二十八条第二項」は internal', () => {
     const r = extractReferences(P1, { resolvedByNum: [], knownLaws: [] });
     expect(r.references).toEqual([
       { kind: 'internal', raw: '第二十八条第二項', article: '28', paragraph: 2 },
@@ -137,7 +137,7 @@ describe('extractReferences', () => {
     ]);
   });
 
-  it('施行令の本文の「法第五十七条の二第二項第一号」は、parentAct があれば親の法律への external', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-010 施行令の本文の「法第五十七条の二第二項第一号」は、parentAct があれば親の法律への external', () => {
     const text = '法第五十七条の二第二項第一号に規定する政令で定める支出は、次に掲げる支出とする。';
     const parent = {
       title: '所得税法',
@@ -159,7 +159,7 @@ describe('extractReferences', () => {
     ]);
   });
 
-  it('parentAct が無ければ「法第N条」は候補名「法」の未解決 external', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-004 SPEC-EGOV-GET-ARTICLE-REFERENCES-010 parentAct が無ければ「法第N条」は候補名「法」の未解決 external', () => {
     const text = '法第五十七条の二の規定により';
     const r = extractReferences(text, { resolvedByNum: [], knownLaws: [] });
     expect(r.references).toEqual([
@@ -172,7 +172,7 @@ describe('extractReferences', () => {
     ]);
   });
 
-  it('既知の名前の直前が漢字なら（「旧所得税法」）その名前では取らず、長い候補名の未解決にする', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-004 SPEC-EGOV-GET-ARTICLE-REFERENCES-011 既知の名前の直前が漢字なら（「旧所得税法」）その名前では取らず、長い候補名の未解決にする', () => {
     const text = '旧所得税法第九条の規定は、なお効力を有する。';
     const r = extractReferences(text, {
       resolvedByNum: [],
@@ -188,12 +188,12 @@ describe('extractReferences', () => {
     ]);
   });
 
-  it('号だけの参照「第一号」は internal（article なし）', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-005 号だけの参照「第一号」は internal（article なし）', () => {
     const r = extractReferences('第一号に掲げる場合を除く。', { resolvedByNum: [], knownLaws: [] });
     expect(r.references).toEqual([{ kind: 'internal', raw: '第一号', item: '1' }]);
   });
 
-  it('参照の無い本文は空配列', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-021 参照の無い本文は空配列', () => {
     const r = extractReferences('この法律は、公布の日から施行する。', {
       resolvedByNum: [],
       knownLaws: [],
@@ -201,7 +201,7 @@ describe('extractReferences', () => {
     expect(r).toEqual({ references: [], delegations: [] });
   });
 
-  it('条を書かない項・号が「及び」で直前の参照につながっていれば、直前の条を引き継ぐ（v0.10.1）', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-009 条を書かない項・号が「及び」で直前の参照につながっていれば、直前の条を引き継ぐ（v0.10.1）', () => {
     // 電帳法施行規則 4 条 1 項の実文（抜粋）
     const text =
       '第二条第二項第二号及び第六項第五号の規定は、法第七条に規定する電磁的記録の保存について準用する。';
@@ -230,7 +230,7 @@ describe('extractReferences', () => {
     ]);
   });
 
-  it('他法令の参照に「又は」でつながる項は、その法令の同じ条として external になる', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-009 他法令の参照に「又は」でつながる項は、その法令の同じ条として external になる', () => {
     const text = '法第七条第一項又は第三項の規定により';
     const parent = { title: '電帳法', law_id: '410AC0000000025' };
     const r = extractReferences(text, { resolvedByNum: [], knownLaws: [], parentAct: parent });
@@ -254,7 +254,7 @@ describe('extractReferences', () => {
     ]);
   });
 
-  it('「第六項第四号及び第五号」の後半は条と項を引き継ぐ。つながっていなければ引き継がない', () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-009 「第六項第四号及び第五号」の後半は条と項を引き継ぐ。つながっていなければ引き継がない', () => {
     const r1 = extractReferences('第二条第六項第四号及び第五号に掲げる', {
       resolvedByNum: [],
       knownLaws: [],

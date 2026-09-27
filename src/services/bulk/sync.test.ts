@@ -52,24 +52,24 @@ function ingestResult(upserted: number, unchanged = 0): IngestResult {
 }
 
 describe('日付ヘルパ', () => {
-  it('todayJst は JST の日付を返す (UTC では前日でも)', () => {
+  it('SPEC-EGOV-CLI-SYNC-002 todayJst は JST の日付を返す (UTC では前日でも)', () => {
     // 2026-09-18 20:00 UTC = 2026-09-19 05:00 JST
     expect(todayJst(Date.parse('2026-09-18T20:00:00Z'))).toBe('2026-09-19');
     expect(todayJst(Date.parse('2026-09-18T14:59:00Z'))).toBe('2026-09-18');
   });
 
-  it('toYyyymmdd / fromYyyymmdd', () => {
+  it('SPEC-EGOV-CLI-SYNC-002 toYyyymmdd / fromYyyymmdd', () => {
     expect(toYyyymmdd('2026-09-07')).toBe('20260907');
     expect(fromYyyymmdd('20260907')).toBe('2026-09-07');
   });
 
-  it('daysBetween は日数差 (後ろ向きは負)', () => {
+  it('SPEC-EGOV-CLI-SYNC-003 daysBetween は日数差 (後ろ向きは負)', () => {
     expect(daysBetween('2026-09-07', '2026-09-19')).toBe(12);
     expect(daysBetween('2026-09-19', '2026-09-19')).toBe(0);
     expect(daysBetween('2026-09-19', '2026-09-18')).toBe(-1);
   });
 
-  it('dateRangeInclusive は両端を含み、月をまたぐ', () => {
+  it('SPEC-EGOV-CLI-SYNC-002 dateRangeInclusive は両端を含み、月をまたぐ', () => {
     expect(dateRangeInclusive('2026-08-30', '2026-09-02')).toEqual([
       '2026-08-30',
       '2026-08-31',
@@ -82,13 +82,13 @@ describe('日付ヘルパ', () => {
 });
 
 describe('planSync', () => {
-  it('sync_state が無ければ no-state', () => {
+  it('SPEC-EGOV-CLI-SYNC-001 sync_state が無ければ no-state', () => {
     expect(planSync({ lastSyncDate: null, nowMs: NOW, limitDays: 90 })).toEqual({
       kind: 'no-state',
     });
   });
 
-  it('最終同期日を含めて今日までを並べる', () => {
+  it('SPEC-EGOV-CLI-SYNC-002 最終同期日を含めて今日までを並べる', () => {
     const plan = planSync({ lastSyncDate: '2026-09-17', nowMs: NOW, limitDays: 90 });
     expect(plan).toEqual({
       kind: 'dates',
@@ -98,13 +98,13 @@ describe('planSync', () => {
     });
   });
 
-  it('同じ日に 2 回目を実行すると、今日 1 日だけを確認し直す', () => {
+  it('SPEC-EGOV-CLI-SYNC-002 同じ日に 2 回目を実行すると、今日 1 日だけを確認し直す', () => {
     const plan = planSync({ lastSyncDate: '2026-09-19', nowMs: NOW, limitDays: 90 });
     expect(plan.kind).toBe('dates');
     if (plan.kind === 'dates') expect(plan.dates).toEqual(['2026-09-19']);
   });
 
-  it('limitDays を超えて空いていれば full-required', () => {
+  it('SPEC-EGOV-CLI-SYNC-003 limitDays を超えて空いていれば full-required', () => {
     const plan = planSync({ lastSyncDate: '2026-05-01', nowMs: NOW, limitDays: 90 });
     expect(plan).toEqual({
       kind: 'full-required',
@@ -114,7 +114,7 @@ describe('planSync', () => {
     });
   });
 
-  it('ちょうど limitDays なら差分で追う', () => {
+  it('SPEC-EGOV-CLI-SYNC-003 ちょうど limitDays なら差分で追う', () => {
     const plan = planSync({ lastSyncDate: '2026-06-21', nowMs: NOW, limitDays: 90 });
     expect(plan.kind).toBe('dates');
     if (plan.kind === 'dates') expect(plan.dates).toHaveLength(91);
@@ -122,12 +122,12 @@ describe('planSync', () => {
 });
 
 describe('isNoDiffResponse', () => {
-  it('HTTP 404 / 500 は「その日の差分なし」', () => {
+  it('SPEC-EGOV-CLI-SYNC-005 HTTP 404 / 500 は「その日の差分なし」', () => {
     expect(isNoDiffResponse(new BulkHttpError('HTTP 500', 500))).toBe(true);
     expect(isNoDiffResponse(new BulkHttpError('HTTP 404', 404))).toBe(true);
   });
 
-  it('それ以外は失敗', () => {
+  it('SPEC-EGOV-CLI-SYNC-005 SPEC-EGOV-CLI-SYNC-007 それ以外は失敗', () => {
     expect(isNoDiffResponse(new BulkHttpError('HTTP 503', 503))).toBe(false);
     expect(isNoDiffResponse(new BulkFetchError('network'))).toBe(false);
     expect(isNoDiffResponse(new Error('x'))).toBe(false);
@@ -135,7 +135,7 @@ describe('isNoDiffResponse', () => {
 });
 
 describe('runSync', () => {
-  it('差分のある日は取り込み、無い日は飛ばし、日ごとに store を進める', async () => {
+  it('SPEC-EGOV-CLI-SYNC-005 SPEC-EGOV-CLI-SYNC-006 差分のある日は取り込み、無い日は飛ばし、日ごとに store を進める', async () => {
     const store = memoryStore('2026-09-16');
     const downloaded: string[] = [];
     const cleaned: string[] = [];
@@ -168,7 +168,7 @@ describe('runSync', () => {
     expect(cleaned).toEqual(['/tmp/R20260917.zip', '/tmp/R20260918.zip']);
   });
 
-  it('差分なし以外の失敗で止まり、成功した日までを store に残す', async () => {
+  it('SPEC-EGOV-CLI-SYNC-007 差分なし以外の失敗で止まり、成功した日までを store に残す', async () => {
     const store = memoryStore('2026-09-16');
     const result = await runSync({
       store,
@@ -189,7 +189,7 @@ describe('runSync', () => {
     expect(result.lastSyncDate).toBe('2026-09-17');
   });
 
-  it('ingest の失敗でも同じように止まる (取得済み zip は消す)', async () => {
+  it('SPEC-EGOV-CLI-SYNC-007 ingest の失敗でも同じように止まる (取得済み zip は消す)', async () => {
     const store = memoryStore('2026-09-18');
     const cleaned: string[] = [];
     const result = await runSync({
@@ -210,7 +210,7 @@ describe('runSync', () => {
     expect(cleaned).toEqual(['/tmp/R20260918.zip', '/tmp/R20260919.zip']);
   });
 
-  it('e-Gov に届かなければ何もせず throw する', async () => {
+  it('SPEC-EGOV-CLI-SYNC-004 e-Gov に届かなければ何もせず throw する', async () => {
     const store = memoryStore('2026-09-18');
     let downloads = 0;
     await expect(
@@ -231,7 +231,7 @@ describe('runSync', () => {
     expect(store.history).toEqual([]);
   });
 
-  it('no-state / full-required では接続確認もしない', async () => {
+  it('SPEC-EGOV-CLI-SYNC-001 SPEC-EGOV-CLI-SYNC-003 no-state / full-required では接続確認もしない', async () => {
     let reached = 0;
     const deps = {
       nowMs: NOW,
@@ -248,7 +248,7 @@ describe('runSync', () => {
     expect(reached).toBe(0);
   });
 
-  it('onDay は日ごとに index / total 付きで呼ばれる', async () => {
+  it('SPEC-EGOV-CLI-SYNC-005 SPEC-EGOV-CLI-SYNC-008 onDay は日ごとに index / total 付きで呼ばれる', async () => {
     const calls: [string, number, number][] = [];
     await runSync({
       store: memoryStore('2026-09-18'),
@@ -270,7 +270,7 @@ describe('runSync', () => {
 });
 
 describe('createSqliteSyncStore', () => {
-  it('sync_state が無ければ null、markSynced で last_sync_date を進め last_full_dl_at は保つ', () => {
+  it('SPEC-EGOV-CLI-SYNC-001 SPEC-EGOV-CLI-SYNC-006 sync_state が無ければ null、markSynced で last_sync_date を進め last_full_dl_at は保つ', () => {
     const db = new Database(':memory:');
     initSchema(db);
     const store = createSqliteSyncStore(db);

@@ -223,7 +223,7 @@ beforeEach(() => {
 });
 
 describe('list_attachments', () => {
-  it('attached_files_info と本文の Fig を src で突き合わせ、位置と URL を付ける', async () => {
+  it('SPEC-EGOV-LIST-ATTACHMENTS-001 SPEC-EGOV-LIST-ATTACHMENTS-002 SPEC-EGOV-LIST-ATTACHMENTS-003 SPEC-EGOV-LIST-ATTACHMENTS-004 SPEC-EGOV-LIST-ATTACHMENTS-005 SPEC-EGOV-LIST-ATTACHMENTS-006 attached_files_info と本文の Fig を src で突き合わせ、位置と URL を付ける', async () => {
     const res = await listAttachments({ law_name: '国旗及び国歌に関する法律' });
     expect('error' in res).toBe(false);
     if ('error' in res) return;
@@ -278,7 +278,7 @@ describe('list_attachments', () => {
     ]);
   });
 
-  it('添付が無い法令は count 0 の成功応答（エラーにしない）', async () => {
+  it('SPEC-EGOV-LIST-ATTACHMENTS-005 SPEC-EGOV-LIST-ATTACHMENTS-006 SPEC-EGOV-LIST-ATTACHMENTS-007 添付が無い法令は count 0 の成功応答（エラーにしない）', async () => {
     const res = await listAttachments({ law_name: '民法' });
     expect('error' in res).toBe(false);
     if ('error' in res) return;
@@ -288,7 +288,7 @@ describe('list_attachments', () => {
     expect(res.next_actions).toBeUndefined();
   });
 
-  it('時点（at）を渡すと、その時点の履歴の一覧になる', async () => {
+  it('SPEC-EGOV-LIST-ATTACHMENTS-008 時点（at）を渡すと、その時点の履歴の一覧になる', async () => {
     const res = await listAttachments({ law_name: '国旗及び国歌に関する法律', at: '2000-01-01' });
     if ('error' in res) throw new Error(res.error);
     expect(res.meta.law_revision_id).toBe(`${KOKKI_ID}_20000101_000000000000000`);
@@ -297,7 +297,7 @@ describe('list_attachments', () => {
     expect(res.count).toBe(5);
   });
 
-  it('LAW_NOT_FOUND / OUT_OF_SCOPE は他のツールと同じ code', async () => {
+  it('SPEC-EGOV-LIST-ATTACHMENTS-009 LAW_NOT_FOUND / OUT_OF_SCOPE は他のツールと同じ code', async () => {
     const nf = await listAttachments({ law_name: '存在しない法律' });
     expect('error' in nf && nf.code).toBe('LAW_NOT_FOUND');
     const oos = await listAttachments({ law_name: '所基通' });
@@ -306,7 +306,7 @@ describe('list_attachments', () => {
 });
 
 describe('get_attachment', () => {
-  it('save なしは e-Gov からファイルを取らず、URL と位置だけ返す', async () => {
+  it('SPEC-EGOV-GET-ATTACHMENT-001 save なしは e-Gov からファイルを取らず、URL と位置だけ返す', async () => {
     const res = await getAttachment({
       law_name: '国旗及び国歌に関する法律',
       src: './pict/H11HO127-002.jpg',
@@ -320,7 +320,7 @@ describe('get_attachment', () => {
     expect(calls.attachment).toHaveLength(0);
   });
 
-  it('ファイル名だけでも引ける', async () => {
+  it('SPEC-EGOV-GET-ATTACHMENT-002 ファイル名だけでも引ける', async () => {
     const res = await getAttachment({
       law_name: '国旗及び国歌に関する法律',
       src: 'H11HO127-001.jpg',
@@ -329,7 +329,7 @@ describe('get_attachment', () => {
     expect(res.src).toBe('./pict/H11HO127-001.jpg');
   });
 
-  it('save: true で保存先に書き、絶対パスとサイズを返す', async () => {
+  it('SPEC-EGOV-GET-ATTACHMENT-003 SPEC-EGOV-GET-ATTACHMENT-004 save: true で保存先に書き、絶対パスとサイズを返す', async () => {
     const res = await getAttachment({
       law_name: '国旗及び国歌に関する法律',
       src: './pict/H11HO127-001.jpg',
@@ -344,7 +344,7 @@ describe('get_attachment', () => {
     expect(res.note).toContain('保存しました');
   });
 
-  it('pdf を保存すると pdf-reader-mcp の read_text を勧める', async () => {
+  it('SPEC-EGOV-GET-ATTACHMENT-006 pdf を保存すると pdf-reader-mcp の read_text を勧める', async () => {
     const res = await getAttachment({
       law_name: '国旗及び国歌に関する法律',
       src: './pict/2FH00000007000.pdf',
@@ -359,7 +359,7 @@ describe('get_attachment', () => {
     });
   });
 
-  it('src 省略は zip。save で <law_revision_id>.zip に保存する', async () => {
+  it('SPEC-EGOV-GET-ATTACHMENT-004 SPEC-EGOV-GET-ATTACHMENT-007 src 省略は zip。save で <law_revision_id>.zip に保存する', async () => {
     const res = await getAttachment({ law_name: '国旗及び国歌に関する法律', save: true });
     if ('error' in res) throw new Error(res.error);
     expect(res.kind).toBe('zip');
@@ -370,7 +370,7 @@ describe('get_attachment', () => {
     expect(existsSync(join(filesDir, KOKKI_REV, `${KOKKI_REV}.zip`))).toBe(true);
   });
 
-  it('一覧に無い src は ATTACHMENT_NOT_FOUND（候補を hint に、list_attachments を next_actions に）', async () => {
+  it('SPEC-EGOV-GET-ATTACHMENT-008 一覧に無い src は ATTACHMENT_NOT_FOUND（候補を hint に、list_attachments を next_actions に）', async () => {
     const res = await getAttachment({
       law_name: '国旗及び国歌に関する法律',
       src: './pict/nope.jpg',
@@ -383,13 +383,13 @@ describe('get_attachment', () => {
     expect(calls.attachment).toHaveLength(0);
   });
 
-  it('添付が無い法令は ATTACHMENT_NOT_FOUND', async () => {
+  it('SPEC-EGOV-GET-ATTACHMENT-009 添付が無い法令は ATTACHMENT_NOT_FOUND', async () => {
     const res = await getAttachment({ law_name: '民法', save: true });
     expect('error' in res && res.code).toBe('ATTACHMENT_NOT_FOUND');
     expect(calls.attachment).toHaveLength(0);
   });
 
-  it('e-Gov が 404003 を返したら ATTACHMENT_NOT_FOUND（一覧にはあるが実体が無い）', async () => {
+  it('SPEC-EGOV-GET-ATTACHMENT-010 e-Gov が 404003 を返したら ATTACHMENT_NOT_FOUND（一覧にはあるが実体が無い）', async () => {
     const res = await getAttachment({
       law_name: '国旗及び国歌に関する法律',
       src: './pict/list-only.jpg',
@@ -404,7 +404,7 @@ describe('get_attachment', () => {
 });
 
 describe('get_law_file', () => {
-  it('save なしは URL だけ。/law_data は引かない', async () => {
+  it('SPEC-EGOV-GET-LAW-FILE-001 SPEC-EGOV-GET-LAW-FILE-006 save なしは URL だけ。/law_data は引かない', async () => {
     const res = await getLawFile({ law_name: '民法', file_type: 'docx' });
     if ('error' in res) throw new Error(res.error);
     expect(res.file_type).toBe('docx');
@@ -415,7 +415,7 @@ describe('get_law_file', () => {
     expect(calls.lawFile).toHaveLength(0);
   });
 
-  it('at は asof として URL に付く', async () => {
+  it('SPEC-EGOV-GET-LAW-FILE-002 at は asof として URL に付く', async () => {
     const res = await getLawFile({ law_name: '民法', file_type: 'html', at: '2020-04-01' });
     if ('error' in res) throw new Error(res.error);
     expect(res.url).toBe(
@@ -424,7 +424,7 @@ describe('get_law_file', () => {
     expect(res.meta.at).toBe('2020-04-01');
   });
 
-  it('save: true は Content-Disposition のファイル名で保存し、履歴 ID を返す', async () => {
+  it('SPEC-EGOV-GET-LAW-FILE-003 SPEC-EGOV-GET-LAW-FILE-006 save: true は Content-Disposition のファイル名で保存し、履歴 ID を返す', async () => {
     const res = await getLawFile({ law_name: '民法', file_type: 'xml', save: true });
     if ('error' in res) throw new Error(res.error);
     expect(calls.lawFile).toEqual([['xml', MINPO_ID, undefined]]);
@@ -442,7 +442,7 @@ describe('get_law_file', () => {
     expect(res.next_actions?.[0].action).toBe('get_law');
   });
 
-  it('file_type が enum 外なら INVALID_ARGUMENT', async () => {
+  it('SPEC-EGOV-GET-LAW-FILE-007 file_type が enum 外なら INVALID_ARGUMENT', async () => {
     const res = await getLawFile({ law_name: '民法', file_type: 'txt' });
     expect('error' in res && res.code).toBe('INVALID_ARGUMENT');
   });
@@ -460,7 +460,7 @@ describe('inputSchema', () => {
     }
   });
 
-  it('get_law_file の file_type は xml / json / html / rtf / docx', async () => {
+  it('SPEC-EGOV-GET-LAW-FILE-007 get_law_file の file_type は xml / json / html / rtf / docx', async () => {
     expect(getLawFileTool.inputSchema.properties.file_type.enum).toEqual([
       'xml',
       'json',

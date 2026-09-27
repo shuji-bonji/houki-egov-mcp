@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/tools/handlers.ts`（`handleGetLawRevisions`）、`src/tools/definitions.ts`、`src/services/law-service.ts`（`getLawRevisionsByName`・`resolveLawId`・`checkAbbreviationScope`・`egovHttpErrorToLawError`）、`src/services/egov-client.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: なし
 
@@ -15,10 +15,10 @@
 
 ## 入力
 
-| 引数 | 必須 | 内容 |
-|---|---|---|
+| 引数       | 必須 | 内容                                                   |
+| ---------- | ---- | ------------------------------------------------------ |
 | `law_name` | 必須 | 法令名または略称。例: `"消費税法"`、`"消法"`、`"民法"` |
-| `latest` | 任意 | 先頭から何件を返すか。省略すると全件 |
+| `latest`   | 任意 | 先頭から何件を返すか。省略すると全件                   |
 
 ## 処理の流れ
 

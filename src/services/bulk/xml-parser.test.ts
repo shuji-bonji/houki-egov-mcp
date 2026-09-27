@@ -202,7 +202,7 @@ describe('extractInlineText', () => {
 });
 
 describe('parseLawXml — 最小法令 (改暦ノ布告)', () => {
-  it('属性とメタデータをパースする', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-011 属性とメタデータをパースする', () => {
     const law = parseLawXml(MINIMAL_LAW);
     expect(law.law_type).toBe('CabinetOrder');
     expect(law.law_num).toBe('明治五年太政官布告第三百三十七号');
@@ -224,7 +224,7 @@ describe('parseLawXml — 最小法令 (改暦ノ布告)', () => {
 });
 
 describe('parseLawXml — Chapter / Section 階層', () => {
-  it('Chapter > Article を chapter_path 付きで articles 化', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-012 Chapter > Article を chapter_path 付きで articles 化', () => {
     const law = parseLawXml(CHAPTERED_LAW);
     expect(law.law_title).toBe('預金保険法');
     expect(law.abbrev).toBe('預保法');
@@ -244,7 +244,7 @@ describe('parseLawXml — Chapter / Section 階層', () => {
     expect(law.articles[2].chapter_path).toBe('第二章　預金保険機構 第一節　総則');
   });
 
-  it('TOC は body に混入しない', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-012 TOC は body に混入しない', () => {
     const law = parseLawXml(CHAPTERED_LAW);
     // どの article body にも `目次` という TOCLabel が入らないこと
     for (const a of law.articles) {
@@ -254,7 +254,7 @@ describe('parseLawXml — Chapter / Section 階層', () => {
 });
 
 describe('parseLawXml — Item / Subitem を含む Article', () => {
-  it('Item / Subitem の本文も body_raw に含まれる', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-012 Item / Subitem の本文も body_raw に含まれる', () => {
     const law = parseLawXml(ITEMIZED_LAW);
     expect(law.articles).toHaveLength(1);
     const a = law.articles[0];
@@ -267,19 +267,19 @@ describe('parseLawXml — Item / Subitem を含む Article', () => {
     expect(a.body_raw).toContain('定期積金');
   });
 
-  it('caption は body_raw に含まれない', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-012 caption は body_raw に含まれない', () => {
     const law = parseLawXml(ITEMIZED_LAW);
     expect(law.articles[0].body_raw).not.toContain('（定義）');
   });
 
-  it('ArticleTitle (第二条) は body_raw に含まれない', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-012 ArticleTitle (第二条) は body_raw に含まれない', () => {
     const law = parseLawXml(ITEMIZED_LAW);
     expect(law.articles[0].body_raw).not.toContain('第二条');
   });
 });
 
 describe('parseLawXml — 附則 (SupplProvision)', () => {
-  it('附則の Article は Suppl{idx}_ プレフィックス付きで articles 化', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-012 附則の Article は Suppl{idx}_ プレフィックス付きで articles 化', () => {
     const law = parseLawXml(WITH_SUPPL_AND_APPDX);
     const supplArticle = law.articles.find((a) => a.article_num.startsWith('Suppl'));
     expect(supplArticle).toBeDefined();
@@ -291,7 +291,7 @@ describe('parseLawXml — 附則 (SupplProvision)', () => {
 });
 
 describe('parseLawXml — 別表 (AppdxTable)', () => {
-  it('別表は article_num=Appendix{連番} で articles 化', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-012 別表は article_num=Appendix{連番} で articles 化', () => {
     const law = parseLawXml(WITH_SUPPL_AND_APPDX);
     const appdx = law.articles.find((a) => a.article_num.startsWith('Appendix'));
     expect(appdx).toBeDefined();
@@ -301,7 +301,7 @@ describe('parseLawXml — 別表 (AppdxTable)', () => {
     expect(appdx?.body_raw).toContain('主要金融機関');
   });
 
-  it('別表タイトルは body_raw に含まれない', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-012 別表タイトルは body_raw に含まれない', () => {
     const law = parseLawXml(WITH_SUPPL_AND_APPDX);
     const appdx = law.articles.find((a) => a.article_num.startsWith('Appendix'));
     expect(appdx?.body_raw).not.toContain('別表第一');
@@ -309,27 +309,27 @@ describe('parseLawXml — 別表 (AppdxTable)', () => {
 });
 
 describe('parseLawXml — エラー系', () => {
-  it('ルート要素が <Law> でないと XmlParseError', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-015 ルート要素が <Law> でないと XmlParseError', () => {
     expect(() => parseLawXml('<NotLaw></NotLaw>')).toThrow(XmlParseError);
   });
 
-  it('LawBody が無いと XmlParseError', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-015 LawBody が無いと XmlParseError', () => {
     const xml = '<Law><LawNum>令和八年法律第一号</LawNum></Law>';
     expect(() => parseLawXml(xml)).toThrow(XmlParseError);
   });
 
-  it('LawNum が空 / 無いと XmlParseError', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-015 LawNum が空 / 無いと XmlParseError', () => {
     const xml = '<Law LawType="Act"><LawBody><LawTitle>無番号法</LawTitle></LawBody></Law>';
     expect(() => parseLawXml(xml)).toThrow(XmlParseError);
   });
 
-  it('壊れた XML は XmlParseError', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-015 壊れた XML は XmlParseError', () => {
     expect(() => parseLawXml('<Law><LawBody>')).toThrow(XmlParseError);
   });
 });
 
 describe('parseLawXml — メタデータ詳細', () => {
-  it('属性が無い時は null が入る', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-011 属性が無い時は null が入る', () => {
     const law = parseLawXml(ITEMIZED_LAW);
     expect(law.era).toBeNull();
     expect(law.year).toBeNull();
@@ -338,7 +338,7 @@ describe('parseLawXml — メタデータ詳細', () => {
     expect(law.enact_statement).toBeNull();
   });
 
-  it('LawTitle に Abbrev が無いケース', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-011 LawTitle に Abbrev が無いケース', () => {
     const law = parseLawXml(ITEMIZED_LAW);
     expect(law.law_title).toBe('サンプル法');
     expect(law.abbrev).toBeNull();
@@ -378,7 +378,7 @@ describe('parseLawXml — Part (編) を持つ法令 (民法型)', () => {
   </LawBody>
 </Law>`;
 
-  it('Part > Chapter > Article を拾い、chapter_path に編と章が入る', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-012 Part > Chapter > Article を拾い、chapter_path に編と章が入る', () => {
     const law = parseLawXml(LAW_WITH_PART);
     expect(law.articles.map((a) => a.article_num)).toEqual(['1', '709']);
     expect(law.articles[0].chapter_path).toBe('第一編　総則 第一章　通則');

@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/tools/handlers.ts`（`handleSearchFulltext`）、`src/tools/definitions.ts`、`src/services/law-search.ts`、`src/services/relevance-scoring.ts`、`src/services/freshness.ts`、`src/constants.ts`、`src/tools/handlers.test.ts`、`src/services/law-search.test.ts`、`src/services/relevance-scoring.test.ts`、`src/services/freshness.test.ts`、`src/test-helpers/law-db-fixture.ts`
 - 関連する Issue: houki-egov-mcp #23（2 文字の語の扱いと `scan_body`）
 
@@ -15,13 +15,13 @@
 
 ## 入力
 
-| 引数 | 必須 | 内容 |
-|---|---|---|
-| `keyword` | 必須 | 検索キーワード。空白で区切ると AND 検索。法令名・略称を含めると（例: `"民法 不法行為"`）その法令の条に絞る。「第30条」を含めると該当条を上位に寄せ、法令名 + 条番号だけ（例: `"民法 第709条"`）ならその条を直接返す |
-| `domain` | 任意 | 分野タグ（`tax` など）。受け付けるが絞り込みはしない |
-| `law_type` | 任意 | 法令種別で絞る。`Act` / `CabinetOrder` / `ImperialOrdinance` / `MinisterialOrdinance` / `Rule` のどれか |
-| `limit` | 任意 | 返す件数。既定 10、最大 30 |
-| `scan_body` | 任意 | 既定 `false`。`true` のとき、2 文字の語だけのクエリで索引を使わずに全法令の条本文を端から照合する |
+| 引数        | 必須 | 内容                                                                                                                                                                                                                |
+| ----------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `keyword`   | 必須 | 検索キーワード。空白で区切ると AND 検索。法令名・略称を含めると（例: `"民法 不法行為"`）その法令の条に絞る。「第30条」を含めると該当条を上位に寄せ、法令名 + 条番号だけ（例: `"民法 第709条"`）ならその条を直接返す |
+| `domain`    | 任意 | 分野タグ（`tax` など）。受け付けるが絞り込みはしない                                                                                                                                                                |
+| `law_type`  | 任意 | 法令種別で絞る。`Act` / `CabinetOrder` / `ImperialOrdinance` / `MinisterialOrdinance` / `Rule` のどれか                                                                                                             |
+| `limit`     | 任意 | 返す件数。既定 10、最大 30                                                                                                                                                                                          |
+| `scan_body` | 任意 | 既定 `false`。`true` のとき、2 文字の語だけのクエリで索引を使わずに全法令の条本文を端から照合する                                                                                                                   |
 
 ## 処理の流れ
 
@@ -57,15 +57,15 @@ flowchart TD
 
 ローカル DB に条が 1 件以上入っているときは、DB を引いて次のフィールドを持つ応答を返す。
 
-| フィールド | 内容 |
-|---|---|
-| `keyword` | 前後の空白を除いた `keyword` |
-| `source` | `bulk` |
-| `count` | `hits` の件数 |
-| `hits` | ヒットの配列（SPEC-EGOV-SEARCH-FULLTEXT-003・009） |
-| `freshness` | DB の鮮度（SPEC-EGOV-SEARCH-FULLTEXT-023） |
-| `filters` | `law_type`（渡した値か `null`）と `domain`（SPEC-EGOV-SEARCH-FULLTEXT-022） |
-| `expanded_keywords` / `law_scope` / `short_tokens` | 該当するときだけ付く（SPEC-EGOV-SEARCH-FULLTEXT-007・012・017〜021） |
+| フィールド                                         | 内容                                                                        |
+| -------------------------------------------------- | --------------------------------------------------------------------------- |
+| `keyword`                                          | 前後の空白を除いた `keyword`                                                |
+| `source`                                           | `bulk`                                                                      |
+| `count`                                            | `hits` の件数                                                               |
+| `hits`                                             | ヒットの配列（SPEC-EGOV-SEARCH-FULLTEXT-003・009）                          |
+| `freshness`                                        | DB の鮮度（SPEC-EGOV-SEARCH-FULLTEXT-023）                                  |
+| `filters`                                          | `law_type`（渡した値か `null`）と `domain`（SPEC-EGOV-SEARCH-FULLTEXT-022） |
+| `expanded_keywords` / `law_scope` / `short_tokens` | 該当するときだけ付く（SPEC-EGOV-SEARCH-FULLTEXT-007・012・017〜021）        |
 
 例: 消費税法の第30条と第30条の2に「適格請求書」がある DB で `{ keyword: "適格請求書" }` を渡すと、`source: "bulk"`、`count: 2`、`hits[0].law_title: "消費税法"` を返す。
 
@@ -84,15 +84,15 @@ flowchart TD
 
 条本文にキーワードを含む条を、1 件ずつ次のフィールドで返す。
 
-| フィールド | 内容 |
-|---|---|
-| `match_type` | `article` |
-| `law_id` / `law_revision_id` / `law_title` / `law_num` / `law_type` | ヒットした法令とその版 |
-| `article_num` | 条番号（表示形式。SPEC-EGOV-SEARCH-FULLTEXT-004） |
-| `caption` / `chapter_path` | 条見出しと章節（無ければ `null`） |
-| `snippet` | 条本文の一致箇所の抜粋。一致した語を `<b>` と `</b>` で囲む |
-| `rank` / `score` / `score_reasons` | 並べ替えの根拠（SPEC-EGOV-SEARCH-FULLTEXT-015） |
-| `url` | `https://laws.e-gov.go.jp/law/<law_id>` |
+| フィールド                                                          | 内容                                                        |
+| ------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `match_type`                                                        | `article`                                                   |
+| `law_id` / `law_revision_id` / `law_title` / `law_num` / `law_type` | ヒットした法令とその版                                      |
+| `article_num`                                                       | 条番号（表示形式。SPEC-EGOV-SEARCH-FULLTEXT-004）           |
+| `caption` / `chapter_path`                                          | 条見出しと章節（無ければ `null`）                           |
+| `snippet`                                                           | 条本文の一致箇所の抜粋。一致した語を `<b>` と `</b>` で囲む |
+| `rank` / `score` / `score_reasons`                                  | 並べ替えの根拠（SPEC-EGOV-SEARCH-FULLTEXT-015）             |
+| `url`                                                               | `https://laws.e-gov.go.jp/law/<law_id>`                     |
 
 例: `適格請求書` では消費税法の `article_num` が `30` と `30の2` の 2 件を返し、`snippet` はどちらも `<b>適格請求書</b>` を含み、`url` は `https://laws.e-gov.go.jp/law/363AC0000000108`、`score` は 0 より大きく 1 以下。
 
@@ -236,13 +236,13 @@ SPEC-EGOV-SEARCH-FULLTEXT-012 で法令を絞り、残りが 2 文字の語だ�
 
 `source: "bulk"` の応答の `freshness` に、DB を最後に同期した日からの鮮度を入れる。DB に同期の記録が無いときは `null`。
 
-| フィールド | 内容 |
-|---|---|
-| `last_sync_date` | 最後に同期を終えた日（`YYYY-MM-DD`） |
-| `last_full_dl_at` | 最後に全件を取り込んだ日時 |
-| `days_since_sync` | `last_sync_date` からの経過日数 |
-| `staleness` | 経過日数が 7 日未満なら `fresh`、30 日未満なら `stale`、30 日以上なら `outdated` |
-| `warning` | `outdated` のときだけ付く。`bulk DB が <日数> 日前のデータです` と、`houki-egov-mcp --sync`（最終同期から 90 日を超えていれば `--bulk-download-everything`）の実行の案内 |
+| フィールド        | 内容                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `last_sync_date`  | 最後に同期を終えた日（`YYYY-MM-DD`）                                                                                                                                     |
+| `last_full_dl_at` | 最後に全件を取り込んだ日時                                                                                                                                               |
+| `days_since_sync` | `last_sync_date` からの経過日数                                                                                                                                          |
+| `staleness`       | 経過日数が 7 日未満なら `fresh`、30 日未満なら `stale`、30 日以上なら `outdated`                                                                                         |
+| `warning`         | `outdated` のときだけ付く。`bulk DB が <日数> 日前のデータです` と、`houki-egov-mcp --sync`（最終同期から 90 日を超えていれば `--bulk-download-everything`）の実行の案内 |
 
 鮮度が `outdated` でも DB を引いた結果を返す。
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isLawServiceError, makeError, NEXT_ACTIONS } from './errors.js';
 
 describe('makeError', () => {
-  it('builds the minimum required shape', () => {
+  it('SPEC-EGOV-COMMON-ERRORS-008 builds the minimum required shape', () => {
     const err = makeError('LAW_NOT_FOUND', '法令が見つかりません');
     expect(err.error).toBe('法令が見つかりません');
     expect(err.code).toBe('LAW_NOT_FOUND');
@@ -11,7 +11,7 @@ describe('makeError', () => {
     expect(err.retryable).toBeUndefined();
   });
 
-  it('attaches optional fields when provided', () => {
+  it('SPEC-EGOV-COMMON-ERRORS-008 attaches optional fields when provided', () => {
     const err = makeError('EGOV_RATE_LIMITED', '429 returned', {
       hint: 'wait',
       next_actions: [NEXT_ACTIONS.retryLater()],
@@ -25,22 +25,22 @@ describe('makeError', () => {
     expect(err.detail?.status).toBe(429);
   });
 
-  it('drops empty next_actions array', () => {
+  it('SPEC-EGOV-COMMON-ERRORS-008 drops empty next_actions array', () => {
     const err = makeError('LAW_NOT_FOUND', 'x', { next_actions: [] });
     expect(err.next_actions).toBeUndefined();
   });
 });
 
 describe('isLawServiceError', () => {
-  it('accepts well-formed errors', () => {
+  it('SPEC-EGOV-COMMON-ERRORS-001 accepts well-formed errors', () => {
     expect(isLawServiceError(makeError('LAW_NOT_FOUND', 'x'))).toBe(true);
   });
 
-  it('rejects success-shaped objects', () => {
+  it('SPEC-EGOV-COMMON-ERRORS-001 rejects success-shaped objects', () => {
     expect(isLawServiceError({ markdown: '...', meta: {} })).toBe(false);
   });
 
-  it('rejects null and primitives', () => {
+  it('SPEC-EGOV-COMMON-ERRORS-001 rejects null and primitives', () => {
     expect(isLawServiceError(null)).toBe(false);
     expect(isLawServiceError(undefined)).toBe(false);
     expect(isLawServiceError('error string')).toBe(false);

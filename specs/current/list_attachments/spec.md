@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-files.ts`、`src/services/law-tree.ts`（図の置き場所）、`src/services/law-service.ts`（法令名の解決・管轄の確認）、`src/services/egov-client.ts`、`src/config.ts`、`src/services/law-files.test.ts`
 - 関連する Issue: houki-egov-mcp #19（添付ファイルと法令本文ファイル）
 
@@ -15,10 +15,10 @@
 
 ## 入力
 
-| 引数 | 必須 | 内容 |
-|---|---|---|
+| 引数       | 必須 | 内容                                                                   |
+| ---------- | ---- | ---------------------------------------------------------------------- |
 | `law_name` | 必須 | 法令名または略称。例: `"戸籍法施行規則"`、`"国旗及び国歌に関する法律"` |
-| `at` | 任意 | 時点。`YYYY-MM-DD` 形式。その時点の法令履歴の添付ファイルの一覧になる |
+| `at`       | 任意 | 時点。`YYYY-MM-DD` 形式。その時点の法令履歴の添付ファイルの一覧になる  |
 
 inputSchema に無い引数を渡したときの扱いは common_errors に書く。
 
@@ -46,21 +46,21 @@ flowchart TD
 
 e-Gov の法令本文に付く添付ファイルの一覧（`attached_files_info`）と、本文の中の図（`Fig` 要素）を `src` で突き合わせ、1 ファイル 1 要素の `attachments` を返す。ファイルの中身は返さない。応答は次のフィールドを持つ。
 
-| フィールド | 内容 |
-|---|---|
-| `meta.law_revision_id` | 添付ファイルが属する法令履歴 ID。例: `411AC0000000127_19990813_000000000000000` |
-| `meta.law_id` / `meta.title` / `meta.law_num` / `meta.retrieved_at` / `meta.url` | 法令 ID・題名・法令番号・取得日時・e-Gov の法令ページの URL |
-| `count` | `attachments` の件数 |
-| `attachments[].src` | 本文の `Fig` 要素の `src`。例: `./pict/H11HO127-001.jpg`。`get_attachment` の `src` にそのまま渡せる |
-| `attachments[].file_name` | `src` の末尾のファイル名。例: `H11HO127-001.jpg` |
-| `attachments[].file_type` | 拡張子から決めた種別。例: `jpg`、`pdf` |
-| `attachments[].content_type` | 拡張子から決めた Content-Type。`jpg` は `image/jpeg`、`pdf` は `application/pdf` |
-| `attachments[].url` | 認証なしで開ける取得 URL。`https://laws.e-gov.go.jp/api/2/attachment/<law_revision_id>?src=<src を URL エンコードしたもの>` |
-| `attachments[].updated` | 正誤などで更新された日時（`attached_files_info` の `updated`）。例: `2024-07-25T00:20:13+09:00` |
-| `attachments[].location` | 法令の中の置き場所（SPEC-EGOV-LIST-ATTACHMENTS-002） |
-| `zip_url` | SPEC-EGOV-LIST-ATTACHMENTS-005 |
-| `note` | 件数と種別ごとの内訳の説明 |
-| `next_actions` | SPEC-EGOV-LIST-ATTACHMENTS-006 |
+| フィールド                                                                       | 内容                                                                                                                        |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `meta.law_revision_id`                                                           | 添付ファイルが属する法令履歴 ID。例: `411AC0000000127_19990813_000000000000000`                                             |
+| `meta.law_id` / `meta.title` / `meta.law_num` / `meta.retrieved_at` / `meta.url` | 法令 ID・題名・法令番号・取得日時・e-Gov の法令ページの URL                                                                 |
+| `count`                                                                          | `attachments` の件数                                                                                                        |
+| `attachments[].src`                                                              | 本文の `Fig` 要素の `src`。例: `./pict/H11HO127-001.jpg`。`get_attachment` の `src` にそのまま渡せる                        |
+| `attachments[].file_name`                                                        | `src` の末尾のファイル名。例: `H11HO127-001.jpg`                                                                            |
+| `attachments[].file_type`                                                        | 拡張子から決めた種別。例: `jpg`、`pdf`                                                                                      |
+| `attachments[].content_type`                                                     | 拡張子から決めた Content-Type。`jpg` は `image/jpeg`、`pdf` は `application/pdf`                                            |
+| `attachments[].url`                                                              | 認証なしで開ける取得 URL。`https://laws.e-gov.go.jp/api/2/attachment/<law_revision_id>?src=<src を URL エンコードしたもの>` |
+| `attachments[].updated`                                                          | 正誤などで更新された日時（`attached_files_info` の `updated`）。例: `2024-07-25T00:20:13+09:00`                             |
+| `attachments[].location`                                                         | 法令の中の置き場所（SPEC-EGOV-LIST-ATTACHMENTS-002）                                                                        |
+| `zip_url`                                                                        | SPEC-EGOV-LIST-ATTACHMENTS-005                                                                                              |
+| `note`                                                                           | 件数と種別ごとの内訳の説明                                                                                                  |
+| `next_actions`                                                                   | SPEC-EGOV-LIST-ATTACHMENTS-006                                                                                              |
 
 ### SPEC-EGOV-LIST-ATTACHMENTS-002 各ファイルに、法令の中の置き場所を付ける
 

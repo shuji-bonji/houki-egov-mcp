@@ -133,38 +133,38 @@ describe('extractText', () => {
 });
 
 describe('findArticle', () => {
-  it('finds article by Num', () => {
+  it('SPEC-EGOV-GET-LAW-008 finds article by Num', () => {
     const a = findArticle(fixture, '30');
     expect(a).not.toBeNull();
     expect(a?.attr?.Num).toBe('30');
   });
 
-  it('finds article with の2 (underscore)', () => {
+  it('SPEC-EGOV-GET-LAW-008 finds article with の2 (underscore)', () => {
     const a = findArticle(fixture, '30_2');
     expect(a).not.toBeNull();
     expect(a?.attr?.Num).toBe('30_2');
   });
 
-  it('returns null for missing article', () => {
+  it('SPEC-EGOV-GET-LAW-009 returns null for missing article', () => {
     expect(findArticle(fixture, '999')).toBeNull();
   });
 });
 
 describe('findParagraph / findItem', () => {
-  it('finds paragraph by num', () => {
+  it('SPEC-EGOV-GET-LAW-010 finds paragraph by num', () => {
     const a = findArticle(fixture, '30')!;
     const p = findParagraph(a, 1);
     expect(p?.attr?.Num).toBe('1');
   });
 
-  it('finds item within paragraph', () => {
+  it('SPEC-EGOV-GET-LAW-010 finds item within paragraph', () => {
     const a = findArticle(fixture, '30')!;
     const p = findParagraph(a, 1)!;
     const i = findItem(p, '1');
     expect(i?.attr?.Num).toBe('1');
   });
 
-  it('findParagraphForItem: 項が 1 つの条はその項、複数ある条は null (v0.6.0)', () => {
+  it('SPEC-EGOV-GET-LAW-011 findParagraphForItem: 項が 1 つの条はその項、複数ある条は null (v0.6.0)', () => {
     const single: LawNode = {
       tag: 'Article',
       attr: { Num: '14_3' },
@@ -185,7 +185,7 @@ describe('findParagraph / findItem', () => {
     expect(findParagraphForItem(multi)).toBeNull();
   });
 
-  it('finds a branch-numbered item by e-Gov Num (v0.6.0)', () => {
+  it('SPEC-EGOV-GET-LAW-009 SPEC-EGOV-GET-LAW-012 finds a branch-numbered item by e-Gov Num (v0.6.0)', () => {
     const p: LawNode = {
       tag: 'Paragraph',
       attr: { Num: '1' },
@@ -201,7 +201,7 @@ describe('findParagraph / findItem', () => {
 });
 
 describe('getArticleCaption / getArticleTitle', () => {
-  it('extracts caption', () => {
+  it('SPEC-EGOV-GET-LAW-013 extracts caption', () => {
     const a = findArticle(fixture, '30')!;
     expect(getArticleCaption(a)).toBe('（仕入れに係る消費税額の控除）');
   });
@@ -213,7 +213,7 @@ describe('getArticleCaption / getArticleTitle', () => {
 });
 
 describe('extractToc', () => {
-  it('extracts hierarchical TOC', () => {
+  it('SPEC-EGOV-GET-LAW-017 SPEC-EGOV-GET-TOC-002 extracts hierarchical TOC', () => {
     const toc = extractToc(fixture);
     expect(toc.length).toBeGreaterThan(0);
     const chapter = toc[0];
@@ -301,7 +301,7 @@ const deepFixture: LawNode = {
 };
 
 describe('limitTocDepth', () => {
-  it('depth=1 keeps only the top structural level (Part)', () => {
+  it('SPEC-EGOV-GET-TOC-010 depth=1 keeps only the top structural level (Part)', () => {
     const toc = extractToc(deepFixture);
     const limited = limitTocDepth(toc, 1);
     expect(limited.length).toBe(1);
@@ -309,7 +309,7 @@ describe('limitTocDepth', () => {
     expect(limited[0].children).toEqual([]);
   });
 
-  it('depth=2 keeps Part and Chapter', () => {
+  it('SPEC-EGOV-GET-TOC-010 depth=2 keeps Part and Chapter', () => {
     const toc = extractToc(deepFixture);
     const limited = limitTocDepth(toc, 2);
     const part = limited[0];
@@ -319,7 +319,7 @@ describe('limitTocDepth', () => {
     expect(part.children[0].children).toEqual([]);
   });
 
-  it('depth=3 keeps down to Section (Article still trimmed off Section)', () => {
+  it('SPEC-EGOV-GET-TOC-010 depth=3 keeps down to Section (Article still trimmed off Section)', () => {
     const toc = extractToc(deepFixture);
     const limited = limitTocDepth(toc, 3);
     const section = limited[0].children[0].children[0];
@@ -327,7 +327,7 @@ describe('limitTocDepth', () => {
     expect(section.children).toEqual([]);
   });
 
-  it('depth >= structural depth keeps everything (Article preserved)', () => {
+  it('SPEC-EGOV-GET-TOC-010 depth >= structural depth keeps everything (Article preserved)', () => {
     const toc = extractToc(deepFixture);
     const limited = limitTocDepth(toc, 4);
     const section = limited[0].children[0].children[0];
@@ -438,7 +438,7 @@ const supplFixture: LawNode = {
 };
 
 describe('extractToc（附則の扱い）', () => {
-  it('本則だけを返し、附則の条は混ぜない', () => {
+  it('SPEC-EGOV-GET-LAW-017 SPEC-EGOV-GET-TOC-001 本則だけを返し、附則の条は混ぜない', () => {
     const toc = extractToc(supplFixture);
     expect(toc).toHaveLength(1);
     expect(toc[0].tag).toBe('Chapter');
@@ -447,16 +447,16 @@ describe('extractToc（附則の扱い）', () => {
 });
 
 describe('extractSupplProvisions', () => {
-  it('附則を出現順に返し、index が 1 始まりになる', () => {
+  it('SPEC-EGOV-GET-TOC-005 附則を出現順に返し、index が 1 始まりになる', () => {
     const suppl = extractSupplProvisions(supplFixture);
     expect(suppl.map((s) => s.index)).toEqual([1, 2, 3]);
   });
 
-  it('見出しの全角空白を詰める', () => {
+  it('SPEC-EGOV-GET-TOC-005 見出しの全角空白を詰める', () => {
     expect(extractSupplProvisions(supplFixture)[0].label).toBe('附則');
   });
 
-  it('制定時の附則には amend_law_num を付けない', () => {
+  it('SPEC-EGOV-GET-TOC-005 制定時の附則には amend_law_num を付けない', () => {
     const first = extractSupplProvisions(supplFixture)[0];
     expect(first.amend_law_num).toBeUndefined();
     expect(first.extract).toBe(true);
@@ -465,14 +465,14 @@ describe('extractSupplProvisions', () => {
     expect(first.children[0].caption).toBe('（施行期日）');
   });
 
-  it('改正法の附則には AmendLawNum が入る', () => {
+  it('SPEC-EGOV-GET-TOC-005 改正法の附則には AmendLawNum が入る', () => {
     const second = extractSupplProvisions(supplFixture)[1];
     expect(second.amend_law_num).toBe('平成元年六月二八日法律第三九号');
     expect(second.article_count).toBe(1);
     expect(second.paragraph_only).toBe(false);
   });
 
-  it('条を立てず項だけの附則は paragraph_only になる', () => {
+  it('SPEC-EGOV-GET-TOC-005 条を立てず項だけの附則は paragraph_only になる', () => {
     const third = extractSupplProvisions(supplFixture)[2];
     expect(third.article_count).toBe(0);
     expect(third.paragraph_only).toBe(true);
@@ -480,7 +480,7 @@ describe('extractSupplProvisions', () => {
     expect(third.children).toEqual([]);
   });
 
-  it('附則が無い法令では空配列を返す', () => {
+  it('SPEC-EGOV-GET-TOC-005 附則が無い法令では空配列を返す', () => {
     expect(extractSupplProvisions(fixture)).toEqual([]);
   });
 });
@@ -580,21 +580,21 @@ const rangeFixture: LawNode = {
 };
 
 describe('extractToc の path（#22）', () => {
-  it('本則の構造ノードに Part3/Chapter2 形式のパスを付ける', () => {
+  it('SPEC-EGOV-GET-TOC-003 本則の構造ノードに Part3/Chapter2 形式のパスを付ける', () => {
     const toc = extractToc(rangeFixture);
     expect(toc[0].path).toBe('Part1');
     expect(toc[0].children[1].path).toBe('Part1/Chapter2');
     expect(toc[1].children[0].children[0].path).toBe('Part2/Chapter2/Section1_2');
   });
 
-  it('条にはパスを付けない', () => {
+  it('SPEC-EGOV-GET-TOC-003 条にはパスを付けない', () => {
     const toc = extractToc(rangeFixture);
     const firstArticle = toc[0].children[0].children[0];
     expect(firstArticle.tag).toBe('Article');
     expect(firstArticle.path).toBeUndefined();
   });
 
-  it('附則の中のノードにはパスを付けない（範囲の指定は suppl_index で行う）', () => {
+  it('SPEC-EGOV-GET-TOC-003 附則の中のノードにはパスを付けない（範囲の指定は suppl_index で行う）', () => {
     const suppl = extractSupplProvisions(rangeFixture);
     expect(suppl[0].children.every((c) => c.path === undefined)).toBe(true);
   });
@@ -610,7 +610,7 @@ describe('範囲のパスの読み書き（#22）', () => {
     ).toBe('Part3/Chapter2');
   });
 
-  it('枝番号と大文字小文字の違いを読む', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-003 枝番号と大文字小文字の違いを読む', () => {
     expect(parseRangePath('Part3/Chapter4_2')).toEqual([
       { tag: 'Part', num: '3' },
       { tag: 'Chapter', num: '4_2' },
@@ -621,7 +621,7 @@ describe('範囲のパスの読み書き（#22）', () => {
     ]);
   });
 
-  it('知らないタグ・番号の無い区切り・空文字は読まない', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-007 知らないタグ・番号の無い区切り・空文字は読まない', () => {
     expect(parseRangePath('Book3')).toBeNull();
     expect(parseRangePath('Part')).toBeNull();
     expect(parseRangePath('第三編/第二章')).toBeNull();
@@ -630,31 +630,31 @@ describe('範囲のパスの読み書き（#22）', () => {
 });
 
 describe('findRanges / findRangeByPath（#22）', () => {
-  it('編と章を指定すると章のノードを 1 つ返す', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-001 編と章を指定すると章のノードを 1 つ返す', () => {
     const found = findRanges(rangeFixture, { Part: '1', Chapter: '2' });
     expect(found).toHaveLength(1);
     expect(found[0].path).toBe('Part1/Chapter2');
     expect(found[0].segments.map((s) => s.title)).toEqual(['第一編　総則', '第二章　人']);
   });
 
-  it('章だけの指定は編ごとの章に当たる（民法の Chapter2 が複数あるのと同じ）', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-004 章だけの指定は編ごとの章に当たる（民法の Chapter2 が複数あるのと同じ）', () => {
     const found = findRanges(rangeFixture, { Chapter: '2' });
     expect(found.map((m) => m.path)).toEqual(['Part1/Chapter2', 'Part2/Chapter2']);
   });
 
-  it('最も下に指定したタグのノードを返す', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-002 最も下に指定したタグのノードを返す', () => {
     const found = findRanges(rangeFixture, { Chapter: '2', Section: '1_2' });
     expect(found).toHaveLength(1);
     expect(found[0].node.tag).toBe('Section');
     expect(found[0].path).toBe('Part2/Chapter2/Section1_2');
   });
 
-  it('該当が無ければ空配列、指定が無ければ空配列', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-005 該当が無ければ空配列、指定が無ければ空配列', () => {
     expect(findRanges(rangeFixture, { Part: '9' })).toEqual([]);
     expect(findRanges(rangeFixture, {})).toEqual([]);
   });
 
-  it('パスの完全一致で探す', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-003 パスの完全一致で探す', () => {
     expect(findRangeByPath(rangeFixture, 'Part2/Chapter2')?.node.tag).toBe('Chapter');
     // 上位を省いたパスは一致しない
     expect(findRangeByPath(rangeFixture, 'Chapter2')).toBeNull();
@@ -663,24 +663,24 @@ describe('findRanges / findRangeByPath（#22）', () => {
 });
 
 describe('collectArticlesInRange / findSupplProvisionByIndex（#22）', () => {
-  it('範囲の中の条を出現順に集める', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-015 範囲の中の条を出現順に集める', () => {
     const range = findRanges(rangeFixture, { Part: '2' })[0];
     expect(collectArticlesInRange(range.node).map((a) => a.attr?.Num)).toEqual(['3', '4_2']);
   });
 
-  it('本則の範囲に附則の条は入らない', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-015 本則の範囲に附則の条は入らない', () => {
     const lawBody = findChildByTag(rangeFixture, 'LawBody');
     if (!lawBody) throw new Error('LawBody が無い');
     expect(collectArticlesInRange(lawBody).map((a) => a.attr?.Num)).toEqual(['1', '2', '3', '4_2']);
   });
 
-  it('附則そのものを渡したときは、その附則の中の条を集める', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-012 附則そのものを渡したときは、その附則の中の条を集める', () => {
     const suppl = findSupplProvisionByIndex(rangeFixture, 1);
     if (!suppl) throw new Error('附則が無い');
     expect(collectArticlesInRange(suppl).map((a) => a.attr?.Num)).toEqual(['1']);
   });
 
-  it('附則は並び順（1 始まり）で取り出し、範囲外は null', () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-012 SPEC-EGOV-GET-LAW-RANGE-014 附則は並び順（1 始まり）で取り出し、範囲外は null', () => {
     expect(findSupplProvisionByIndex(rangeFixture, 2)?.attr?.AmendLawNum).toBe(
       '平成二年六月二二日法律第三六号'
     );

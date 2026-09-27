@@ -27,12 +27,12 @@ const ROW_UNENFORCED =
   '法律,平成十年法律第百三十号,金融庁設置法,きんゆうちょうせっちほう,,平成十年十月十六日,金融機能の強化のための特別措置に関する法律等の一部を改正する法律,令和八年法律第十五号,令和八年五月七日,令和八年八月六日,公布の日から起算して三月を超えない範囲内において政令で定める日,410AC1000000130,https://laws.e-gov.go.jp/law/410AC1000000130/20260806_508AC0000000015,○';
 
 describe('parseCsv (state-machine CSV parser)', () => {
-  it('BOM を除去する', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 BOM を除去する', () => {
     const rows = parseCsv(`${BOM}a,b,c`);
     expect(rows).toEqual([['a', 'b', 'c']]);
   });
 
-  it('CRLF を行終端として扱う', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 CRLF を行終端として扱う', () => {
     const rows = parseCsv('a,b\r\nc,d\r\n');
     expect(rows).toEqual([
       ['a', 'b'],
@@ -40,7 +40,7 @@ describe('parseCsv (state-machine CSV parser)', () => {
     ]);
   });
 
-  it('LF (Unix) も行終端として扱う', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 LF (Unix) も行終端として扱う', () => {
     const rows = parseCsv('a,b\nc,d');
     expect(rows).toEqual([
       ['a', 'b'],
@@ -48,22 +48,22 @@ describe('parseCsv (state-machine CSV parser)', () => {
     ]);
   });
 
-  it('クォート内のコンマをフィールドの一部として扱う', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 クォート内のコンマをフィールドの一部として扱う', () => {
     const rows = parseCsv('"a,b",c');
     expect(rows).toEqual([['a,b', 'c']]);
   });
 
-  it('クォート内のクォートエスケープ "" を扱う', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 クォート内のクォートエスケープ "" を扱う', () => {
     const rows = parseCsv('"a""b",c');
     expect(rows).toEqual([['a"b', 'c']]);
   });
 
-  it('クォート内の改行 (CRLF) をフィールドの一部として扱う', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 クォート内の改行 (CRLF) をフィールドの一部として扱う', () => {
     const rows = parseCsv('"a\r\nb",c');
     expect(rows).toEqual([['a\r\nb', 'c']]);
   });
 
-  it('空行を結果に含めない', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 空行を結果に含めない', () => {
     const rows = parseCsv('a,b\r\n\r\nc,d');
     expect(rows).toEqual([
       ['a', 'b'],
@@ -71,7 +71,7 @@ describe('parseCsv (state-machine CSV parser)', () => {
     ]);
   });
 
-  it('末尾改行なしでも最後の行を取り込む', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 末尾改行なしでも最後の行を取り込む', () => {
     const rows = parseCsv('a,b,c');
     expect(rows).toEqual([['a', 'b', 'c']]);
   });
@@ -86,7 +86,7 @@ describe('parseCsv (state-machine CSV parser)', () => {
 });
 
 describe('extractLawRevisionId', () => {
-  it('新規制定 (改正なし) URL から revision_id を構成する', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-008 新規制定 (改正なし) URL から revision_id を構成する', () => {
     const r = extractLawRevisionId(
       'https://laws.e-gov.go.jp/law/105DF0000000337/18721109_000000000000000',
       '105DF0000000337'
@@ -96,7 +96,7 @@ describe('extractLawRevisionId', () => {
     expect(r.amendment_law_id).toBe('000000000000000');
   });
 
-  it('改正法令 URL から revision_id を構成する', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-008 改正法令 URL から revision_id を構成する', () => {
     const r = extractLawRevisionId(
       'https://laws.e-gov.go.jp/law/322AC0000000149/20250601_504AC0000000068',
       '322AC0000000149'
@@ -106,7 +106,7 @@ describe('extractLawRevisionId', () => {
     expect(r.amendment_law_id).toBe('504AC0000000068');
   });
 
-  it('英数字混在の改正 ID も扱える (例: M10000001002 形式)', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-008 英数字混在の改正 ID も扱える (例: M10000001002 形式)', () => {
     const r = extractLawRevisionId(
       'https://laws.e-gov.go.jp/law/122M10000001012/18931111_126M10000001002',
       '122M10000001012'
@@ -114,7 +114,7 @@ describe('extractLawRevisionId', () => {
     expect(r.amendment_law_id).toBe('126M10000001002');
   });
 
-  it('クエリ / フラグメント / 末尾スラッシュを除去する', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-008 クエリ / フラグメント / 末尾スラッシュを除去する', () => {
     const r = extractLawRevisionId(
       'https://laws.e-gov.go.jp/law/105DF0000000337/18721109_000000000000000?foo=bar#frag',
       '105DF0000000337'
@@ -122,14 +122,14 @@ describe('extractLawRevisionId', () => {
     expect(r.law_revision_id).toBe('105DF0000000337_18721109_000000000000000');
   });
 
-  it('期待形式以外の URL では例外を投げる', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-009 期待形式以外の URL では例外を投げる', () => {
     expect(() => extractLawRevisionId('https://example.com/foo', 'X')).toThrow();
     expect(() => extractLawRevisionId('https://laws.e-gov.go.jp/law/X/abc_def', 'X')).toThrow();
   });
 });
 
 describe('parseAllLawList', () => {
-  it('簡易行 (旧法令名なし) を正しくパース', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 SPEC-EGOV-CLI-BULK-DOWNLOAD-008 簡易行 (旧法令名なし) を正しくパース', () => {
     const csv = BOM + HEADER + CRLF + ROW_SIMPLE + CRLF;
     const rows = parseAllLawList(csv);
     expect(rows).toHaveLength(1);
@@ -146,7 +146,7 @@ describe('parseAllLawList', () => {
     expect(row.amendment_law_id).toBe('000000000000000');
   });
 
-  it('クォート付きフィールド (旧法令名 CSV-in-CSV) を正しくパース', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 SPEC-EGOV-CLI-BULK-DOWNLOAD-008 クォート付きフィールド (旧法令名 CSV-in-CSV) を正しくパース', () => {
     const csv = BOM + HEADER + CRLF + ROW_QUOTED + CRLF;
     const rows = parseAllLawList(csv);
     expect(rows).toHaveLength(1);
@@ -160,14 +160,14 @@ describe('parseAllLawList', () => {
     expect(row.law_revision_id).toBe('324CO0000000408_20191216_501CO0000000183');
   });
 
-  it('未施行フラグ ○ を boolean に正規化', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 未施行フラグ ○ を boolean に正規化', () => {
     const csv = BOM + HEADER + CRLF + ROW_UNENFORCED + CRLF;
     const rows = parseAllLawList(csv);
     expect(rows[0].unenforced).toBe(true);
     expect(rows[0].law_revision_id).toBe('410AC1000000130_20260806_508AC0000000015');
   });
 
-  it('複数行を順序通りに返す', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-007 複数行を順序通りに返す', () => {
     const csv = BOM + HEADER + CRLF + ROW_SIMPLE + CRLF + ROW_UNENFORCED + CRLF;
     const rows = parseAllLawList(csv);
     expect(rows).toHaveLength(2);
@@ -175,7 +175,7 @@ describe('parseAllLawList', () => {
     expect(rows[1].law_id).toBe('410AC1000000130');
   });
 
-  it('header 列数が違うと CsvParseError', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-010 header 列数が違うと CsvParseError', () => {
     const badHeader = '法令種別,法令番号,法令名'; // 14 列でない
     const csv = BOM + badHeader + CRLF + ROW_SIMPLE + CRLF;
     expect(() => parseAllLawList(csv)).toThrow(CsvParseError);
@@ -186,14 +186,14 @@ describe('parseAllLawList', () => {
     expect(() => parseAllLawList(csv)).toThrow(CsvParseError);
   });
 
-  it('skipMalformed=true で不正行を skip', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-009 skipMalformed=true で不正行を skip', () => {
     const csv = `${BOM}${HEADER}${CRLF}bogus,line\r\n${ROW_SIMPLE}${CRLF}`;
     const rows = parseAllLawList(csv, { skipMalformed: true });
     expect(rows).toHaveLength(1);
     expect(rows[0].law_id).toBe('105DF0000000337');
   });
 
-  it('skipMalformed=true で revision_id 抽出失敗行を skip', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-009 skipMalformed=true で revision_id 抽出失敗行を skip', () => {
     const badUrl = ROW_SIMPLE.replace(
       'https://laws.e-gov.go.jp/law/105DF0000000337/18721109_000000000000000',
       'https://example.com/no-revision-id'
@@ -210,7 +210,7 @@ describe('parseAllLawList', () => {
     expect(rows).toHaveLength(1);
   });
 
-  it('空入力を空配列で返す', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-010 空入力を空配列で返す', () => {
     expect(parseAllLawList('')).toEqual([]);
     expect(parseAllLawList(BOM)).toEqual([]);
   });

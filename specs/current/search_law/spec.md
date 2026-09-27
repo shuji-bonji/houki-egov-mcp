@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/egov-client.ts`、`src/errors.ts`、`src/tools/handlers.test.ts`、`src/server.test.ts`
 - 関連する Issue: なし
 
@@ -15,12 +15,12 @@
 
 ## 入力
 
-| 引数 | 必須 | 内容 |
-|---|---|---|
-| `keyword` | 必須 | 検索キーワード。法令名の一部（例: `"消費税"`、`"労働基準"`）か略称（例: `"消法"`、`"労基法"`） |
-| `law_type` | 任意 | 法令種別で絞り込む。`Act` / `CabinetOrder` / `ImperialOrdinance` / `MinisterialOrdinance` / `Rule` のどれか |
-| `domain` | 任意 | 分野タグ。`tax` / `labor` / `accounting` / `commercial` / `civil` / `administrative` のどれか（v0.15.1 では絞り込みに使われない。未決 1） |
-| `limit` | 任意 | 取得件数。既定は 10。inputSchema の説明では最大 50（v0.15.1 では上限をかけない。未決 2） |
+| 引数       | 必須 | 内容                                                                                                                                      |
+| ---------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `keyword`  | 必須 | 検索キーワード。法令名の一部（例: `"消費税"`、`"労働基準"`）か略称（例: `"消法"`、`"労基法"`）                                            |
+| `law_type` | 任意 | 法令種別で絞り込む。`Act` / `CabinetOrder` / `ImperialOrdinance` / `MinisterialOrdinance` / `Rule` のどれか                               |
+| `domain`   | 任意 | 分野タグ。`tax` / `labor` / `accounting` / `commercial` / `civil` / `administrative` のどれか（v0.15.1 では絞り込みに使われない。未決 1） |
+| `limit`    | 任意 | 取得件数。既定は 10。inputSchema の説明では最大 50（v0.15.1 では上限をかけない。未決 2）                                                  |
 
 ## 処理の流れ
 

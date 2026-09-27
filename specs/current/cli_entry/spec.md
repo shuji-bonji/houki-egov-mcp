@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: CLI
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/index.ts`、`src/cli/index.ts`、`src/config.ts`、`src/cli/index.test.ts`
 - 関連する Issue: なし
 
@@ -16,15 +16,15 @@
 
 ## 入力
 
-| フラグ | 必須 | 内容 |
-|---|---|---|
-| （なし） | 任意 | MCP サーバーとして起動する |
-| `--help` / `-h` | 任意 | 使い方を出して終わる |
-| `--version` / `-v` | 任意 | パッケージ名と版を出して終わる |
-| `--bulk-download-everything` | 任意 | 全件の取り込み（cli_bulk_download） |
-| `--bulk-download-by-date YYYYMMDD` | 任意 | 1 日分の差分の取り込み（cli_bulk_download） |
-| `--sync` / `--bulk-download-incremental` | 任意 | 日次差分での最新化（cli_sync） |
-| `--status` | 任意 | 同期の状態と DB の件数の表示（cli_status） |
+| フラグ                                   | 必須 | 内容                                        |
+| ---------------------------------------- | ---- | ------------------------------------------- |
+| （なし）                                 | 任意 | MCP サーバーとして起動する                  |
+| `--help` / `-h`                          | 任意 | 使い方を出して終わる                        |
+| `--version` / `-v`                       | 任意 | パッケージ名と版を出して終わる              |
+| `--bulk-download-everything`             | 任意 | 全件の取り込み（cli_bulk_download）         |
+| `--bulk-download-by-date YYYYMMDD`       | 任意 | 1 日分の差分の取り込み（cli_bulk_download） |
+| `--sync` / `--bulk-download-incremental` | 任意 | 日次差分での最新化（cli_sync）              |
+| `--status`                               | 任意 | 同期の状態と DB の件数の表示（cli_status）  |
 
 見るのは最初の引数だけである。
 

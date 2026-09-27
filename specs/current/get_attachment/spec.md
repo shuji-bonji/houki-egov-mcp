@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-files.ts`、`src/services/file-store.ts`、`src/services/egov-client.ts`、`src/services/law-service.ts`（法令名の解決・管轄の確認）、`src/config.ts`、`src/services/law-files.test.ts`、`src/services/file-store.test.ts`
 - 関連する Issue: houki-egov-mcp #19（添付ファイルと法令本文ファイル）
 
@@ -16,12 +16,12 @@
 
 ## 入力
 
-| 引数 | 必須 | 内容 |
-|---|---|---|
-| `law_name` | 必須 | 法令名または略称 |
-| `src` | 任意 | `list_attachments` が返す `attachments[].src`（例: `"./pict/H11HO127-001.jpg"`）。ファイル名だけ（`"H11HO127-001.jpg"`）でもよい。省くと、その法令履歴の添付ファイル全部の zip |
-| `at` | 任意 | 時点。`YYYY-MM-DD` 形式。`list_attachments` と同じ時点を渡す |
-| `save` | 任意 | `true` でファイルを取得して保存する。既定は `false`（URL とメタ情報だけを返し、ファイルは取らない） |
+| 引数       | 必須 | 内容                                                                                                                                                                           |
+| ---------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `law_name` | 必須 | 法令名または略称                                                                                                                                                               |
+| `src`      | 任意 | `list_attachments` が返す `attachments[].src`（例: `"./pict/H11HO127-001.jpg"`）。ファイル名だけ（`"H11HO127-001.jpg"`）でもよい。省くと、その法令履歴の添付ファイル全部の zip |
+| `at`       | 任意 | 時点。`YYYY-MM-DD` 形式。`list_attachments` と同じ時点を渡す                                                                                                                   |
+| `save`     | 任意 | `true` でファイルを取得して保存する。既定は `false`（URL とメタ情報だけを返し、ファイルは取らない）                                                                            |
 
 保存先のパスは引数では指定できない。inputSchema に無い引数を渡したときの扱いは common_errors に書く。
 
@@ -54,16 +54,16 @@ flowchart TD
 
 `save` を省くか `false` にしたときは、e-Gov からファイルを取らず、次のフィールドを持つ応答を返す。`saved` は付けない。`note` には、保存するには `save: true` を付けるよう書く。
 
-| フィールド | 内容 |
-|---|---|
-| `meta` | 法令と法令履歴の情報。`law_revision_id` を含む（`list_attachments` の `meta` と同じフィールド） |
-| `kind` | `file`（`src` を指定したとき）または `zip`（`src` を省いたとき） |
-| `src` | 対象のファイルの `src`（一覧にある形。例: `./pict/H11HO127-002.jpg`）。zip では `null` |
-| `file_name` | ファイル名。例: `H11HO127-002.jpg` |
-| `file_type` / `content_type` | 拡張子から決めた種別と Content-Type |
-| `url` | 認証なしで開ける取得 URL |
-| `location` | 法令の中の置き場所（例: `title` が `別記第二`）。zip と、本文に見つからないファイルでは `null` |
-| `note` | 説明 |
+| フィールド                   | 内容                                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| `meta`                       | 法令と法令履歴の情報。`law_revision_id` を含む（`list_attachments` の `meta` と同じフィールド） |
+| `kind`                       | `file`（`src` を指定したとき）または `zip`（`src` を省いたとき）                                |
+| `src`                        | 対象のファイルの `src`（一覧にある形。例: `./pict/H11HO127-002.jpg`）。zip では `null`          |
+| `file_name`                  | ファイル名。例: `H11HO127-002.jpg`                                                              |
+| `file_type` / `content_type` | 拡張子から決めた種別と Content-Type                                                             |
+| `url`                        | 認証なしで開ける取得 URL                                                                        |
+| `location`                   | 法令の中の置き場所（例: `title` が `別記第二`）。zip と、本文に見つからないファイルでは `null`  |
+| `note`                       | 説明                                                                                            |
 
 ### SPEC-EGOV-GET-ATTACHMENT-002 src はファイル名だけでも引ける
 

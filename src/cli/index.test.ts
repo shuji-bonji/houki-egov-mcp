@@ -23,13 +23,13 @@ describe('runCli — 引数解析', () => {
     errSpy.mockRestore();
   });
 
-  it('引数なしは MCP fallback', async () => {
+  it('SPEC-EGOV-CLI-ENTRY-001 引数なしは MCP fallback', async () => {
     const result = await runCli(['node', 'index.js']);
     expect(shouldFallbackToMcp(result)).toBe(true);
     expect(result.exitCode).toBe(0);
   });
 
-  it('--help は exitCode=0 で help 出力', async () => {
+  it('SPEC-EGOV-CLI-ENTRY-002 --help は exitCode=0 で help 出力', async () => {
     const result = await runCli(['node', 'index.js', '--help']);
     expect(result.command).toBe('help');
     expect(result.exitCode).toBe(0);
@@ -37,13 +37,13 @@ describe('runCli — 引数解析', () => {
     expect(shouldFallbackToMcp(result)).toBe(false);
   });
 
-  it('-h も --help と同じ', async () => {
+  it('SPEC-EGOV-CLI-ENTRY-002 -h も --help と同じ', async () => {
     const result = await runCli(['node', 'index.js', '-h']);
     expect(result.command).toBe('help');
     expect(result.exitCode).toBe(0);
   });
 
-  it('--version はバージョン出力', async () => {
+  it('SPEC-EGOV-CLI-ENTRY-003 --version はバージョン出力', async () => {
     const result = await runCli(['node', 'index.js', '--version']);
     expect(result.command).toBe('version');
     expect(result.exitCode).toBe(0);
@@ -51,18 +51,18 @@ describe('runCli — 引数解析', () => {
     expect(out).toContain('houki-egov-mcp');
   });
 
-  it('--bulk-download-by-date は YYYYMMDD 必須', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-001 --bulk-download-by-date は YYYYMMDD 必須', async () => {
     const result = await runCli(['node', 'index.js', '--bulk-download-by-date']);
     expect(result.exitCode).toBe(2);
     expect(errSpy).toHaveBeenCalled();
   });
 
-  it('--bulk-download-by-date に不正な日付形式は拒否', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-001 --bulk-download-by-date に不正な日付形式は拒否', async () => {
     const result = await runCli(['node', 'index.js', '--bulk-download-by-date', '2026-05-07']);
     expect(result.exitCode).toBe(2);
   });
 
-  it('未知のフラグは exitCode=2 でヘルプ表示', async () => {
+  it('SPEC-EGOV-CLI-ENTRY-004 未知のフラグは exitCode=2 でヘルプ表示', async () => {
     const result = await runCli(['node', 'index.js', '--unknown-flag']);
     expect(result.command).toBe('unknown');
     expect(result.exitCode).toBe(2);
@@ -71,12 +71,12 @@ describe('runCli — 引数解析', () => {
     expect(logSpy).toHaveBeenCalled();
   });
 
-  it('shouldFallbackToMcp は CLI コマンド実行時 false', async () => {
+  it('SPEC-EGOV-CLI-ENTRY-002 shouldFallbackToMcp は CLI コマンド実行時 false', async () => {
     const result = await runCli(['node', 'index.js', '--help']);
     expect(shouldFallbackToMcp(result)).toBe(false);
   });
 
-  it('shouldFallbackToMcp は引数なし時 true', async () => {
+  it('SPEC-EGOV-CLI-ENTRY-001 shouldFallbackToMcp は引数なし時 true', async () => {
     const result = await runCli(['node', 'index.js']);
     expect(shouldFallbackToMcp(result)).toBe(true);
   });

@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`（`get_toc`）、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-tree.ts`、`src/formatters/markdown.ts`、`src/services/law-service.suppl-toc.test.ts`、`src/services/law-service.range.test.ts`、`src/services/law-tree.test.ts`、`src/formatters/markdown.test.ts`
 - 関連する Issue: houki-egov-mcp #24（本則と附則を分ける）、#22（`toc[].path`）
 
@@ -15,13 +15,13 @@
 
 ## 入力
 
-| 引数 | 必須 | 内容 |
-|---|---|---|
-| `law_name` | 必須 | 法令名または略称。例: `民法`、`消法` |
-| `at` | 任意 | 時点指定（`YYYY-MM-DD`） |
-| `depth` | 任意 | 本則の構造階層（編・章・節・款・目）を上から何階層まで返すか。省くと全階層 |
-| `suppl` | 任意 | 附則をどこまで返すか。`list`（既定）/ `full` / `none` |
-| `with_amend_titles` | 任意 | `true` のとき附則に改正法の題名を付ける。既定は `false` |
+| 引数                | 必須 | 内容                                                                       |
+| ------------------- | ---- | -------------------------------------------------------------------------- |
+| `law_name`          | 必須 | 法令名または略称。例: `民法`、`消法`                                       |
+| `at`                | 任意 | 時点指定（`YYYY-MM-DD`）                                                   |
+| `depth`             | 任意 | 本則の構造階層（編・章・節・款・目）を上から何階層まで返すか。省くと全階層 |
+| `suppl`             | 任意 | 附則をどこまで返すか。`list`（既定）/ `full` / `none`                      |
+| `with_amend_titles` | 任意 | `true` のとき附則に改正法の題名を付ける。既定は `false`                    |
 
 ## 処理の流れ
 
@@ -60,14 +60,14 @@ flowchart TD
 
 `toc` の各ノードは次のフィールドを持つ。構造ノードは法令の階層どおりに `children` に入れ子になる。
 
-| フィールド | 内容 |
-|---|---|
-| `tag` | `Part`（編）/ `Chapter`（章）/ `Section`（節）/ `Subsection`（款）/ `Division`（目）/ `Article`（条） |
-| `num` | e-Gov の番号。枝番号の条は `30_2` |
-| `title` | 構造ノードは見出し（例: `第三章　税額控除等`）、条は条名（例: `第三十条`） |
-| `caption` | 条の見出し（例: `（仕入れに係る消費税額の控除）`）。条にだけ付く |
-| `path` | 本則の構造ノードにだけ付く範囲のパス（SPEC-EGOV-GET-TOC-003） |
-| `children` | 子のノードの配列 |
+| フィールド | 内容                                                                                                  |
+| ---------- | ----------------------------------------------------------------------------------------------------- |
+| `tag`      | `Part`（編）/ `Chapter`（章）/ `Section`（節）/ `Subsection`（款）/ `Division`（目）/ `Article`（条） |
+| `num`      | e-Gov の番号。枝番号の条は `30_2`                                                                     |
+| `title`    | 構造ノードは見出し（例: `第三章　税額控除等`）、条は条名（例: `第三十条`）                            |
+| `caption`  | 条の見出し（例: `（仕入れに係る消費税額の控除）`）。条にだけ付く                                      |
+| `path`     | 本則の構造ノードにだけ付く範囲のパス（SPEC-EGOV-GET-TOC-003）                                         |
+| `children` | 子のノードの配列                                                                                      |
 
 ### SPEC-EGOV-GET-TOC-003 本則の構造ノードに、`get_law_range` にそのまま渡せる `path` を付ける
 
@@ -79,26 +79,26 @@ flowchart TD
 
 `suppl` を省くか `list` にしたとき、`suppl_provisions` の各要素の `children` は空配列にする（附則の中の条は返さない）。応答の `suppl` には次を入れる。
 
-| フィールド | 内容 |
-|---|---|
-| `suppl.mode` | 適用した `suppl` の値（`list`） |
-| `suppl.count` | この法令が持つ附則の本数 |
-| `suppl.article_count` | 附則の中の条の総数 |
-| `suppl.note` | 何を返したかの 1 行。`list` のときは、中の条まで要るなら `suppl: "full"` を指定するよう書く |
+| フィールド            | 内容                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `suppl.mode`          | 適用した `suppl` の値（`list`）                                                             |
+| `suppl.count`         | この法令が持つ附則の本数                                                                    |
+| `suppl.article_count` | 附則の中の条の総数                                                                          |
+| `suppl.note`          | 何を返したかの 1 行。`list` のときは、中の条まで要るなら `suppl: "full"` を指定するよう書く |
 
 ### SPEC-EGOV-GET-TOC-005 `suppl_provisions` の各要素の形
 
 `suppl_provisions` の各要素は次のフィールドを持つ。
 
-| フィールド | 内容 |
-|---|---|
-| `index` | 附則の出現順の番号（1 始まり）。`get_law_range` の `suppl_index` に渡せる |
-| `label` | 見出し。全角空白を詰めた `附則` |
-| `amend_law_num` | どの改正法の附則かを示す法令番号（例: `平成元年六月二八日法律第三九号`）。制定時の附則には付かない |
-| `extract` | 抄（改正法の附則の一部だけを載せた形）なら `true` |
-| `article_count` | その附則が持つ条の数 |
-| `paragraph_only` | 条を立てず項だけで書かれた附則なら `true`（このとき `article_count` は 0、`children` は空配列） |
-| `children` | 附則の中の目次。`suppl: "full"` のときだけ中身が入る |
+| フィールド       | 内容                                                                                               |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| `index`          | 附則の出現順の番号（1 始まり）。`get_law_range` の `suppl_index` に渡せる                          |
+| `label`          | 見出し。全角空白を詰めた `附則`                                                                    |
+| `amend_law_num`  | どの改正法の附則かを示す法令番号（例: `平成元年六月二八日法律第三九号`）。制定時の附則には付かない |
+| `extract`        | 抄（改正法の附則の一部だけを載せた形）なら `true`                                                  |
+| `article_count`  | その附則が持つ条の数                                                                               |
+| `paragraph_only` | 条を立てず項だけで書かれた附則なら `true`（このとき `article_count` は 0、`children` は空配列）    |
+| `children`       | 附則の中の目次。`suppl: "full"` のときだけ中身が入る                                               |
 
 附則を持たない法令では `suppl_provisions` は空配列。
 
@@ -126,12 +126,12 @@ flowchart TD
 
 応答の `suppl.amend_law_titles` に次を入れる。
 
-| フィールド | 内容 |
-|---|---|
-| `matched` | 題名を付けた附則の数 |
+| フィールド  | 内容                                                                         |
+| ----------- | ---------------------------------------------------------------------------- |
+| `matched`   | 題名を付けた附則の数                                                         |
 | `unmatched` | 改正履歴に該当が無く題名を付けられなかった附則の数（制定時の附則は数えない） |
-| `revisions` | 照合に使った改正履歴の件数 |
-| `source` | `law_revisions` |
+| `revisions` | 照合に使った改正履歴の件数                                                   |
+| `source`    | `law_revisions`                                                              |
 
 題名を付けられなかった附則があるときは、`suppl.note` に残りの本数（`残り N 本`）と、改正履歴に該当が無かったことを書く。
 

@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/errors.ts`、`src/tools/handlers.test.ts`、`src/server.test.ts`（辞書は `@shuji-bonji/houki-abbreviations` 0.x）
 - 関連する Issue: なし
 
@@ -15,8 +15,8 @@
 
 ## 入力
 
-| 引数 | 必須 | 内容 |
-|---|---|---|
+| 引数   | 必須 | 内容                                             |
+| ------ | ---- | ------------------------------------------------ |
 | `abbr` | 必須 | 略称。例: `"消法"`、`"所法"`、`"労基法"`、`"民"` |
 
 ## 処理の流れ

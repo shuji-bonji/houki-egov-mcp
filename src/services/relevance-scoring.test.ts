@@ -12,12 +12,12 @@ import {
 } from './relevance-scoring.js';
 
 describe('rankToBaseScore', () => {
-  it('rank 0 / 非有限は 0', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-015 rank 0 / 非有限は 0', () => {
     expect(rankToBaseScore(0)).toBe(0);
     expect(rankToBaseScore(Number.NaN)).toBe(0);
     expect(rankToBaseScore(Number.POSITIVE_INFINITY)).toBe(0);
   });
-  it('|rank| が大きいほど 1 に近づく', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-015 |rank| が大きいほど 1 に近づく', () => {
     expect(rankToBaseScore(-10)).toBeCloseTo(0.5);
     expect(rankToBaseScore(-30)).toBeGreaterThan(rankToBaseScore(-10));
     expect(rankToBaseScore(-1000)).toBeLessThan(1);
@@ -25,18 +25,18 @@ describe('rankToBaseScore', () => {
 });
 
 describe('extractArticleNumFromQuery', () => {
-  it('「第30条」→ 30、「第30条の2」→ 30_2', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-014 「第30条」→ 30、「第30条の2」→ 30_2', () => {
     expect(extractArticleNumFromQuery('適格請求書 第30条')).toBe('30');
     expect(extractArticleNumFromQuery('第30条の2')).toBe('30_2');
     expect(extractArticleNumFromQuery('第30の2条')).toBe('30_2');
   });
-  it('全角数字も受け付ける', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-014 全角数字も受け付ける', () => {
     expect(extractArticleNumFromQuery('第３０条')).toBe('30');
   });
-  it('漢数字は未対応で null', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-014 漢数字は未対応で null', () => {
     expect(extractArticleNumFromQuery('第三十条')).toBeNull();
   });
-  it('条番号がなければ null', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-014 条番号がなければ null', () => {
     expect(extractArticleNumFromQuery('適格請求書')).toBeNull();
     expect(extractArticleNumFromQuery('')).toBeNull();
   });
@@ -45,13 +45,13 @@ describe('extractArticleNumFromQuery', () => {
 describe('computeLawRelevance', () => {
   const base = { rank: -10, query: '消費税法', lawTitle: '消費税法' };
 
-  it('base のみ (boost なし)', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-015 base のみ (boost なし)', () => {
     const r = computeLawRelevance({ rank: -10, query: '課税仕入れ', lawTitle: '消費税法' });
     expect(r.score).toBeCloseTo(0.5);
     expect(r.score_reasons).toHaveLength(1);
   });
 
-  it('title_exact_match +0.3 (幅・空白・大小文字の違いは吸収)', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-015 title_exact_match +0.3 (幅・空白・大小文字の違いは吸収)', () => {
     const r = computeLawRelevance(base);
     expect(r.score).toBeCloseTo(0.5 + BOOST.titleExact);
     expect(r.score_reasons).toContain('title_exact_match');
@@ -59,7 +59,7 @@ describe('computeLawRelevance', () => {
     expect(r2.score_reasons).toContain('title_exact_match');
   });
 
-  it('abbrev_match +0.2 (null / 空は無視)', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-015 abbrev_match +0.2 (null / 空は無視)', () => {
     const r = computeLawRelevance({
       rank: -10,
       query: '消法',
@@ -70,7 +70,7 @@ describe('computeLawRelevance', () => {
     expect(r.score_reasons).toContain('abbrev_match');
   });
 
-  it('article_num_match +0.3 (一致しない条番号には付かない)', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-014 SPEC-EGOV-SEARCH-FULLTEXT-015 article_num_match +0.3 (一致しない条番号には付かない)', () => {
     const hit = computeLawRelevance({
       rank: -10,
       query: '適格請求書 第30条',
@@ -87,7 +87,7 @@ describe('computeLawRelevance', () => {
     expect(miss.score_reasons).not.toContain('article_num_match');
   });
 
-  it('article_caption_match +0.1 (条番号だけのクエリは対象外)', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-015 article_caption_match +0.1 (条番号だけのクエリは対象外)', () => {
     const hit = computeLawRelevance({
       rank: -10,
       query: '仕入れ',
@@ -104,7 +104,7 @@ describe('computeLawRelevance', () => {
     expect(onlyNum.score_reasons).not.toContain('article_caption_match');
   });
 
-  it('supplementary_provision で -0.15 (下限 0)', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-015 supplementary_provision で -0.15 (下限 0)', () => {
     const r = computeLawRelevance({
       rank: -10,
       query: '課税仕入れ',
@@ -122,7 +122,7 @@ describe('computeLawRelevance', () => {
     expect(floor.score).toBe(0);
   });
 
-  it('上限は 1.0', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-015 上限は 1.0', () => {
     const r = computeLawRelevance({
       rank: -100,
       query: '消費税法 第30条',
@@ -136,7 +136,7 @@ describe('computeLawRelevance', () => {
 });
 
 describe('sortByScoreDesc', () => {
-  it('score 降順、同点は rank 昇順 (FTS5 順) で安定', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-016 score 降順、同点は rank 昇順 (FTS5 順) で安定', () => {
     const sorted = sortByScoreDesc([
       { id: 'a', score: 0.5, rank: -5 },
       { id: 'b', score: 0.9, rank: -1 },

@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-files.ts`、`src/services/file-store.ts`、`src/services/egov-client.ts`、`src/services/law-service.ts`（法令名の解決・管轄の確認）、`src/constants.ts`、`src/config.ts`、`src/services/law-files.test.ts`、`src/services/file-store.test.ts`
 - 関連する Issue: houki-egov-mcp #19（添付ファイルと法令本文ファイル）
 
@@ -16,12 +16,12 @@
 
 ## 入力
 
-| 引数 | 必須 | 内容 |
-|---|---|---|
-| `law_name` | 必須 | 法令名または略称。例: `"民法"`、`"消法"` |
+| 引数        | 必須 | 内容                                                                                                  |
+| ----------- | ---- | ----------------------------------------------------------------------------------------------------- |
+| `law_name`  | 必須 | 法令名または略称。例: `"民法"`、`"消法"`                                                              |
 | `file_type` | 必須 | ファイル種別。`xml`（法令標準 XML）/ `json`（e-Gov の JSON）/ `html` / `rtf` / `docx`（Word）のどれか |
-| `at` | 任意 | 時点。`YYYY-MM-DD` 形式。その時点以前で最新の法令履歴の本文になる |
-| `save` | 任意 | `true` でファイルを取得して保存する。既定は `false`（URL だけを返し、ファイルは取らない） |
+| `at`        | 任意 | 時点。`YYYY-MM-DD` 形式。その時点以前で最新の法令履歴の本文になる                                     |
+| `save`      | 任意 | `true` でファイルを取得して保存する。既定は `false`（URL だけを返し、ファイルは取らない）             |
 
 保存先のパスは引数では指定できない。inputSchema に無い引数を渡したときの扱いは common_errors に書く。
 
@@ -53,13 +53,13 @@ flowchart TD
 
 `save` を省くか `false` にしたときは、e-Gov からファイルを取らず、次のフィールドを持つ応答を返す。`saved` は付けない。
 
-| フィールド | 内容 |
-|---|---|
-| `meta` | 法令の情報（`law_id`・`title`・`law_num`・`retrieved_at`・`url`、`at` を渡したときは `at`） |
-| `file_type` | 渡した `file_type` |
-| `content_type` | 種別から決めた Content-Type。`docx` は `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
-| `url` | 認証なしで開ける取得 URL。`https://laws.e-gov.go.jp/api/2/law_file/<file_type>/<law_id>`（例: `https://laws.e-gov.go.jp/api/2/law_file/docx/129AC0000000089`） |
-| `note` | 説明 |
+| フィールド     | 内容                                                                                                                                                           |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `meta`         | 法令の情報（`law_id`・`title`・`law_num`・`retrieved_at`・`url`、`at` を渡したときは `at`）                                                                    |
+| `file_type`    | 渡した `file_type`                                                                                                                                             |
+| `content_type` | 種別から決めた Content-Type。`docx` は `application/vnd.openxmlformats-officedocument.wordprocessingml.document`                                               |
+| `url`          | 認証なしで開ける取得 URL。`https://laws.e-gov.go.jp/api/2/law_file/<file_type>/<law_id>`（例: `https://laws.e-gov.go.jp/api/2/law_file/docx/129AC0000000089`） |
+| `note`         | 説明                                                                                                                                                           |
 
 ### SPEC-EGOV-GET-LAW-FILE-002 時点（at）は URL の asof になる
 

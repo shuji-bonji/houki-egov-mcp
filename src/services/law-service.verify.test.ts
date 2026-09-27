@@ -136,14 +136,14 @@ beforeEach(() => {
 });
 
 describe('verify_citations の inputSchema', () => {
-  it('引用の配列にも件ごとの形にも additionalProperties: false が付く', () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-001 引用の配列にも件ごとの形にも additionalProperties: false が付く', () => {
     const schema = verifyCitationsTool.inputSchema;
     expect(schema.additionalProperties).toBe(false);
     expect(schema.properties.citations.items.additionalProperties).toBe(false);
     expect(schema.properties.citations.maxItems).toBe(50);
   });
 
-  it('inputSchema に無い引数は検証で弾かれる', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-001 inputSchema に無い引数は検証で弾かれる', async () => {
     const validator = fromJsonSchema(verifyCitationsTool.inputSchema as unknown as JsonSchemaType);
     const result = await validator['~standard'].validate({
       citations: [{ law_name: '所得税法', article: '9', note: '余計な引数' }],
@@ -153,7 +153,7 @@ describe('verify_citations の inputSchema', () => {
 });
 
 describe('verifyCitations', () => {
-  it('実在する引用と存在しない引用を混ぜても、件ごとに判定が返る', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-004 SPEC-EGOV-VERIFY-CITATIONS-005 SPEC-EGOV-VERIFY-CITATIONS-006 SPEC-EGOV-VERIFY-CITATIONS-007 SPEC-EGOV-VERIFY-CITATIONS-008 SPEC-EGOV-VERIFY-CITATIONS-009 SPEC-EGOV-VERIFY-CITATIONS-010 SPEC-EGOV-VERIFY-CITATIONS-011 SPEC-EGOV-VERIFY-CITATIONS-012 SPEC-EGOV-VERIFY-CITATIONS-013 SPEC-EGOV-VERIFY-CITATIONS-014 SPEC-EGOV-VERIFY-CITATIONS-015 SPEC-EGOV-VERIFY-CITATIONS-016 実在する引用と存在しない引用を混ぜても、件ごとに判定が返る', async () => {
     const res = await verifyCitations({
       citations: [
         { law_name: '所得税法', article: '57の2', paragraph: 2, item: 1, label: '所法57の2②一' },
@@ -246,7 +246,7 @@ describe('verifyCitations', () => {
     });
   });
 
-  it('全件が実在すれば all_found が true になる', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-016 全件が実在すれば all_found が true になる', async () => {
     const res = await verifyCitations({
       citations: [
         { law_name: '所得税法', article: '9', item: 1 },
@@ -263,7 +263,7 @@ describe('verifyCitations', () => {
     });
   });
 
-  it('同じ法令名が並んでも e-Gov の検索は 1 回で済む', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-017 同じ法令名が並んでも e-Gov の検索は 1 回で済む', async () => {
     const res = await verifyCitations({
       citations: [
         { law_name: '所得税法施行令', article: '1' },
@@ -275,7 +275,7 @@ describe('verifyCitations', () => {
     expect(searchCalls.filter((c) => c.law_title === '所得税法施行令')).toHaveLength(1);
   });
 
-  it('law_name と law_id のどちらも無い引用があれば、ツール全体が INVALID_ARGUMENT になる', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-003 law_name と law_id のどちらも無い引用があれば、ツール全体が INVALID_ARGUMENT になる', async () => {
     const res = await verifyCitations({
       citations: [{ law_name: '所得税法', article: '9' }, { article: '9' }],
     });
@@ -284,13 +284,13 @@ describe('verifyCitations', () => {
     expect(res.error).toContain('citations[1]');
   });
 
-  it('citations が空ならツール全体が INVALID_ARGUMENT になる', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-002 citations が空ならツール全体が INVALID_ARGUMENT になる', async () => {
     const res = await verifyCitations({ citations: [] });
     if (!isError(res)) throw new Error('エラーにならなかった');
     expect(res.code).toBe('INVALID_ARGUMENT');
   });
 
-  it('条番号の書き方が不正なら件ごとに INVALID_ARTICLE_NUM を返す', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-018 条番号の書き方が不正なら件ごとに INVALID_ARTICLE_NUM を返す', async () => {
     const res = await verifyCitations({
       citations: [{ law_name: '所得税法', article: '三〇' }],
     });
@@ -299,7 +299,7 @@ describe('verifyCitations', () => {
     expect(res.results[0].code).toBe('INVALID_ARTICLE_NUM');
   });
 
-  it('e-Gov に問い合わせられなかったときは、件ごとの判定ではなくツール全体のエラーを返す', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-019 e-Gov に問い合わせられなかったときは、件ごとの判定ではなくツール全体のエラーを返す', async () => {
     const mod = await import('./egov-client.js');
     const spy = vi.spyOn(mod, 'getLawData').mockRejectedValue(new Error('getaddrinfo ENOTFOUND'));
     const res = await verifyCitations({ citations: [{ law_name: '所得税法', article: '9' }] });

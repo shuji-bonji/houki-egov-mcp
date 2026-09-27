@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: CLI
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/cli/index.ts`、`src/config.ts`、`src/services/bulk/sync.ts`、`src/services/bulk/zip-fetcher.ts`、`src/services/bulk/ingester.ts`、`src/services/bulk/sync.test.ts`
 - 関連する Issue: houki-egov-mcp #21（`--sync` の追加）
 
@@ -15,12 +15,12 @@
 
 ## 入力
 
-| フラグ・環境変数 | 必須 | 内容 |
-|---|---|---|
-| `--sync` / `--bulk-download-incremental` | 必須 | 差分での最新化を行う。2 つは同じ動作 |
-| `HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS` | 任意 | 最後に同期した日から差分で追える日数の上限（既定 90。e-Gov が日次差分を公開している範囲） |
-| `HOUKI_EGOV_DB_PATH` | 任意 | DB ファイルの場所。既定は `${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/laws.db` |
-| `HOUKI_EGOV_BULK_RETRY` | 任意 | 1 日分の zip の取得に失敗したときに試す回数（既定 3） |
+| フラグ・環境変数                         | 必須 | 内容                                                                                      |
+| ---------------------------------------- | ---- | ----------------------------------------------------------------------------------------- |
+| `--sync` / `--bulk-download-incremental` | 必須 | 差分での最新化を行う。2 つは同じ動作                                                      |
+| `HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS`      | 任意 | 最後に同期した日から差分で追える日数の上限（既定 90。e-Gov が日次差分を公開している範囲） |
+| `HOUKI_EGOV_DB_PATH`                     | 任意 | DB ファイルの場所。既定は `${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/laws.db`            |
+| `HOUKI_EGOV_BULK_RETRY`                  | 任意 | 1 日分の zip の取得に失敗したときに試す回数（既定 3）                                     |
 
 ## 処理の流れ
 

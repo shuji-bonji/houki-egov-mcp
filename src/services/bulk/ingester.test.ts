@@ -109,7 +109,7 @@ describe('ingestZip', () => {
     closeDb(db);
   });
 
-  it('CSV + XML 1 件を正常に ingest', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-008 SPEC-EGOV-CLI-BULK-DOWNLOAD-011 CSV + XML 1 件を正常に ingest', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI]) },
       {
@@ -141,7 +141,7 @@ describe('ingestZip', () => {
     expect(law.fetched_at).toBe(NOW_ISO);
   });
 
-  it('articles テーブルにも本文が入る', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-012 articles テーブルにも本文が入る', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI]) },
       {
@@ -161,7 +161,7 @@ describe('ingestZip', () => {
     expect(articles[0].body as string).toContain('改暦ノ儀');
   });
 
-  it('articles_fts に trigger 経由で同期される', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-013 articles_fts に trigger 経由で同期される', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_YOKIN]) },
       {
@@ -177,7 +177,7 @@ describe('ingestZip', () => {
     expect(hits.length).toBeGreaterThan(0);
   });
 
-  it('body は normalizeJpText 済み、body_raw は原文のまま (Phase 2-7 Normalize-everywhere)', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-013 body は normalizeJpText 済み、body_raw は原文のまま (Phase 2-7 Normalize-everywhere)', async () => {
     const xml = XML_KAIREKI.replace(
       '今般改暦ノ儀別紙　詔書ノ通被　仰出候条此旨相達候事',
       '第１２条　ＰＬ法－２　今般改暦ノ儀'
@@ -206,13 +206,13 @@ describe('ingestZip', () => {
     expect(law.law_title).toBe('明治五年太政官布告第三百三十七号（改暦ノ布告）');
   });
 
-  it('content_hash は INGEST_VERSION を含む (パーサー変更で再 ingest を強制できる)', () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-014 content_hash は INGEST_VERSION を含む (パーサー変更で再 ingest を強制できる)', () => {
     const buf = Buffer.from('<Law/>');
     expect(contentHashOf(buf)).not.toBe(createHash('sha256').update(buf).digest('hex'));
     expect(contentHashOf(buf)).toBe(contentHashOf(Buffer.from('<Law/>')));
   });
 
-  it('laws_fts (standalone) にも手動で同期される', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-013 laws_fts (standalone) にも手動で同期される', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_YOKIN]) },
       {
@@ -229,7 +229,7 @@ describe('ingestZip', () => {
     expect(hits[0].law_revision_id).toBe('346AC0000000034_19710401_000000000000000');
   });
 
-  it('未施行フラグ (○) は current_revision_status=UnEnforced', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-011 未施行フラグ (○) は current_revision_status=UnEnforced', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_UNENFORCED]) },
       {
@@ -245,7 +245,7 @@ describe('ingestZip', () => {
     expect(law.current_revision_status).toBe('UnEnforced');
   });
 
-  it('content_hash 一致で再 ingest を no-op (skip)', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-014 content_hash 一致で再 ingest を no-op (skip)', async () => {
     const entries = [
       { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI]) },
       {
@@ -271,7 +271,7 @@ describe('ingestZip', () => {
     expect(law.fetched_at).toBe(NOW_ISO); // 1 回目の値のまま
   });
 
-  it('content 変化で再 ingest が UPDATE される', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-014 content 変化で再 ingest が UPDATE される', async () => {
     const entriesV1 = [
       { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI]) },
       {
@@ -305,7 +305,7 @@ describe('ingestZip', () => {
     expect(article.body).toContain('改正');
   });
 
-  it('複数法令を順序通り ingest', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-011 複数法令を順序通り ingest', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI, CSV_YOKIN, CSV_UNENFORCED]) },
       {
@@ -329,7 +329,7 @@ describe('ingestZip', () => {
     expect(count).toBe(3);
   });
 
-  it('CSV にない zip エントリは無視される', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-015 CSV にない zip エントリは無視される', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI]) },
       {
@@ -350,7 +350,7 @@ describe('ingestZip', () => {
     expect(count).toBe(1);
   });
 
-  it('XML が見つからない CSV 行は failed カウンタに計上', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-015 XML が見つからない CSV 行は failed カウンタに計上', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI]) },
       // XML が無い
@@ -360,7 +360,7 @@ describe('ingestZip', () => {
     expect(r.upserted).toBe(0);
   });
 
-  it('壊れた XML は skip (default onXmlError)', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-015 壊れた XML は skip (default onXmlError)', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI]) },
       {
@@ -386,7 +386,7 @@ describe('ingestZip', () => {
     );
   });
 
-  it('CSV が無いと IngestError', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-010 CSV が無いと IngestError', async () => {
     const zip = createMemoryZip([
       {
         path: '105DF0000000337_18721109_000000000000000/105DF0000000337_18721109_000000000000000.xml',
@@ -396,7 +396,7 @@ describe('ingestZip', () => {
     await expect(ingestZip({ db, zip, nowIso: NOW_ISO })).rejects.toThrow(IngestError);
   });
 
-  it('sync_state を upsert する (source=all_xml)', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-017 sync_state を upsert する (source=all_xml)', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI]) },
       {
@@ -413,7 +413,7 @@ describe('ingestZip', () => {
     expect(ss.total_laws).toBe(1);
   });
 
-  it('source=incremental では既存の last_full_dl_at を保持', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-018 source=incremental では既存の last_full_dl_at を保持', async () => {
     // 先に full DL
     await ingestZip({
       db,
@@ -448,7 +448,7 @@ describe('ingestZip', () => {
     expect(ss.bulk_source).toBe('incremental');
   });
 
-  it('source=incremental の total_laws は差分 CSV の行数ではなく DB の法令数', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-018 source=incremental の total_laws は差分 CSV の行数ではなく DB の法令数', async () => {
     await ingestZip({
       db,
       zip: createMemoryZip([
@@ -515,7 +515,7 @@ describe('ingestZip', () => {
     expect(ss.bulk_source).toBe('all_xml');
   });
 
-  it('同じ法令の新しい版が現行として届いたら、前の版を PreviousEnforced に落とす', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-016 同じ法令の新しい版が現行として届いたら、前の版を PreviousEnforced に落とす', async () => {
     // 全件: 預金保険法の初版 (19710401)
     await ingestZip({
       db,
@@ -567,7 +567,7 @@ describe('ingestZip', () => {
     ]);
   });
 
-  it('1 つの zip に同じ法令の古い版が後から並んでいても、新しい版を落とさない', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-016 1 つの zip に同じ法令の古い版が後から並んでいても、新しい版を落とさない', async () => {
     // 全件 zip の fixture (law-db-fixture) と同じ並び: 現行 (20231001) の後に旧 (20191001)
     const csvOld = CSV_YOKIN.replace(
       '19710401_000000000000000',
@@ -610,7 +610,7 @@ describe('ingestZip', () => {
     ]);
   });
 
-  it('未施行の版が届いても、現行の版はそのまま', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-016 未施行の版が届いても、現行の版はそのまま', async () => {
     await ingestZip({
       db,
       zip: createMemoryZip([
@@ -651,7 +651,7 @@ describe('ingestZip', () => {
     expect(rows.map((r) => r.current_revision_status)).toEqual(['CurrentEnforced', 'UnEnforced']);
   });
 
-  it('progress callback を発火する', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-019 progress callback を発火する', async () => {
     const zip = createMemoryZip([
       { path: 'all_law_list.csv', content: buildCsv([CSV_KAIREKI, CSV_YOKIN, CSV_UNENFORCED]) },
       {

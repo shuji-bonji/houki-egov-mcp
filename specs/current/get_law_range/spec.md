@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`（`get_law_range`）、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-tree.ts`、`src/formatters/markdown.ts`、`src/utils/article-num.ts`、`src/constants.ts`、`src/services/law-service.range.test.ts`、`src/services/law-tree.test.ts`、`src/utils/article-num.test.ts`
 - 関連する Issue: houki-egov-mcp #22（章・節単位の分割取得）
 
@@ -17,19 +17,19 @@
 
 範囲の指定は「編・章・節・款・目の番号」「`path`」「`suppl_index`」の 3 通りで、1 回の呼び出しで使えるのはどれか 1 つだけ。
 
-| 引数 | 必須 | 内容 |
-|---|---|---|
-| `law_name` | 必須 | 法令名または略称。例: `民法`、`会社法`、`消法` |
-| `part` | 任意 | 編の番号。`3` / `"3"` / `"三"` / `"第三編"` / 枝番号 `"2の2"` |
-| `chapter` | 任意 | 章の番号（書き方は `part` と同じ）。章の番号は編ごとに振り直されるので、編を持つ法令では `part` も渡す |
-| `section` | 任意 | 節の番号 |
-| `subsection` | 任意 | 款の番号 |
-| `division` | 任意 | 目の番号 |
-| `path` | 任意 | 範囲のパス。`get_toc` の `toc[].path` をそのまま渡せる。例: `"Part3/Chapter2"` |
-| `suppl_index` | 任意 | 附則の番号（1 始まり）。`get_toc` の `suppl_provisions[].index` と同じ |
+| 引数           | 必須 | 内容                                                                                                         |
+| -------------- | ---- | ------------------------------------------------------------------------------------------------------------ |
+| `law_name`     | 必須 | 法令名または略称。例: `民法`、`会社法`、`消法`                                                               |
+| `part`         | 任意 | 編の番号。`3` / `"3"` / `"三"` / `"第三編"` / 枝番号 `"2の2"`                                                |
+| `chapter`      | 任意 | 章の番号（書き方は `part` と同じ）。章の番号は編ごとに振り直されるので、編を持つ法令では `part` も渡す       |
+| `section`      | 任意 | 節の番号                                                                                                     |
+| `subsection`   | 任意 | 款の番号                                                                                                     |
+| `division`     | 任意 | 目の番号                                                                                                     |
+| `path`         | 任意 | 範囲のパス。`get_toc` の `toc[].path` をそのまま渡せる。例: `"Part3/Chapter2"`                               |
+| `suppl_index`  | 任意 | 附則の番号（1 始まり）。`get_toc` の `suppl_provisions[].index` と同じ                                       |
 | `from_article` | 任意 | 範囲の中のこの条から返す。前の応答の `next_from_article` を渡す。例: `"561"`、`"548の4"`、`"第五百六十一条"` |
-| `max_chars` | 任意 | 返す条本文の文字数の上限。既定 30,000、2,000〜120,000 |
-| `at` | 任意 | 時点指定（`YYYY-MM-DD`） |
+| `max_chars`    | 任意 | 返す条本文の文字数の上限。既定 30,000、2,000〜120,000                                                        |
+| `at`           | 任意 | 時点指定（`YYYY-MM-DD`）                                                                                     |
 
 ## 処理の流れ
 
@@ -68,16 +68,16 @@ flowchart TD
 
 指定した範囲の中の条だけを返す。応答は次のフィールドを持つ。
 
-| フィールド | 内容 |
-|---|---|
-| `range.path` | 本則の範囲のパス（例: `Part1/Chapter1`）。編・章・節の番号で指定したときも付く |
-| `range.tag` | 範囲の種類。`Part` / `Chapter` / `Section` / `Subsection` / `Division`、附則は `SupplProvision` |
-| `range.titles` | 範囲の見出しの連なり（上位から）。例: `["第一編　総則", "第一章　通則"]` |
-| `range.article_count` | 範囲が持つ条の数 |
-| `range.returned_count` | 本文を返した条の数 |
-| `range.truncated` | 文字数の上限で打ち切ったか |
-| `articles` | 返した条の一覧。要素は `num`（e-Gov の条番号。例: `"1"`）・`label`（表示用。例: `第1条`）・`caption`（条見出し。例: `（趣旨）`） |
-| `markdown` | 見出し `# <法令名> <範囲の見出し…>` と、条ごとの `## 第N条` の節 |
+| フィールド             | 内容                                                                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `range.path`           | 本則の範囲のパス（例: `Part1/Chapter1`）。編・章・節の番号で指定したときも付く                                                   |
+| `range.tag`            | 範囲の種類。`Part` / `Chapter` / `Section` / `Subsection` / `Division`、附則は `SupplProvision`                                  |
+| `range.titles`         | 範囲の見出しの連なり（上位から）。例: `["第一編　総則", "第一章　通則"]`                                                         |
+| `range.article_count`  | 範囲が持つ条の数                                                                                                                 |
+| `range.returned_count` | 本文を返した条の数                                                                                                               |
+| `range.truncated`      | 文字数の上限で打ち切ったか                                                                                                       |
+| `articles`             | 返した条の一覧。要素は `num`（e-Gov の条番号。例: `"1"`）・`label`（表示用。例: `第1条`）・`caption`（条見出し。例: `（趣旨）`） |
+| `markdown`             | 見出し `# <法令名> <範囲の見出し…>` と、条ごとの `## 第N条` の節                                                                 |
 
 例: `part: 1, chapter: 1` では、第一編第一章の第1条・第2条だけを返し、`range.path` は `Part1/Chapter1`、`range.tag` は `Chapter`、`range.article_count` と `range.returned_count` は 2、`markdown` の見出しは `# テスト法 第一編　総則 第一章　通則` で、第一編第二章の `## 第3条` は含まない。
 
@@ -121,14 +121,14 @@ flowchart TD
 
 返す条本文の文字数（条ごとの見出しを含む）が `max_chars` を超える手前で、条の単位で打ち切る。条の途中では切らない。打ち切ったときは次を返す。
 
-| フィールド | 内容 |
-|---|---|
-| `range.truncated` | `true` |
-| `range.next_from_article` | 続きの最初の条番号。`from_article` にそのまま渡せる |
-| `range.first_article` / `range.last_article` | 返した最初と最後の条（例: `第5条` / `第6条`） |
-| `range.body_chars` | 返した条本文の文字数（`max_chars` 以下） |
-| `range.note` | 何件のうち何件を返したかと、`from_article: "<続きの条番号>"` を付けて呼び直す案内 |
-| `range.next_actions` | `get_law_range` の呼び出し例。`reason` は `同じ範囲の続きの条から取れます`、`example` は `law_name`・範囲の `path`（附則なら `suppl_index`）・`from_article` |
+| フィールド                                   | 内容                                                                                                                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `range.truncated`                            | `true`                                                                                                                                                       |
+| `range.next_from_article`                    | 続きの最初の条番号。`from_article` にそのまま渡せる                                                                                                          |
+| `range.first_article` / `range.last_article` | 返した最初と最後の条（例: `第5条` / `第6条`）                                                                                                                |
+| `range.body_chars`                           | 返した条本文の文字数（`max_chars` 以下）                                                                                                                     |
+| `range.note`                                 | 何件のうち何件を返したかと、`from_article: "<続きの条番号>"` を付けて呼び直す案内                                                                            |
+| `range.next_actions`                         | `get_law_range` の呼び出し例。`reason` は `同じ範囲の続きの条から取れます`、`example` は `law_name`・範囲の `path`（附則なら `suppl_index`）・`from_article` |
 
 `markdown` の末尾にも同じ `note`（`上限で打ち切りました` を含む）を書く。
 

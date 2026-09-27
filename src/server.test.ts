@@ -56,13 +56,13 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
     await client.close();
   });
 
-  it('initialize で PACKAGE_INFO の name / version を返す', () => {
+  it('SPEC-EGOV-COMMON-ERRORS-011 initialize で PACKAGE_INFO の name / version を返す', () => {
     const info = client.getServerVersion();
     expect(info?.name).toBe(PACKAGE_INFO.name);
     expect(info?.version).toBe(PACKAGE_INFO.version);
   });
 
-  it('tools/list が definitions.ts の全ツールを返す', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-009 tools/list が definitions.ts の全ツールを返す', async () => {
     const res = await client.listTools();
     const names = res.tools.map((t) => t.name).sort();
     expect(names).toEqual(tools.map((t) => t.name).sort());
@@ -70,14 +70,14 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
     expect(names).toContain('search_fulltext');
   });
 
-  it('tools/list の inputSchema が JSON Schema のまま渡る', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-010 tools/list の inputSchema が JSON Schema のまま渡る', async () => {
     const res = await client.listTools();
     const searchLaw = res.tools.find((t) => t.name === 'search_law');
     expect(searchLaw?.inputSchema.type).toBe('object');
     expect(searchLaw?.inputSchema.required).toEqual(['keyword']);
   });
 
-  it('存在しないツール名は UNKNOWN_TOOL + isError: true (family error contract)', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-002 存在しないツール名は UNKNOWN_TOOL + isError: true (family error contract)', async () => {
     const res = await client.callTool({ name: 'no_such_tool', arguments: {} });
     expect(res.isError).toBe(true);
     const body = JSON.parse(firstText(res));
@@ -86,7 +86,7 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
     expect(body.next_actions[0].action).toBe('list_tools');
   });
 
-  it('inputSchema に合わない引数は INVALID_ARGUMENT + isError: true (handler は呼ばれない)', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-003 SPEC-EGOV-COMMON-ERRORS-006 inputSchema に合わない引数は INVALID_ARGUMENT + isError: true (handler は呼ばれない)', async () => {
     const res = await client.callTool({
       name: 'explain_law_type',
       // biome-ignore lint/suspicious/noExplicitAny: 型違反を意図的に送る
@@ -108,14 +108,14 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
     expect(JSON.parse(firstText(res3)).code).toBe('INVALID_ARGUMENT');
   });
 
-  it('すべてのツールの inputSchema に additionalProperties: false が付く (v0.6.0)', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-005 すべてのツールの inputSchema に additionalProperties: false が付く (v0.6.0)', async () => {
     const res = await client.listTools();
     for (const t of res.tools) {
       expect(t.inputSchema.additionalProperties).toBe(false);
     }
   });
 
-  it('inputSchema に無い引数は INVALID_ARGUMENT で、detail.issues の path に引数名が入る (v0.6.0)', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-004 inputSchema に無い引数は INVALID_ARGUMENT で、detail.issues の path に引数名が入る (v0.6.0)', async () => {
     const res = await client.callTool({
       name: 'explain_law_type',
       arguments: { name: '政令', typo: 1 },
@@ -126,7 +126,7 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
     expect(body.detail.issues[0].path).toBe('typo');
   });
 
-  it('get_law の item は文字列も inputSchema の検証を通る (v0.6.0)', async () => {
+  it('SPEC-EGOV-GET-LAW-001 SPEC-EGOV-GET-LAW-002 get_law の item は文字列も inputSchema の検証を通る (v0.6.0)', async () => {
     // 通達名（消基通）なので handler が OUT_OF_SCOPE を返す（e-Gov には触れない）。
     // INVALID_ARGUMENT にならないことで、item の文字列が inputSchema の検証を通ったことを確かめる
     const res = await client.callTool({
@@ -137,14 +137,14 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
     expect(body.code).toBe('OUT_OF_SCOPE');
   });
 
-  it('explain_law_type が isError なしで JSON を返す', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-001 SPEC-EGOV-EXPLAIN-LAW-TYPE-001 explain_law_type が isError なしで JSON を返す', async () => {
     const res = await client.callTool({ name: 'explain_law_type', arguments: { name: '政令' } });
     expect(res.isError).toBeFalsy();
     const body = JSON.parse(firstText(res));
     expect(body.name).toBe('政令');
   });
 
-  it('LawServiceError を返す handler は isError: true になる', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-001 LawServiceError を返す handler は isError: true になる', async () => {
     const res = await client.callTool({ name: '__test_law_error', arguments: {} });
     expect(res.isError).toBe(true);
     const body = JSON.parse(firstText(res));
@@ -152,7 +152,7 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
     expect(body.hint).toBe('テスト用');
   });
 
-  it('handler が throw すると INTERNAL_ERROR + retryable: true (protocol error にしない)', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-007 handler が throw すると INTERNAL_ERROR + retryable: true (protocol error にしない)', async () => {
     const res = await client.callTool({ name: '__test_throw', arguments: {} });
     expect(res.isError).toBe(true);
     const body = JSON.parse(firstText(res));
@@ -161,7 +161,7 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
     expect(body.detail.cause).toBe('boom');
   });
 
-  it('見つからない法令種別は found: false を isError なしで返す（後方互換）', async () => {
+  it('SPEC-EGOV-EXPLAIN-LAW-TYPE-005 見つからない法令種別は found: false を isError なしで返す（後方互換）', async () => {
     const res = await client.callTool({
       name: 'explain_law_type',
       arguments: { name: '存在しない法令種別' },
@@ -171,7 +171,7 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
     expect(body.found).toBe(false);
   });
 
-  it('resolve_abbreviation が略称を解決する', async () => {
+  it('SPEC-EGOV-RESOLVE-ABBREVIATION-001 resolve_abbreviation が略称を解決する', async () => {
     const res = await client.callTool({
       name: 'resolve_abbreviation',
       arguments: { abbr: '労基法' },

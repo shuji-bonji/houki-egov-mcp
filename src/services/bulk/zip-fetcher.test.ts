@@ -82,7 +82,7 @@ describe('downloadZip', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('正常な zip を取得して dest に保存する', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-005 正常な zip を取得して dest に保存する', async () => {
     const mockFetch = (async () => makeMockResponse(VALID_ZIP_BYTES)) as unknown as typeof fetch;
 
     const result = await downloadZip({
@@ -101,7 +101,7 @@ describe('downloadZip', () => {
     expect(saved.equals(VALID_ZIP_BYTES)).toBe(true);
   });
 
-  it('zip マジック不一致で ZipFormatError', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-005 zip マジック不一致で ZipFormatError', async () => {
     const mockFetch = (async () => makeMockResponse(NOT_A_ZIP_BYTES)) as unknown as typeof fetch;
 
     await expect(
@@ -117,7 +117,7 @@ describe('downloadZip', () => {
     await expect(access(`${dest}.partial`)).rejects.toBeDefined();
   });
 
-  it('fetch error → retry → 成功', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-003 fetch error → retry → 成功', async () => {
     let calls = 0;
     const mockFetch = (async () => {
       calls++;
@@ -138,7 +138,7 @@ describe('downloadZip', () => {
     expect(saved.equals(VALID_ZIP_BYTES)).toBe(true);
   });
 
-  it('maxRetries 回連続失敗で BulkFetchError', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-004 maxRetries 回連続失敗で BulkFetchError', async () => {
     let calls = 0;
     const mockFetch = (async () => {
       calls++;
@@ -160,7 +160,7 @@ describe('downloadZip', () => {
     await expect(access(`${dest}.partial`)).rejects.toBeDefined();
   });
 
-  it('HTTP 500 で BulkFetchError + retry', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-003 HTTP 500 で BulkFetchError + retry', async () => {
     let calls = 0;
     const mockFetch = (async () => {
       calls++;
@@ -177,7 +177,7 @@ describe('downloadZip', () => {
     expect(result.attempts).toBe(3);
   });
 
-  it('progress callback を発火する', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-006 progress callback を発火する', async () => {
     // 5 MB の chunk を 1 つで返し、progress interval を 1 MB にすると 1 回呼ばれる + 完了
     // ただし pipeline 完了直前の最終フックで合計 2 回呼ばれることがあるため >= 1 とする
     const totalBytes = 5_000_000;
@@ -203,7 +203,7 @@ describe('downloadZip', () => {
     expect(last.bytesDownloaded).toBe(totalBytes);
   });
 
-  it('expectedBytes 超えても ratio は 1.0 で頭打ち', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-006 expectedBytes 超えても ratio は 1.0 で頭打ち', async () => {
     // expectedBytes(2 MB) より大きい 5 MB を返す
     const mockFetch = (async () =>
       makeChunkedResponse(5_000_000, 5_000_000, true)) as unknown as typeof fetch;
@@ -257,7 +257,7 @@ describe('downloadFullZip / downloadIncrementalZip (URL builder ラッパ)', () 
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('downloadFullZip は file_section=1 の URL を fetch する', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-002 downloadFullZip は file_section=1 の URL を fetch する', async () => {
     let capturedUrl = '';
     const mockFetch = (async (url: string) => {
       capturedUrl = url;
@@ -269,7 +269,7 @@ describe('downloadFullZip / downloadIncrementalZip (URL builder ラッパ)', () 
     expect(capturedUrl).toContain('only_xml_flag=true');
   });
 
-  it('downloadIncrementalZip は file_section=3 + update_date を含む URL を fetch する', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-002 downloadIncrementalZip は file_section=3 + update_date を含む URL を fetch する', async () => {
     let capturedUrl = '';
     const mockFetch = (async (url: string) => {
       capturedUrl = url;
@@ -292,7 +292,7 @@ describe('verifyZipMagic (内部経由テスト)', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('短すぎるファイル (3 byte 未満) は ZipFormatError', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-005 短すぎるファイル (3 byte 未満) は ZipFormatError', async () => {
     const dest = join(tempDir, 'short.zip');
     const mockFetch = (async () =>
       makeMockResponse(Buffer.from([0x50, 0x4b]))) as unknown as typeof fetch;

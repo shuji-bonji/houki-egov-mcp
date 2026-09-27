@@ -166,7 +166,7 @@ beforeEach(() => {
 });
 
 describe('getRelatedLaws', () => {
-  it('所得税法から、実在する施行令と施行規則を law_id 付きで返す', async () => {
+  it('SPEC-EGOV-GET-RELATED-LAWS-001 SPEC-EGOV-GET-RELATED-LAWS-007 SPEC-EGOV-GET-RELATED-LAWS-008 所得税法から、実在する施行令と施行規則を law_id 付きで返す', async () => {
     const r = await getRelatedLaws({ law_name: '所得税法' });
     if ('error' in r) throw new Error(r.error);
     expect(r.law).toEqual({
@@ -184,7 +184,7 @@ describe('getRelatedLaws', () => {
     expect(r.next_actions.map((a) => a.action)).toEqual(['get_toc', 'get_toc']);
   });
 
-  it('略称（所令）から親の法律と兄弟の施行規則を返す', async () => {
+  it('SPEC-EGOV-GET-RELATED-LAWS-002 SPEC-EGOV-GET-RELATED-LAWS-003 略称（所令）から親の法律と兄弟の施行規則を返す', async () => {
     const r = await getRelatedLaws({ law_name: '所令' });
     if ('error' in r) throw new Error(r.error);
     expect(r.related.map((x) => [x.relation, x.title])).toEqual([
@@ -193,7 +193,7 @@ describe('getRelatedLaws', () => {
     ]);
   });
 
-  it('候補が e-Gov に無ければ related は空、not_found に候補名を入れる（エラーにしない）', async () => {
+  it('SPEC-EGOV-GET-RELATED-LAWS-005 候補が e-Gov に無ければ related は空、not_found に候補名を入れる（エラーにしない）', async () => {
     const r = await getRelatedLaws({ law_name: '民法' });
     if ('error' in r) throw new Error(r.error);
     expect(r.related).toEqual([]);
@@ -203,14 +203,14 @@ describe('getRelatedLaws', () => {
     ]);
   });
 
-  it('知らない法令名は LAW_NOT_FOUND', async () => {
+  it('SPEC-EGOV-GET-RELATED-LAWS-006 知らない法令名は LAW_NOT_FOUND', async () => {
     const r = await getRelatedLaws({ law_name: '存在しない法' });
     expect('code' in r && r.code).toBe('LAW_NOT_FOUND');
   });
 });
 
 describe('getArticleReferences', () => {
-  it('他法令の条は law_id 付き、同一法令内は internal、委任には施行令・施行規則が付く', async () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-001 SPEC-EGOV-GET-ARTICLE-REFERENCES-003 SPEC-EGOV-GET-ARTICLE-REFERENCES-004 SPEC-EGOV-GET-ARTICLE-REFERENCES-005 SPEC-EGOV-GET-ARTICLE-REFERENCES-006 SPEC-EGOV-GET-ARTICLE-REFERENCES-007 SPEC-EGOV-GET-ARTICLE-REFERENCES-008 SPEC-EGOV-GET-ARTICLE-REFERENCES-012 SPEC-EGOV-GET-ARTICLE-REFERENCES-020 SPEC-EGOV-GET-ARTICLE-REFERENCES-022 他法令の条は law_id 付き、同一法令内は internal、委任には施行令・施行規則が付く', async () => {
     const r = await getArticleReferences({ law_name: '所得税法', article: '57の2' });
     if ('error' in r) throw new Error(r.error);
     expect(r.meta.article).toBe('57の2');
@@ -267,7 +267,7 @@ describe('getArticleReferences', () => {
     expect(r.coverage.note).toContain('網羅性は保証しません');
   });
 
-  it('paragraph を指定するとその項だけを対象にする', async () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-014 SPEC-EGOV-GET-ARTICLE-REFERENCES-022 paragraph を指定するとその項だけを対象にする', async () => {
     const r = await getArticleReferences({ law_name: '所得税法', article: '57の2', paragraph: 1 });
     if ('error' in r) throw new Error(r.error);
     expect(r.meta.paragraph).toBe(1);
@@ -275,7 +275,7 @@ describe('getArticleReferences', () => {
     expect(r.delegations).toEqual([]);
   });
 
-  it('next_actions の example は、そのまま get_law / search_fulltext の inputSchema を通る', async () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-015 SPEC-EGOV-GET-ARTICLE-REFERENCES-016 next_actions の example は、そのまま get_law / search_fulltext の inputSchema を通る', async () => {
     const r = await getArticleReferences({ law_name: '所得税法', article: '57の2' });
     if ('error' in r) throw new Error(r.error);
     const getLaw = fromJsonSchema(getLawTool.inputSchema as unknown as JsonSchemaType);
@@ -299,7 +299,7 @@ describe('getArticleReferences', () => {
     ]);
   });
 
-  it('同じ法令番号・候補名は 1 回しか e-Gov に問い合わせない', async () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-017 同じ法令番号・候補名は 1 回しか e-Gov に問い合わせない', async () => {
     await getArticleReferences({ law_name: '所得税法', article: '57の2' });
     const nums = calls.filter((c) => c.law_num).map((c) => c.law_num);
     expect(nums).toEqual(['昭和四十九年法律第百十六号']);
@@ -307,19 +307,19 @@ describe('getArticleReferences', () => {
     expect(new Set(titles).size).toBe(titles.length);
   });
 
-  it('条が無ければ ARTICLE_NOT_FOUND、項が無ければ ARTICLE_NOT_FOUND', async () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-018 条が無ければ ARTICLE_NOT_FOUND、項が無ければ ARTICLE_NOT_FOUND', async () => {
     const r1 = await getArticleReferences({ law_name: '所得税法', article: '999' });
     expect('code' in r1 && r1.code).toBe('ARTICLE_NOT_FOUND');
     const r2 = await getArticleReferences({ law_name: '所得税法', article: '57の2', paragraph: 9 });
     expect('code' in r2 && r2.code).toBe('ARTICLE_NOT_FOUND');
   });
 
-  it('条番号の形式が不正なら INVALID_ARTICLE_NUM', async () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-019 条番号の形式が不正なら INVALID_ARTICLE_NUM', async () => {
     const r = await getArticleReferences({ law_name: '所得税法', article: '三〇' });
     expect('code' in r && r.code).toBe('INVALID_ARTICLE_NUM');
   });
 
-  it('施行令の条では「法第N条」が親の法律への external になり、「政令で定める」は自身（self: true）', async () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-010 SPEC-EGOV-GET-ARTICLE-REFERENCES-013 SPEC-EGOV-GET-ARTICLE-REFERENCES-016 施行令の条では「法第N条」が親の法律への external になり、「政令で定める」は自身（self: true）', async () => {
     const r = await getArticleReferences({ law_name: '所得税法施行令', article: '167の3' });
     if ('error' in r) throw new Error(r.error);
     expect(r.references).toEqual([

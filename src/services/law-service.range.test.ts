@@ -160,7 +160,7 @@ beforeEach(() => {
 });
 
 describe('get_law_range の範囲の指定（#22）', () => {
-  it('編と章を指定するとその章の条だけを返し、範囲を range に入れる', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-001 編と章を指定するとその章の条だけを返し、範囲を range に入れる', async () => {
     const r = await ok(getLawRange({ law_name: TITLE, part: 1, chapter: 1 }));
 
     expect(r.range.path).toBe('Part1/Chapter1');
@@ -176,20 +176,20 @@ describe('get_law_range の範囲の指定（#22）', () => {
     expect(r.markdown).not.toContain('## 第3条');
   });
 
-  it('漢数字と「第三編」の表記でも同じ範囲を指す', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-002 漢数字と「第三編」の表記でも同じ範囲を指す', async () => {
     const r = await ok(getLawRange({ law_name: TITLE, part: '第二編', chapter: '二' }));
     expect(r.range.path).toBe('Part2/Chapter2');
     expect(r.range.article_count).toBe(4);
   });
 
-  it('節の枝番号（第二節の二）を指定できる', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-002 節の枝番号（第二節の二）を指定できる', async () => {
     const r = await ok(getLawRange({ law_name: TITLE, part: 2, chapter: 2, section: '2の2' }));
     expect(r.range.path).toBe('Part2/Chapter2/Section2_2');
     expect(r.range.tag).toBe('Section');
     expect(r.articles.map((a) => a.num)).toEqual(['8']);
   });
 
-  it('get_toc が返す path をそのまま渡せる', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-003 SPEC-EGOV-GET-TOC-003 get_toc が返す path をそのまま渡せる', async () => {
     const toc = await ok(getLawToc({ law_name: TITLE, suppl: 'none' }));
     const path = toc.toc[1].children[1].path;
     expect(path).toBe('Part2/Chapter2');
@@ -199,7 +199,7 @@ describe('get_law_range の範囲の指定（#22）', () => {
     expect(r.range.titles).toEqual(['第二編　物権', '第二章　占有権']);
   });
 
-  it('上位を省いた指定が複数に当たるときは候補のパスを返す', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-004 上位を省いた指定が複数に当たるときは候補のパスを返す', async () => {
     const e = await err(getLawRange({ law_name: TITLE, chapter: 2 }));
 
     expect(e.code).toBe('INVALID_ARGUMENT');
@@ -212,13 +212,13 @@ describe('get_law_range の範囲の指定（#22）', () => {
     ]);
   });
 
-  it('範囲が無いときは RANGE_NOT_FOUND を返す', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-005 範囲が無いときは RANGE_NOT_FOUND を返す', async () => {
     const e = await err(getLawRange({ law_name: TITLE, part: 9 }));
     expect(e.code).toBe('RANGE_NOT_FOUND');
     expect(e.next_actions?.[0].action).toBe('get_toc');
   });
 
-  it('範囲の指定が無いときと、2 通り同時に指定したときはエラーにする', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-006 範囲の指定が無いときと、2 通り同時に指定したときはエラーにする', async () => {
     const none = await err(getLawRange({ law_name: TITLE }));
     expect(none.code).toBe('INVALID_ARGUMENT');
     expect(none.error).toContain('範囲を指定してください');
@@ -228,7 +228,7 @@ describe('get_law_range の範囲の指定（#22）', () => {
     expect(both.error).toContain('1 通りにしてください');
   });
 
-  it('path の書式が不正なときはエラーにする', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-007 path の書式が不正なときはエラーにする', async () => {
     const e = await err(getLawRange({ law_name: TITLE, path: '第一編/第一章' }));
     expect(e.code).toBe('INVALID_ARGUMENT');
     expect(e.error).toContain('path の形式が不正です');
@@ -236,7 +236,7 @@ describe('get_law_range の範囲の指定（#22）', () => {
 });
 
 describe('get_law_range の文字数の上限（#22）', () => {
-  it('上限を超える範囲は条の単位で打ち切り、続きの条番号を返す', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-008 上限を超える範囲は条の単位で打ち切り、続きの条番号を返す', async () => {
     const r = await ok(
       getLawRange({ law_name: TITLE, part: 2, chapter: 2, section: 1, max_chars: 2000 })
     );
@@ -257,7 +257,7 @@ describe('get_law_range の文字数の上限（#22）', () => {
     expect(r.markdown).toContain('上限で打ち切りました');
   });
 
-  it('from_article で続きから返し、飛ばした条数を skipped_count に入れる', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-009 from_article で続きから返し、飛ばした条数を skipped_count に入れる', async () => {
     const r = await ok(
       getLawRange({
         law_name: TITLE,
@@ -275,7 +275,7 @@ describe('get_law_range の文字数の上限（#22）', () => {
     expect(r.range.note).toContain('先頭の 2 件は from_article より前');
   });
 
-  it('1 条だけで上限を超えるときも、その 1 条は返す', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-010 1 条だけで上限を超えるときも、その 1 条は返す', async () => {
     // 第7条は本文が 2,500 文字あり、1 条だけで上限（2,000 文字）を超える
     const r = await ok(
       getLawRange({
@@ -292,7 +292,7 @@ describe('get_law_range の文字数の上限（#22）', () => {
     expect(r.range.truncated).toBe(false);
   });
 
-  it('範囲にない条を from_article に渡すと ARTICLE_NOT_FOUND を返す', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-011 範囲にない条を from_article に渡すと ARTICLE_NOT_FOUND を返す', async () => {
     const e = await err(getLawRange({ law_name: TITLE, part: 1, chapter: 1, from_article: '999' }));
     expect(e.code).toBe('ARTICLE_NOT_FOUND');
     expect(e.hint).toContain('第1条');
@@ -300,7 +300,7 @@ describe('get_law_range の文字数の上限（#22）', () => {
 });
 
 describe('get_law_range の附則（#22）', () => {
-  it('suppl_index で附則 1 本の条を返す', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-012 suppl_index で附則 1 本の条を返す', async () => {
     const r = await ok(getLawRange({ law_name: TITLE, suppl_index: 1 }));
 
     expect(r.range.suppl_index).toBe(1);
@@ -311,7 +311,7 @@ describe('get_law_range の附則（#22）', () => {
     expect(r.markdown).toContain('# テスト法 附則(1) 制定時（抄）');
   });
 
-  it('条を持たず項だけの附則は、範囲の本文をそのまま返す', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-013 条を持たず項だけの附則は、範囲の本文をそのまま返す', async () => {
     const r = await ok(getLawRange({ law_name: TITLE, suppl_index: 2 }));
 
     expect(r.range.article_count).toBe(0);
@@ -320,20 +320,20 @@ describe('get_law_range の附則（#22）', () => {
     expect(r.markdown).toContain('この法律は、公布の日から施行する。');
   });
 
-  it('無い附則の番号は RANGE_NOT_FOUND を返し、本数を hint に入れる', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-014 無い附則の番号は RANGE_NOT_FOUND を返し、本数を hint に入れる', async () => {
     const e = await err(getLawRange({ law_name: TITLE, suppl_index: 99 }));
     expect(e.code).toBe('RANGE_NOT_FOUND');
     expect(e.hint).toContain('附則は 2 本');
   });
 
-  it('本則の範囲には附則の条が入らない', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-015 本則の範囲には附則の条が入らない', async () => {
     const r = await ok(getLawRange({ law_name: TITLE, part: 1, max_chars: 120000 }));
     // 第一編は第1条〜第3条と削除条（第4条及び第5条）。附則の第1条は入らない
     expect(r.articles.map((a) => a.num)).toEqual(['1', '2', '3', '4:5']);
     expect(r.range.article_count).toBe(4);
   });
 
-  it('削除された条をまとめた範囲表記でも続きが取れる（v0.14.1）', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-016 削除された条をまとめた範囲表記でも続きが取れる（v0.14.1）', async () => {
     const first = await ok(getLawRange({ law_name: TITLE, part: 1, chapter: 2, max_chars: 2000 }));
     // 第3条だけで上限を超えるので 1 条返して打ち切り、続きは削除条から
     expect(first.range.returned_count).toBe(1);

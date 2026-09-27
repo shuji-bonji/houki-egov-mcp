@@ -126,19 +126,19 @@ const base = {
 };
 
 describe('formatProvisionLines', () => {
-  it('puts a space after ItemTitle and a full-width space between Columns', () => {
+  it('SPEC-EGOV-GET-LAW-014 puts a space after ItemTitle and a full-width space between Columns', () => {
     expect(formatProvisionLines(item8)).toEqual([
       '八 資産の譲渡等　事業として対価を得て行われる資産の譲渡及び貸付け並びに役務の提供をいう。',
     ]);
   });
 
-  it('keeps branch-numbered ItemTitle as is', () => {
+  it('SPEC-EGOV-GET-LAW-014 keeps branch-numbered ItemTitle as is', () => {
     expect(formatProvisionLines(item8no2)).toEqual([
       '八の二 特定資産の譲渡等　事業者向け電気通信利用役務の提供をいう。',
     ]);
   });
 
-  it('renders Subitem1 / Subitem2 as nested Markdown list items', () => {
+  it('SPEC-EGOV-GET-LAW-014 renders Subitem1 / Subitem2 as nested Markdown list items', () => {
     expect(formatProvisionLines(item30_2_1)).toEqual([
       '一 区分が明らかにされている場合　イに掲げる金額にロに掲げる金額を加算する方法',
       '- イ 課税資産の譲渡等にのみ要する税額の合計額',
@@ -147,7 +147,7 @@ describe('formatProvisionLines', () => {
     ]);
   });
 
-  it('falls back to Num when ItemTitle is missing', () => {
+  it('SPEC-EGOV-GET-LAW-014 falls back to Num when ItemTitle is missing', () => {
     const node: LawNode = {
       tag: 'Item',
       attr: { Num: '3_2' },
@@ -156,7 +156,7 @@ describe('formatProvisionLines', () => {
     expect(formatProvisionLines(node)).toEqual(['3の2 本文']);
   });
 
-  it('puts other children (List etc.) on their own line', () => {
+  it('SPEC-EGOV-GET-LAW-014 puts other children (List etc.) on their own line', () => {
     const node: LawNode = {
       tag: 'Item',
       attr: { Num: '1' },
@@ -169,7 +169,7 @@ describe('formatProvisionLines', () => {
     expect(formatProvisionLines(node)).toEqual(['一 次に掲げるもの', '甲']);
   });
 
-  it('renders TableStruct in a Subitem as an indented Markdown table', () => {
+  it('SPEC-EGOV-GET-LAW-016 renders TableStruct in a Subitem as an indented Markdown table', () => {
     const node: LawNode = {
       tag: 'Item',
       attr: { Num: '1' },
@@ -200,7 +200,7 @@ describe('formatProvisionLines', () => {
 });
 
 describe('formatArticleMarkdown', () => {
-  it('builds 第70条の6 for branch-numbered articles', () => {
+  it('SPEC-EGOV-GET-LAW-013 builds 第70条の6 for branch-numbered articles', () => {
     const md = formatArticleMarkdown({
       ...base,
       lawTitle: '租税特別措置法',
@@ -211,7 +211,7 @@ describe('formatArticleMarkdown', () => {
     expect(md.split('\n')[0]).toBe('# 租税特別措置法 第70条の6');
   });
 
-  it('item: header with 号 and body with separated ItemTitle / Columns', () => {
+  it('SPEC-EGOV-GET-LAW-013 SPEC-EGOV-GET-LAW-014 item: header with 号 and body with separated ItemTitle / Columns', () => {
     const p = paragraph('1', [item8]);
     const md = formatArticleMarkdown({
       ...base,
@@ -226,7 +226,7 @@ describe('formatArticleMarkdown', () => {
     );
   });
 
-  it('paragraph: each item on its own line, Subitem1 as list items', () => {
+  it('SPEC-EGOV-GET-LAW-013 SPEC-EGOV-GET-LAW-014 SPEC-EGOV-GET-LAW-015 paragraph: each item on its own line, Subitem1 as list items', () => {
     const p = paragraph('2', [
       { tag: 'ParagraphNum', children: ['２'] },
       {
@@ -249,7 +249,7 @@ describe('formatArticleMarkdown', () => {
     expect(md.split('\n')[0]).toBe('# 消費税法 第30条第2項');
   });
 
-  it('paragraph: renders a TableStruct directly under Paragraph (所得税法 89 条 1 項)', () => {
+  it('SPEC-EGOV-GET-LAW-016 paragraph: renders a TableStruct directly under Paragraph (所得税法 89 条 1 項)', () => {
     const p = paragraph('1', [
       { tag: 'ParagraphNum', children: [] },
       {
@@ -281,7 +281,7 @@ describe('formatArticleMarkdown', () => {
     );
   });
 
-  it('item: branch-numbered item header is 第8号の2 (no "第8_2号")', () => {
+  it('SPEC-EGOV-GET-LAW-012 SPEC-EGOV-GET-LAW-013 item: branch-numbered item header is 第8号の2 (no "第8_2号")', () => {
     const p = paragraph('1', [item8, item8no2]);
     const md = formatArticleMarkdown({
       ...base,
@@ -295,7 +295,7 @@ describe('formatArticleMarkdown', () => {
     expect(md).not.toContain('資産の譲渡等　事業として');
   });
 
-  it('paragraph: branch-numbered items keep 八の二 (no "8_2 の二")', () => {
+  it('SPEC-EGOV-GET-LAW-014 paragraph: branch-numbered items keep 八の二 (no "8_2 の二")', () => {
     const p = paragraph('1', [item8, item8no2]);
     const md = formatArticleMarkdown({ ...base, article: article('2', [p]), paragraph: p });
     expect(md).toContain('八の二 特定資産の譲渡等　');
@@ -304,7 +304,7 @@ describe('formatArticleMarkdown', () => {
 });
 
 describe('formatTableStructLines', () => {
-  it('uses a blank header row when TableHeaderRow is absent', () => {
+  it('SPEC-EGOV-GET-LAW-016 uses a blank header row when TableHeaderRow is absent', () => {
     expect(formatTableStructLines(table([row(['a', 'b']), row(['c', 'd'])]))).toEqual([
       '',
       '|  |  |',
@@ -315,7 +315,7 @@ describe('formatTableStructLines', () => {
     ]);
   });
 
-  it('uses TableHeaderRow as the header and prints TableStructTitle and Remarks', () => {
+  it('SPEC-EGOV-GET-LAW-016 uses TableHeaderRow as the header and prints TableStructTitle and Remarks', () => {
     const node: LawNode = {
       tag: 'TableStruct',
       children: [
@@ -352,7 +352,7 @@ describe('formatTableStructLines', () => {
     ]);
   });
 
-  it('fills cells merged by rowspan / colspan with empty cells and escapes |', () => {
+  it('SPEC-EGOV-GET-LAW-016 fills cells merged by rowspan / colspan with empty cells and escapes |', () => {
     const node = table([
       row([cell('A', { rowspan: '2' }), cell('B|C', { colspan: '2' })]),
       row(['d', 'e']),
@@ -369,7 +369,7 @@ describe('formatTableStructLines', () => {
 });
 
 describe('formatTocMarkdown', () => {
-  it('附則を渡すと本則と附則の 2 節に分ける（#24）', () => {
+  it('SPEC-EGOV-GET-LAW-018 SPEC-EGOV-GET-TOC-009 SPEC-EGOV-GET-TOC-011 附則を渡すと本則と附則の 2 節に分ける（#24）', () => {
     const md = formatTocMarkdown({
       ...base,
       lawTitle: '消費税法',
@@ -415,7 +415,7 @@ describe('formatTocMarkdown', () => {
     expect(md).toContain('  - 第1条');
   });
 
-  it('附則が無ければ見出しを付けない（#24）', () => {
+  it('SPEC-EGOV-GET-LAW-018 SPEC-EGOV-GET-TOC-011 附則が無ければ見出しを付けない（#24）', () => {
     const md = formatTocMarkdown({
       ...base,
       lawTitle: '消費税法',
@@ -425,7 +425,7 @@ describe('formatTocMarkdown', () => {
     expect(md).not.toContain('## 附則');
   });
 
-  it('lists branch-numbered articles as 第N条のM', () => {
+  it('SPEC-EGOV-GET-LAW-017 SPEC-EGOV-GET-TOC-011 lists branch-numbered articles as 第N条のM', () => {
     const md = formatTocMarkdown({
       ...base,
       lawTitle: '租税特別措置法',

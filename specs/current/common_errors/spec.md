@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: 共通
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/server.ts`、`src/errors.ts`、`src/tools/tool-args.ts`、`src/tools/handlers.ts`（ツールの登録の表）、`src/tools/definitions.ts`（tools/list の一覧）、`src/server.test.ts`、`src/errors.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: なし
 
@@ -15,62 +15,62 @@
 
 ## 入力
 
-| 入力 | 必須 | 内容 |
-| --- | --- | --- |
-| tools/call の `name` | 必須 | 呼ぶツールの名前。下の「対象」の 14 個のどれか |
+| 入力                      | 必須 | 内容                                                                                                        |
+| ------------------------- | ---- | ----------------------------------------------------------------------------------------------------------- |
+| tools/call の `name`      | 必須 | 呼ぶツールの名前。下の「対象」の 14 個のどれか                                                              |
 | tools/call の `arguments` | 任意 | ツールの引数（JSON オブジェクト）。tools/list に出している、そのツールの inputSchema に合わなければならない |
 
 ## 対象
 
 この規則は、tools/call で呼べる次の 14 ツールすべてに当てはまる。どのツールも、tools/list の inputSchema と同じものを使って引数を検査してから、ツールの処理に進む。表の順は tools/list が返す順である。
 
-| ツール | 当てはまる場面 |
-| --- | --- |
-| `search_law` | 引数の検査、エラー応答の形、処理中の想定外の例外 |
-| `get_law` | 同上 |
-| `get_toc` | 同上 |
-| `get_law_range` | 同上 |
-| `search_fulltext` | 同上 |
-| `resolve_abbreviation` | 同上 |
-| `get_law_revisions` | 同上 |
-| `explain_law_type` | 同上 |
-| `get_related_laws` | 同上 |
-| `get_article_references` | 同上 |
-| `verify_citations` | 同上 |
-| `list_attachments` | 同上 |
-| `get_attachment` | 同上 |
-| `get_law_file` | 同上 |
-| 上の 14 個以外の名前 | 存在しないツール名のエラー（SPEC-EGOV-COMMON-ERRORS-002） |
+| ツール                   | 当てはまる場面                                            |
+| ------------------------ | --------------------------------------------------------- |
+| `search_law`             | 引数の検査、エラー応答の形、処理中の想定外の例外          |
+| `get_law`                | 同上                                                      |
+| `get_toc`                | 同上                                                      |
+| `get_law_range`          | 同上                                                      |
+| `search_fulltext`        | 同上                                                      |
+| `resolve_abbreviation`   | 同上                                                      |
+| `get_law_revisions`      | 同上                                                      |
+| `explain_law_type`       | 同上                                                      |
+| `get_related_laws`       | 同上                                                      |
+| `get_article_references` | 同上                                                      |
+| `verify_citations`       | 同上                                                      |
+| `list_attachments`       | 同上                                                      |
+| `get_attachment`         | 同上                                                      |
+| `get_law_file`           | 同上                                                      |
+| 上の 14 個以外の名前     | 存在しないツール名のエラー（SPEC-EGOV-COMMON-ERRORS-002） |
 
 ### エラー応答のフィールド
 
 エラーの本文は、次のフィールドを持つ JSON オブジェクトである。`error` と `code` は必ず付き、ほかは値があるときだけ付く（SPEC-EGOV-COMMON-ERRORS-008）。
 
-| フィールド | 内容 |
-| --- | --- |
-| `error` | 1 文のエラーの説明（人も LLM も読む） |
-| `code` | 失敗の種類を表す文字列（下の表） |
-| `hint` | 次に何を確かめるかの案内 |
+| フィールド     | 内容                                                                                                                                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `error`        | 1 文のエラーの説明（人も LLM も読む）                                                                                                                                                                                          |
+| `code`         | 失敗の種類を表す文字列（下の表）                                                                                                                                                                                               |
+| `hint`         | 次に何を確かめるかの案内                                                                                                                                                                                                       |
 | `next_actions` | 次に呼ぶツールや取る手段の候補の配列。要素は `action`（ツール名、または `list_tools` / `retry_later` / `visit_egov_site` / `delegate_to_mcp` のような手段の名前）・`reason`（どんなときに有効か）・`example`（引数の例。任意） |
-| `retryable` | `true` なら、時間をおいて同じ呼び出しをやり直すと結果が変わりうる |
-| `detail` | 調べるための詳細。`status`（HTTP ステータス）・`url`・`cause`（元の例外の文）・`issues`（引数の検査の問題の一覧） |
+| `retryable`    | `true` なら、時間をおいて同じ呼び出しをやり直すと結果が変わりうる                                                                                                                                                              |
+| `detail`       | 調べるための詳細。`status`（HTTP ステータス）・`url`・`cause`（元の例外の文）・`issues`（引数の検査の問題の一覧）                                                                                                              |
 
 ### エラーの code
 
 どの場面でどの code を返すかは、存在しないツール名・引数の検査・処理中の想定外の例外を除いて、各ツールの spec.md に書く。
 
-| code | 失敗の種類 |
-| --- | --- |
-| `INVALID_ARGUMENT` | 引数が inputSchema に合わない、または値の形がツールの受け付ける形でない（呼び出し側の誤り） |
-| `INVALID_ARTICLE_NUM` | 条番号・号番号の書き方が受け付ける形でない |
-| `UNKNOWN_TOOL` | 存在しないツール名を呼んだ（呼び出し側の誤り） |
-| `OUT_OF_SCOPE` | このサーバーの管轄でない資料を求めた（通達名など。別の MCP サーバーで取る） |
-| `LAW_NOT_FOUND` | 法令が見つからない |
-| `ARTICLE_NOT_FOUND` | 法令はあるが、求めた条・項・号が無い |
-| `RANGE_NOT_FOUND` | 求めた編・章・節、または附則の番号が無い |
-| `ATTACHMENT_NOT_FOUND` | 求めた添付ファイルが無い |
-| `SOURCE_API_ERROR` / `SOURCE_TIMEOUT` / `SOURCE_RATE_LIMITED` / `SOURCE_UNAVAILABLE` | e-Gov からの取得の失敗 / 時間切れ / 回数制限 / 接続できない |
-| `INTERNAL_ERROR` | サーバー内部の失敗（処理中の想定外の例外） |
+| code                                                                                 | 失敗の種類                                                                                  |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `INVALID_ARGUMENT`                                                                   | 引数が inputSchema に合わない、または値の形がツールの受け付ける形でない（呼び出し側の誤り） |
+| `INVALID_ARTICLE_NUM`                                                                | 条番号・号番号の書き方が受け付ける形でない                                                  |
+| `UNKNOWN_TOOL`                                                                       | 存在しないツール名を呼んだ（呼び出し側の誤り）                                              |
+| `OUT_OF_SCOPE`                                                                       | このサーバーの管轄でない資料を求めた（通達名など。別の MCP サーバーで取る）                 |
+| `LAW_NOT_FOUND`                                                                      | 法令が見つからない                                                                          |
+| `ARTICLE_NOT_FOUND`                                                                  | 法令はあるが、求めた条・項・号が無い                                                        |
+| `RANGE_NOT_FOUND`                                                                    | 求めた編・章・節、または附則の番号が無い                                                    |
+| `ATTACHMENT_NOT_FOUND`                                                               | 求めた添付ファイルが無い                                                                    |
+| `SOURCE_API_ERROR` / `SOURCE_TIMEOUT` / `SOURCE_RATE_LIMITED` / `SOURCE_UNAVAILABLE` | e-Gov からの取得の失敗 / 時間切れ / 回数制限 / 接続できない                                 |
+| `INTERNAL_ERROR`                                                                     | サーバー内部の失敗（処理中の想定外の例外）                                                  |
 
 ## 処理の流れ
 

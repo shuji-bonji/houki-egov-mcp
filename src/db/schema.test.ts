@@ -36,11 +36,11 @@ describe('initSchema (Phase 2-1)', () => {
     closeDb(db);
   });
 
-  it('schema_version を SCHEMA_VERSION に設定する', () => {
+  it('SPEC-EGOV-DB-SCHEMA-001 schema_version を SCHEMA_VERSION に設定する', () => {
     expect(getSchemaVersion(db)).toBe(SCHEMA_VERSION);
   });
 
-  it('Phase 2-1 で必要な全テーブルを作る', () => {
+  it('SPEC-EGOV-DB-SCHEMA-002 Phase 2-1 で必要な全テーブルを作る', () => {
     const tables = listTables(db);
     expect(tables.has('schema_meta')).toBe(true);
     expect(tables.has('laws')).toBe(true);
@@ -51,7 +51,7 @@ describe('initSchema (Phase 2-1)', () => {
     expect(tables.has('articles_fts')).toBe(true);
   });
 
-  it('laws テーブルに必須カラムが揃っている', () => {
+  it('SPEC-EGOV-DB-SCHEMA-003 laws テーブルに必須カラムが揃っている', () => {
     const cols = listColumns(db, 'laws');
     // 主キー + 識別子
     expect(cols.has('law_revision_id')).toBe(true);
@@ -79,7 +79,7 @@ describe('initSchema (Phase 2-1)', () => {
     expect(cols.has('content_hash')).toBe(true);
   });
 
-  it('articles テーブルに必須カラムが揃っている (body / body_raw 両持ち)', () => {
+  it('SPEC-EGOV-DB-SCHEMA-004 articles テーブルに必須カラムが揃っている (body / body_raw 両持ち)', () => {
     const cols = listColumns(db, 'articles');
     expect(cols.has('id')).toBe(true);
     expect(cols.has('law_revision_id')).toBe(true);
@@ -91,7 +91,7 @@ describe('initSchema (Phase 2-1)', () => {
     expect(cols.has('body_raw')).toBe(true);
   });
 
-  it('current_revision_status の CHECK 制約が効く', () => {
+  it('SPEC-EGOV-DB-SCHEMA-005 current_revision_status の CHECK 制約が効く', () => {
     insertLaw(db, { current_revision_status: 'CurrentEnforced', repeal_status: 'None' });
     expect(() =>
       insertLaw(db, {
@@ -102,7 +102,7 @@ describe('initSchema (Phase 2-1)', () => {
     ).toThrow();
   });
 
-  it('repeal_status の CHECK 制約が効く', () => {
+  it('SPEC-EGOV-DB-SCHEMA-006 repeal_status の CHECK 制約が効く', () => {
     expect(() =>
       insertLaw(db, {
         law_revision_id: 'BAD_REV2',
@@ -112,7 +112,7 @@ describe('initSchema (Phase 2-1)', () => {
     ).toThrow();
   });
 
-  it('articles 挿入で articles_fts に自動同期される (trigger)', () => {
+  it('SPEC-EGOV-DB-SCHEMA-007 articles 挿入で articles_fts に自動同期される (trigger)', () => {
     insertLaw(db);
     db.prepare(
       `INSERT INTO articles (law_revision_id, article_num, caption, chapter_path, ord, body, body_raw)
@@ -133,7 +133,7 @@ describe('initSchema (Phase 2-1)', () => {
     expect(hits.length).toBeGreaterThan(0);
   });
 
-  it('article 削除で articles_fts からも消える (trigger)', () => {
+  it('SPEC-EGOV-DB-SCHEMA-008 article 削除で articles_fts からも消える (trigger)', () => {
     insertLaw(db);
     const ins = db
       .prepare(
@@ -165,7 +165,7 @@ describe('initSchema (Phase 2-1)', () => {
     ).toBe(0);
   });
 
-  it('law 削除で article も CASCADE 削除される', () => {
+  it('SPEC-EGOV-DB-SCHEMA-009 law 削除で article も CASCADE 削除される', () => {
     insertLaw(db);
     db.prepare(
       `INSERT INTO articles (law_revision_id, article_num, caption, chapter_path, ord, body, body_raw)
@@ -184,7 +184,7 @@ describe('initSchema (Phase 2-1)', () => {
     ).toBe(0);
   });
 
-  it('sync_state は id=1 の single-row 制約を持つ', () => {
+  it('SPEC-EGOV-DB-SCHEMA-010 sync_state は id=1 の single-row 制約を持つ', () => {
     db.prepare(
       `INSERT INTO sync_state (id, last_sync_date, last_full_dl_at, total_laws, bulk_source)
        VALUES (1, '2026-05-08', '2026-05-08T00:00:00+09:00', 0, 'all_xml')`
@@ -215,7 +215,7 @@ describe('initSchema (Phase 2-1)', () => {
     expect(getSchemaVersion(db)).toBe(SCHEMA_VERSION);
   });
 
-  it('initSchema は冪等 (二度呼んでも壊れない)', () => {
+  it('SPEC-EGOV-DB-SCHEMA-011 initSchema は冪等 (二度呼んでも壊れない)', () => {
     initSchema(db);
     initSchema(db);
     expect(getSchemaVersion(db)).toBe(SCHEMA_VERSION);
@@ -224,7 +224,7 @@ describe('initSchema (Phase 2-1)', () => {
 });
 
 describe('openDb (in-memory)', () => {
-  it(':memory: で開いて initSchema が走る', () => {
+  it('SPEC-EGOV-DB-SCHEMA-001 :memory: で開いて initSchema が走る', () => {
     const db = openDb(':memory:');
     try {
       expect(getSchemaVersion(db)).toBe(SCHEMA_VERSION);

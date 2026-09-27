@@ -3,7 +3,7 @@ import { parseContentDispositionFileName } from './egov-client.js';
 import { safeFileName } from './file-store.js';
 
 describe('safeFileName', () => {
-  it('src のパスは末尾のファイル名だけにし、親ディレクトリ参照を残さない', () => {
+  it('SPEC-EGOV-GET-ATTACHMENT-005 SPEC-EGOV-GET-LAW-FILE-005 src のパスは末尾のファイル名だけにし、親ディレクトリ参照を残さない', () => {
     expect(safeFileName('./pict/H11HO127-001.jpg')).toBe('H11HO127-001.jpg');
     expect(safeFileName('../../etc/passwd')).toBe('passwd');
     expect(safeFileName('..\\..\\x.pdf')).toBe('x.pdf');
@@ -13,7 +13,7 @@ describe('safeFileName', () => {
 });
 
 describe('parseContentDispositionFileName', () => {
-  it('e-Gov の attachment; filename="…" を読む', () => {
+  it('SPEC-EGOV-GET-LAW-FILE-004 e-Gov の attachment; filename="…" を読む', () => {
     expect(
       parseContentDispositionFileName(
         'attachment; filename="129AC0000000089_20260624_508AC0000000045.docx"'

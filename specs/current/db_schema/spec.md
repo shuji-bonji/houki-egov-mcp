@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: DB
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/db/index.ts`、`src/db/schema.ts`、`src/config.ts`（`BULK_CONFIG`）、`src/cli/index.ts`（DB を開く箇所と `--help`）、`src/db/schema.test.ts`
 - 関連する Issue: なし
 
@@ -18,13 +18,13 @@
 
 利用者がこの DB に触れる入口は次のとおり。
 
-| 入口 | 必須 | 内容 |
-| --- | --- | --- |
-| 環境変数 `HOUKI_EGOV_DB_PATH` | 任意 | DB ファイルのパスをまるごと指定する。ほかの指定より優先する |
-| 環境変数 `XDG_CACHE_HOME` | 任意 | `HOUKI_EGOV_DB_PATH` が無いとき、`$XDG_CACHE_HOME/houki-egov-mcp/laws.db` に置く。これも無いときは `~/.cache/houki-egov-mcp/laws.db` |
-| CLI `--bulk-download-everything` / `--sync` | 任意 | DB に書き込む（取り込みの中身は CLI の spec.md に書く） |
-| CLI `--status` | 任意 | DB を開いて `laws` と `articles` の件数、同期の状態を表示する（CLI の spec.md に書く） |
-| ツール `search_fulltext` | 任意 | 呼び出しごとに DB を開いて引き、閉じる（`search_fulltext` の spec.md に書く） |
+| 入口                                        | 必須 | 内容                                                                                                                                 |
+| ------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 環境変数 `HOUKI_EGOV_DB_PATH`               | 任意 | DB ファイルのパスをまるごと指定する。ほかの指定より優先する                                                                          |
+| 環境変数 `XDG_CACHE_HOME`                   | 任意 | `HOUKI_EGOV_DB_PATH` が無いとき、`$XDG_CACHE_HOME/houki-egov-mcp/laws.db` に置く。これも無いときは `~/.cache/houki-egov-mcp/laws.db` |
+| CLI `--bulk-download-everything` / `--sync` | 任意 | DB に書き込む（取り込みの中身は CLI の spec.md に書く）                                                                              |
+| CLI `--status`                              | 任意 | DB を開いて `laws` と `articles` の件数、同期の状態を表示する（CLI の spec.md に書く）                                               |
+| ツール `search_fulltext`                    | 任意 | 呼び出しごとに DB を開いて引き、閉じる（`search_fulltext` の spec.md に書く）                                                        |
 
 ## 処理の流れ
 
@@ -53,27 +53,27 @@ flowchart TD
 
 DB を開くと、次のテーブルを作る。
 
-| テーブル | 内容 |
-| --- | --- |
-| `schema_meta` | スキーマの版などを `key` と `value` で持つ |
-| `laws` | 法令の履歴 1 件につき 1 行 |
-| `articles` | 条（または別表）1 つにつき 1 行 |
-| `revisions_meta` | 法令の履歴のメタ情報 |
-| `sync_state` | 取り込みの同期の状態（1 行だけ） |
-| `laws_fts` | 法令名・略称・法令番号・分類の全文検索の索引 |
-| `articles_fts` | 条の本文と見出しの全文検索の索引 |
+| テーブル         | 内容                                         |
+| ---------------- | -------------------------------------------- |
+| `schema_meta`    | スキーマの版などを `key` と `value` で持つ   |
+| `laws`           | 法令の履歴 1 件につき 1 行                   |
+| `articles`       | 条（または別表）1 つにつき 1 行              |
+| `revisions_meta` | 法令の履歴のメタ情報                         |
+| `sync_state`     | 取り込みの同期の状態（1 行だけ）             |
+| `laws_fts`       | 法令名・略称・法令番号・分類の全文検索の索引 |
+| `articles_fts`   | 条の本文と見出しの全文検索の索引             |
 
 ### SPEC-EGOV-DB-SCHEMA-003 laws テーブルの列
 
 `laws` テーブルは次の列を持つ。主キーは `law_revision_id`（法令の履歴の ID）。
 
-| 分類 | 列 |
-| --- | --- |
-| 識別子 | `law_revision_id`、`law_id` |
-| 法令の情報 | `law_type`、`law_num`、`law_title`、`abbrev`、`category` |
-| 日付 | `promulgation_date`、`amendment_promulgate_date`、`amendment_enforcement_date`、`amendment_scheduled_enforcement_date` |
-| 状態 | `current_revision_status`、`repeal_status`、`repeal_date`、`remain_in_force`、`amendment_type` |
-| 同期 | `updated`、`fetched_at`、`content_hash` |
+| 分類       | 列                                                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 識別子     | `law_revision_id`、`law_id`                                                                                            |
+| 法令の情報 | `law_type`、`law_num`、`law_title`、`abbrev`、`category`                                                               |
+| 日付       | `promulgation_date`、`amendment_promulgate_date`、`amendment_enforcement_date`、`amendment_scheduled_enforcement_date` |
+| 状態       | `current_revision_status`、`repeal_status`、`repeal_date`、`remain_in_force`、`amendment_type`                         |
+| 同期       | `updated`、`fetched_at`、`content_hash`                                                                                |
 
 ### SPEC-EGOV-DB-SCHEMA-004 articles テーブルの列（検索用の本文と表示用の本文を両方持つ）
 

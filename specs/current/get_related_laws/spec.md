@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-relations.ts`、`src/services/law-service.references.test.ts`、`src/services/law-relations.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: houki-egov-mcp #20（施行令・施行規則の関連付けと条文内の参照抽出）
 
@@ -15,8 +15,8 @@
 
 ## 入力
 
-| 引数 | 必須 | 内容 |
-|---|---|---|
+| 引数       | 必須 | 内容                                                                       |
+| ---------- | ---- | -------------------------------------------------------------------------- |
 | `law_name` | 必須 | 法令名または略称。例: `"所得税法"`、`"所法"`、`"所得税法施行令"`、`"所令"` |
 
 ## 処理の流れ
@@ -46,11 +46,11 @@ flowchart TD
 
 応答は次のフィールドを持つ。
 
-| フィールド | 内容 |
-|---|---|
-| `law` | 解決した法令。`law_id`・`title`（正式名称）・`law_num`（法令番号） |
-| `related` | 実在した関連法令の配列。要素は `relation`（施行令は `enforcement_order`、施行規則は `enforcement_rule`、親の法律は `parent_act`）・`law_id`・`title`・`abbr`（略称辞書にあるときだけ） |
-| `not_found` | 候補にしたが e-Gov に無かった名前の配列（SPEC-EGOV-GET-RELATED-LAWS-005） |
+| フィールド  | 内容                                                                                                                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `law`       | 解決した法令。`law_id`・`title`（正式名称）・`law_num`（法令番号）                                                                                                                     |
+| `related`   | 実在した関連法令の配列。要素は `relation`（施行令は `enforcement_order`、施行規則は `enforcement_rule`、親の法律は `parent_act`）・`law_id`・`title`・`abbr`（略称辞書にあるときだけ） |
+| `not_found` | 候補にしたが e-Gov に無かった名前の配列（SPEC-EGOV-GET-RELATED-LAWS-005）                                                                                                              |
 
 例: `law_name: "所得税法"` では、`law` は `{ law_id: "340AC0000000033", title: "所得税法", law_num: "昭和四十年法律第三十三号" }`、`related` は `enforcement_order` の所得税法施行令（`340CO0000000096`、`abbr: "所令"`）と `enforcement_rule` の所得税法施行規則（`340M50000040011`、`abbr: "所規"`）の 2 件で、`not_found` は空の配列。
 

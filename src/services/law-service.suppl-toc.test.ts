@@ -131,7 +131,7 @@ beforeEach(() => {
 });
 
 describe('get_toc の本則と附則（#24）', () => {
-  it('既定では附則の見出しと条数だけを返し、本則に附則の条を混ぜない', async () => {
+  it('SPEC-EGOV-GET-TOC-001 SPEC-EGOV-GET-TOC-004 既定では附則の見出しと条数だけを返し、本則に附則の条を混ぜない', async () => {
     const r = await getLawToc({ law_name: TITLE });
     if (isError(r)) throw new Error(`unexpected error: ${r.error}`);
 
@@ -147,7 +147,7 @@ describe('get_toc の本則と附則（#24）', () => {
     expect(r.suppl.note).toContain('suppl: "full"');
   });
 
-  it('附則の 1 本目は制定時、2 本目以降は改正法の番号が付く', async () => {
+  it('SPEC-EGOV-GET-TOC-005 附則の 1 本目は制定時、2 本目以降は改正法の番号が付く', async () => {
     const r = await getLawToc({ law_name: TITLE });
     if (isError(r)) throw new Error(`unexpected error: ${r.error}`);
 
@@ -157,7 +157,7 @@ describe('get_toc の本則と附則（#24）', () => {
     expect(r.suppl_provisions[2].paragraph_only).toBe(true);
   });
 
-  it('suppl: "full" で附則の中の条まで返す', async () => {
+  it('SPEC-EGOV-GET-TOC-006 SPEC-EGOV-GET-TOC-011 suppl: "full" で附則の中の条まで返す', async () => {
     const r = await getLawToc({ law_name: TITLE, suppl: 'full' });
     if (isError(r)) throw new Error(`unexpected error: ${r.error}`);
 
@@ -169,7 +169,7 @@ describe('get_toc の本則と附則（#24）', () => {
     expect(r.markdown).toContain('附則(3) 平成二年六月二二日法律第三六号 — 項のみ');
   });
 
-  it('suppl: "none" で附則を落とすが、本数と条数は数えて返す', async () => {
+  it('SPEC-EGOV-GET-TOC-007 SPEC-EGOV-GET-TOC-011 suppl: "none" で附則を落とすが、本数と条数は数えて返す', async () => {
     const r = await getLawToc({ law_name: TITLE, suppl: 'none' });
     if (isError(r)) throw new Error(`unexpected error: ${r.error}`);
 
@@ -179,12 +179,12 @@ describe('get_toc の本則と附則（#24）', () => {
     expect(r.markdown).not.toContain('## 附則');
   });
 
-  it('既定では改正履歴を引かない', async () => {
+  it('SPEC-EGOV-GET-TOC-008 既定では改正履歴を引かない', async () => {
     await getLawToc({ law_name: TITLE });
     expect(revisionsCalls).toEqual([]);
   });
 
-  it('with_amend_titles で改正法の題名を付け、付かなかった本数を返す', async () => {
+  it('SPEC-EGOV-GET-TOC-009 with_amend_titles で改正法の題名を付け、付かなかった本数を返す', async () => {
     const r = await getLawToc({ law_name: TITLE, with_amend_titles: true });
     if (isError(r)) throw new Error(`unexpected error: ${r.error}`);
 
@@ -202,7 +202,7 @@ describe('get_toc の本則と附則（#24）', () => {
     expect(r.suppl.note).toContain('残り 1 本');
   });
 
-  it('depth は本則の階層に効き、附則の本数は変わらない', async () => {
+  it('SPEC-EGOV-GET-TOC-010 depth は本則の階層に効き、附則の本数は変わらない', async () => {
     const r = await getLawToc({ law_name: TITLE, depth: 1 });
     if (isError(r)) throw new Error(`unexpected error: ${r.error}`);
 

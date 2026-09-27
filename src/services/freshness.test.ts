@@ -33,16 +33,16 @@ function seedSyncState(
 }
 
 describe('buildWarning', () => {
-  it('staleness=fresh では undefined', () => {
+  it('SPEC-EGOV-CLI-STATUS-004 SPEC-EGOV-SEARCH-FULLTEXT-023 staleness=fresh では undefined', () => {
     expect(buildWarning('fresh', 0)).toBeUndefined();
     expect(buildWarning('fresh', 6)).toBeUndefined();
   });
 
-  it('staleness=stale でも undefined (warning は outdated のみ)', () => {
+  it('SPEC-EGOV-CLI-STATUS-004 SPEC-EGOV-SEARCH-FULLTEXT-023 staleness=stale でも undefined (warning は outdated のみ)', () => {
     expect(buildWarning('stale', 10)).toBeUndefined();
   });
 
-  it('staleness=outdated で警告メッセージを返す', () => {
+  it('SPEC-EGOV-CLI-STATUS-004 SPEC-EGOV-SEARCH-FULLTEXT-023 staleness=outdated で警告メッセージを返す', () => {
     const msg = buildWarning('outdated', 45);
     expect(msg).toBeDefined();
     expect(msg).toContain('45 日前');
@@ -69,11 +69,11 @@ describe('summarizeFreshness (sync_state ベース)', () => {
     closeDb(db);
   });
 
-  it('sync_state がまだないと null を返す', () => {
+  it('SPEC-EGOV-CLI-STATUS-001 SPEC-EGOV-SEARCH-FULLTEXT-023 sync_state がまだないと null を返す', () => {
     expect(summarizeFreshness(db, undefined, NOW)).toBeNull();
   });
 
-  it('1 日前の同期は fresh', () => {
+  it('SPEC-EGOV-CLI-STATUS-003 SPEC-EGOV-CLI-STATUS-004 SPEC-EGOV-SEARCH-FULLTEXT-023 1 日前の同期は fresh', () => {
     seedSyncState(db, '2026-05-08'); // NOW から 1 日前
     const info = summarizeFreshness(db, undefined, NOW);
     expect(info).not.toBeNull();
@@ -82,7 +82,7 @@ describe('summarizeFreshness (sync_state ベース)', () => {
     expect(info?.warning).toBeUndefined();
   });
 
-  it('閾値の境界 — `fresh_days` 直前は fresh', () => {
+  it('SPEC-EGOV-CLI-STATUS-003 SPEC-EGOV-SEARCH-FULLTEXT-023 閾値の境界 — `fresh_days` 直前は fresh', () => {
     // STALENESS_THRESHOLDS.fresh_days - 1 日前
     const days = STALENESS_THRESHOLDS.fresh_days - 1;
     const date = new Date(NOW - days * 86400_000).toISOString().slice(0, 10);
@@ -91,7 +91,7 @@ describe('summarizeFreshness (sync_state ベース)', () => {
     expect(info?.staleness).toBe('fresh');
   });
 
-  it('閾値の境界 — `fresh_days` ちょうどは stale', () => {
+  it('SPEC-EGOV-CLI-STATUS-003 SPEC-EGOV-SEARCH-FULLTEXT-023 閾値の境界 — `fresh_days` ちょうどは stale', () => {
     const days = STALENESS_THRESHOLDS.fresh_days;
     const date = new Date(NOW - days * 86400_000).toISOString().slice(0, 10);
     seedSyncState(db, date);
@@ -99,7 +99,7 @@ describe('summarizeFreshness (sync_state ベース)', () => {
     expect(info?.staleness).toBe('stale');
   });
 
-  it('1 ヶ月超の同期は outdated + 警告付き', () => {
+  it('SPEC-EGOV-CLI-STATUS-003 SPEC-EGOV-CLI-STATUS-004 SPEC-EGOV-SEARCH-FULLTEXT-023 1 ヶ月超の同期は outdated + 警告付き', () => {
     seedSyncState(db, '2026-04-01'); // NOW から 38 日前
     const info = summarizeFreshness(db, undefined, NOW);
     expect(info?.staleness).toBe('outdated');
@@ -108,7 +108,7 @@ describe('summarizeFreshness (sync_state ベース)', () => {
     expect(info?.warning).toContain('日前');
   });
 
-  it('last_sync_date と last_full_dl_at がレスポンスに含まれる', () => {
+  it('SPEC-EGOV-CLI-STATUS-002 SPEC-EGOV-SEARCH-FULLTEXT-023 last_sync_date と last_full_dl_at がレスポンスに含まれる', () => {
     seedSyncState(db, '2026-05-07', '2026-05-01T03:00:00+09:00');
     const info = summarizeFreshness(db, undefined, NOW);
     expect(info?.last_sync_date).toBe('2026-05-07');
@@ -121,7 +121,7 @@ describe('summarizeFreshness (sync_state ベース)', () => {
     expect(info?.warning).toContain('`MY_CMD`');
   });
 
-  it('judgeStaleness は houki-abbreviations の閾値で動作している', () => {
+  it('SPEC-EGOV-CLI-STATUS-003 SPEC-EGOV-SEARCH-FULLTEXT-023 judgeStaleness は houki-abbreviations の閾値で動作している', () => {
     // 純関数の sanity check (re-export 経由)
     expect(judgeStaleness(0)).toBe('fresh');
     expect(judgeStaleness(STALENESS_THRESHOLDS.fresh_days - 1)).toBe('fresh');

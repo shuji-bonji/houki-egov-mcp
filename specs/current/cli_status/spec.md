@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: CLI
 - 版: current
-- 承認日:
+- 承認日: 2026-09-28（PR #50）
 - 起こした元: v0.15.1 の `src/cli/index.ts`、`src/services/freshness.ts`、`src/config.ts`、`src/services/freshness.test.ts`
 - 関連する Issue: houki-egov-mcp #21（`--status` の案内を `--sync` に変えた）
 
@@ -15,9 +15,9 @@
 
 ## 入力
 
-| フラグ・環境変数 | 必須 | 内容 |
-|---|---|---|
-| `--status` | 必須 | 同期の状態と DB の件数を表示する |
+| フラグ・環境変数     | 必須 | 内容                                                                           |
+| -------------------- | ---- | ------------------------------------------------------------------------------ |
+| `--status`           | 必須 | 同期の状態と DB の件数を表示する                                               |
 | `HOUKI_EGOV_DB_PATH` | 任意 | DB ファイルの場所。既定は `${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/laws.db` |
 
 ## 処理の流れ
@@ -53,11 +53,11 @@ flowchart TD
 
 `days_since_sync` に `last_sync_date` から今までの日数を、`staleness` に次の古さを出す。
 
-| `days_since_sync` | `staleness` |
-|---|---|
-| 7 日未満 | `fresh` |
-| 7 日以上 30 日未満 | `stale` |
-| 30 日以上 | `outdated` |
+| `days_since_sync`  | `staleness` |
+| ------------------ | ----------- |
+| 7 日未満           | `fresh`     |
+| 7 日以上 30 日未満 | `stale`     |
+| 30 日以上          | `outdated`  |
 
 例: 2026-05-09 に `last_sync_date` が `2026-05-08` なら `days_since_sync` は 1、`staleness` は `fresh`。`2026-04-01` なら `outdated`。
 
