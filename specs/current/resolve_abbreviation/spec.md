@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #PR-SPEC）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/errors.ts`、`src/tools/handlers.test.ts`、`src/server.test.ts`（辞書は `@shuji-bonji/houki-abbreviations` 0.x）
 - 関連する Issue: なし
 
@@ -57,6 +57,36 @@ SPEC-EGOV-RESOLVE-ABBREVIATION-003 の応答には `next_actions` を付け、�
 
 例: `abbr: "存在しない法律"` の `next_actions[0].action` は `search_law`。
 
+### SPEC-EGOV-RESOLVE-ABBREVIATION-005 正式名称からも、そのエントリを返す
+
+`abbr` が略称辞書のエントリの正式名称（`formal`）と一致するときも、エラーにせず、そのエントリを `resolved` に入れて返す。`resolved.abbr` は辞書の略称で、応答の `abbr` とは違う値になる。
+
+例: `abbr: "消費税法"` は `abbr: "消費税法"`・`resolved.abbr: "消法"`・`resolved.formal: "消費税法"`。`abbr: "所得税法"` は `resolved.abbr: "所法"`、`abbr: "労働基準法"` は `resolved.abbr: "労基法"`。
+
+### SPEC-EGOV-RESOLVE-ABBREVIATION-006 別名からも、そのエントリを返す
+
+`abbr` が略称辞書のエントリの別名（`aliases` の要素）と一致するときも、エラーにせず、そのエントリを `resolved` に入れて返す。
+
+例: `abbr: "消費税"` と `abbr: "インボイス"` は、どちらも `resolved.abbr: "消法"`・`resolved.formal: "消費税法"`。
+
+### SPEC-EGOV-RESOLVE-ABBREVIATION-007 前後の空白を除いてから辞書と照合する
+
+`abbr` の前後にある空白（半角スペース・全角スペース・タブ・改行）を除いてから辞書と照合する。
+
+例: `abbr: " 消法 "`・`abbr: "　消法　"`（前後が全角スペース）・`abbr: "\t消法\n"` は、どれも `resolved.abbr: "消法"`・`resolved.formal: "消費税法"`。
+
+### SPEC-EGOV-RESOLVE-ABBREVIATION-008 応答の abbr は渡した値のまま返す
+
+応答の `abbr` には、前後の空白を除く前の、渡した値をそのまま入れる。辞書にあるときも無いときも同じ。
+
+例: `abbr: " 消法 "` は応答の `abbr` が `" 消法 "`（`resolved.abbr` は `"消法"`）。`abbr: " 存在しない法律 "` は応答の `abbr` が `" 存在しない法律 "` で、`resolved: null`。
+
+### SPEC-EGOV-RESOLVE-ABBREVIATION-009 resolved は略称辞書のエントリをそのまま返す
+
+`resolved` には、略称辞書（`@shuji-bonji/houki-abbreviations`）の `resolveAbbreviation` が返すエントリを、フィールドを足したり除いたりせずにそのまま入れる。SPEC-EGOV-RESOLVE-ABBREVIATION-001・002 のフィールドのほか、エントリが持っていれば `abbr`・`law_id`・`law_num`・`law_type`・`aliases`・`note` も付く。どのフィールドを持つかは辞書のパッケージの版で決まる。
+
+例: `abbr: "消法"` の `resolved` は、`resolveAbbreviation("消法")` の戻り値と同じ内容（深く比べて等しい）。辞書 0.4.1 では `abbr: "消法"`・`formal: "消費税法"`・`law_id: "363AC0000000108"`・`law_num: "昭和六十三年法律第百八号"`・`law_type: "Act"`・`domain: "tax"`・`category: "law"`・`source_mcp_hint: "houki-egov"`・`aliases`（先頭は `消費税`、`インボイス` を含む 10 件）・`note` を持つ。
+
 ## できないこと
 
 - 略称を渡して条文を返すこと（条文は `get_law`。`get_law` も略称を受け付ける）
@@ -71,9 +101,9 @@ SPEC-EGOV-RESOLVE-ABBREVIATION-003 の応答には `next_actions` を付け、�
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-1. **正式名称・別名からも引ける。** `abbr` が辞書の正式名称（例: `消費税法`）や別名（例: `消費税`、`インボイス`）と一致するときも、そのエントリを `resolved` に入れて返す。`resolved.abbr` は辞書の略称（`消法`）。inputSchema の説明は「略称」だけを挙げている。テストが無い。ID を振るのは受入テストを書いてから。
-2. **前後の空白を除いて引き、応答の `abbr` は渡した値のまま返す。** `abbr: " 消法 "` は `消法` のエントリを返し、応答の `abbr` は `" 消法 "`。テストが無い。ID を振るのは受入テストを書いてから。
+1. **正式名称・別名からも引ける。** → SPEC-EGOV-RESOLVE-ABBREVIATION-005・SPEC-EGOV-RESOLVE-ABBREVIATION-006
+2. **前後の空白を除いて引き、応答の `abbr` は渡した値のまま返す。** → SPEC-EGOV-RESOLVE-ABBREVIATION-007・SPEC-EGOV-RESOLVE-ABBREVIATION-008
 3. **全角と半角の違いを吸収しない。** → houki-egov-mcp #52
 4. **空の `abbr` に、同じく空の `keyword` で `search_law` を案内する。** → houki-egov-mcp #53
 5. **通達の略称も `resolved` に入れて返す。** → houki-egov-mcp #52
-6. **`resolved` のそのほかのフィールド。** `resolved` は辞書のエントリそのもので、`abbr`・`law_id`・`law_num`・`law_type`・`aliases`・`note` も付く（例: `消法` は `law_id: "363AC0000000108"`・`law_num: "昭和六十三年法律第百八号"`・`law_type: "Act"`）。どのフィールドが付くかは辞書のパッケージの版で決まる。テストが無い。ID を振るのは受入テストを書いてから。
+6. **`resolved` のそのほかのフィールド。** → SPEC-EGOV-RESOLVE-ABBREVIATION-009

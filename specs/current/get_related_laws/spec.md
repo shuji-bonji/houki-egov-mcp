@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #PR-SPEC）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-relations.ts`、`src/services/law-service.references.test.ts`、`src/services/law-relations.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: houki-egov-mcp #20（施行令・施行規則の関連付けと条文内の参照抽出）
 
@@ -94,6 +94,64 @@ flowchart TD
 
 例: `law_name: "所得税法"` では、`next_actions` の `action` は `["get_toc", "get_toc"]`。
 
+### SPEC-EGOV-GET-RELATED-LAWS-009 related の要素に law_num・law_type・url を付ける
+
+`related` の要素には、SPEC-EGOV-GET-RELATED-LAWS-001 の `relation`・`law_id`・`title`・`abbr` に加えて、e-Gov の法令番号 `law_num`、法令の種類 `law_type`（e-Gov の値のまま。例: `CabinetOrder`・`MinisterialOrdinance`・`Act`）、e-Gov 法令の公開ページの URL `url`（`https://laws.e-gov.go.jp/law/<law_id>`）を付ける。
+
+例: `law_name: "所得税法"` の `related[0]` は `{ relation: "enforcement_order", law_id: "340CO0000000096", title: "所得税法施行令", law_num: "昭和四十年政令第九十六号", law_type: "CabinetOrder", abbr: "所令", url: "https://laws.e-gov.go.jp/law/340CO0000000096" }`。`related[1]` は `law_type: "MinisterialOrdinance"`、`url: "https://laws.e-gov.go.jp/law/340M50000040011"`。
+
+### SPEC-EGOV-GET-RELATED-LAWS-010 成功の応答の meta.retrieved_at に応答を作った日時を入れる
+
+成功の応答には `meta: { retrieved_at }` を付ける。`retrieved_at` は応答を作った日時の ISO 8601 形式の文字列（UTC、例: `2026-09-27T20:31:35.697Z`）。
+
+例: `law_name: "所得税法"` の応答の `meta` は `retrieved_at` だけを持ち、その値は `new Date(retrieved_at).toISOString()` と同じ文字列になる。`related` が空の応答（`law_name: "民法"`）にも付く。
+
+### SPEC-EGOV-GET-RELATED-LAWS-011 法令番号が分からないときは law.law_num を付けない
+
+`law_name` を解決した法令の法令番号が分からないとき（e-Gov の法令名検索で解決し、その法令の法令番号が空の文字列のとき）は、`law` に `law_num` のキーを付けず、`law_id` と `title` だけを返す。
+
+例: e-Gov の法令名検索が `{ law_id: "999AC0000000001", law_title: "番号無し法", law_num: "" }` を返すとき、`law_name: "番号無し法"` の `law` は `{ law_id: "999AC0000000001", title: "番号無し法" }`（`law_num` のキーが無い）。
+
+### SPEC-EGOV-GET-RELATED-LAWS-012 next_actions の get_toc に、related の法令名と関係に応じた reason を付ける
+
+SPEC-EGOV-GET-RELATED-LAWS-008 の `get_toc` の各要素は、`example: { law_name: <related の title> }` と、`relation` に応じた次の `reason` を持つ。
+
+| `relation`          | `reason`                                         |
+| ------------------- | ------------------------------------------------ |
+| `parent_act`        | `親の法律の目次を見て、委任している条を探せます` |
+| `enforcement_order` | `施行令の目次を見て、委任先の条を探せます`       |
+| `enforcement_rule`  | `施行規則の目次を見て、委任先の条を探せます`     |
+
+例: `law_name: "所得税法"` の `next_actions` は `[{ action: "get_toc", reason: "施行令の目次を見て、委任先の条を探せます", example: { law_name: "所得税法施行令" } }, { action: "get_toc", reason: "施行規則の目次を見て、委任先の条を探せます", example: { law_name: "所得税法施行規則" } }]`。`law_name: "所令"` の `next_actions[0]` は `{ action: "get_toc", reason: "親の法律の目次を見て、委任している条を探せます", example: { law_name: "所得税法" } }`。
+
+### SPEC-EGOV-GET-RELATED-LAWS-013 houki-egov-mcp の管轄外の略称はエラー `OUT_OF_SCOPE` で、管轄の MCP を案内する
+
+`law_name` が略称辞書で houki-egov-mcp 以外の管轄（`source_mcp_hint` が `houki-egov` でない）の名前のときは、e-Gov に問い合わせずにエラー `OUT_OF_SCOPE` を返す。`hint` は `<管轄>-mcp の対応 tool に切り替えてください`、`next_actions` は `action: "delegate_to_mcp"`、`example: { mcp: <管轄> }` の 1 件。
+
+例: `law_name: "消基通"` は `{ code: "OUT_OF_SCOPE", error: "「消費税法基本通達」は houki-nta の管轄です（houki-egov-mcp は法律・政令・省令の本文のみを扱います）", hint: "houki-nta-mcp の対応 tool に切り替えてください", next_actions: [{ action: "delegate_to_mcp", example: { mcp: "houki-nta" }, … }] }`。e-Gov への問い合わせは 0 回。
+
+### SPEC-EGOV-GET-RELATED-LAWS-014 候補の問い合わせで e-Gov からの取得に失敗したら、SOURCE_* のエラーを返し候補ごとの結果は返さない
+
+`law_name` を法令に解決した後、候補を e-Gov に問い合わせている途中で取得に失敗したときは、次のエラーを返す。応答はエラーだけで、`related`・`not_found`・`law` は返さない。
+
+| 失敗                                   | `code`                | `retryable` |
+| -------------------------------------- | --------------------- | ----------- |
+| タイムアウト                           | `SOURCE_TIMEOUT`      | `true`      |
+| HTTP 429                               | `SOURCE_RATE_LIMITED` | `true`      |
+| HTTP 5xx                               | `SOURCE_API_ERROR`    | `true`      |
+| 5xx 以外の HTTP エラー（例: 400）      | `SOURCE_API_ERROR`    | `false`     |
+
+例: 略称辞書で解決する `law_name: "所得税法"` で、候補 `所得税法施行令` の問い合わせが HTTP 429 を返すと `{ code: "SOURCE_RATE_LIMITED", retryable: true, … }`。タイムアウトなら `code: "SOURCE_TIMEOUT"`、HTTP 503 なら `code: "SOURCE_API_ERROR"`、HTTP 400 なら `code: "SOURCE_API_ERROR"` で `retryable: false`。
+
+### SPEC-EGOV-GET-RELATED-LAWS-015 LAW_NOT_FOUND に hint と、resolve_abbreviation・search_law の next_actions を付ける
+
+SPEC-EGOV-GET-RELATED-LAWS-006 の `LAW_NOT_FOUND` は、`hint: "略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください"` と、次の 2 件の `next_actions` をこの順で持つ。
+
+1. `action: "resolve_abbreviation"`、`example: { abbr: <渡した law_name> }`
+2. `action: "search_law"`、`example: { keyword: <渡した law_name> }`
+
+例: `law_name: "存在しない法"` は `{ code: "LAW_NOT_FOUND", error: "法令が見つかりません: 存在しない法", hint: "略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください", next_actions: [{ action: "resolve_abbreviation", example: { abbr: "存在しない法" }, … }, { action: "search_law", example: { keyword: "存在しない法" }, … }] }`。
+
 ## できないこと
 
 - 名前の末尾に「施行令」「施行規則」を付ける・落とす以外の規則で下位法令を探すこと（「…の施行に関する省令」「…施行細則」、複数の省令、告示は返さない）
@@ -108,10 +166,10 @@ flowchart TD
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-1. **応答のフィールドのうちテストで確かめていないもの。** `related` の要素の `law_num`・`law_type`・`url`（e-Gov 法令の公開ページの URL）、`meta.retrieved_at`（応答を作った日時）、法令番号が分からないときに `law.law_num` を付けないこと、`next_actions` の `reason`（親の法律なら委任している条を、施行令・施行規則なら委任先の条を探せる旨）と `example: { law_name: <related の title> }`。テストが無い。ID を振るのは受入テストを書いてから。
-2. **houki-egov-mcp の管轄外の略称を渡したとき。** 略称辞書で通達など別の MCP の管轄と分かる名前（例: `消基通`）は、エラー `OUT_OF_SCOPE` を返し、`next_actions` で管轄の MCP を案内する。テストが無い。ID を振るのは受入テストを書いてから。
-3. **候補を e-Gov に問い合わせている途中で取得に失敗したとき。** タイムアウトは `SOURCE_TIMEOUT`、429 は `SOURCE_RATE_LIMITED`、接続できないときは `SOURCE_UNAVAILABLE`、5xx などは `SOURCE_API_ERROR` を返し、候補ごとの結果は返さない。テストが無い。ID を振るのは受入テストを書いてから。
-4. **`LAW_NOT_FOUND` の `hint` と `next_actions`。** `hint` は略称辞書・e-Gov 法令検索で該当が無い旨、`next_actions` は `resolve_abbreviation` と `search_law` の 2 件。テストが無い。ID を振るのは受入テストを書いてから。
+1. **応答のフィールドのうちテストで確かめていないもの。** → SPEC-EGOV-GET-RELATED-LAWS-009・SPEC-EGOV-GET-RELATED-LAWS-010・SPEC-EGOV-GET-RELATED-LAWS-011・SPEC-EGOV-GET-RELATED-LAWS-012
+2. **houki-egov-mcp の管轄外の略称を渡したとき。** → SPEC-EGOV-GET-RELATED-LAWS-013
+3. **候補を e-Gov に問い合わせている途中で取得に失敗したとき。** → SPEC-EGOV-GET-RELATED-LAWS-014
+4. **`LAW_NOT_FOUND` の `hint` と `next_actions`。** → SPEC-EGOV-GET-RELATED-LAWS-015
 5. **法令名の解決で e-Gov の検索に失敗すると `LAW_NOT_FOUND` になる。** → houki-egov-mcp #46
 6. **法令名が完全一致しないとき、部分一致の先頭の法令を採る。** → houki-egov-mcp #45
 7. **末尾が「施行令」「施行規則」でない政令・省令を渡したとき。** → houki-egov-mcp #63
