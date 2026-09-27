@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: CLI
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #PR-SPEC）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
 - 起こした元: v0.15.1 の `src/cli/index.ts`、`src/config.ts`、`src/services/bulk/zip-fetcher.ts`、`src/services/bulk/csv-parser.ts`、`src/services/bulk/xml-parser.ts`、`src/services/bulk/ingester.ts`、`src/cli/index.test.ts`、`src/services/bulk/zip-fetcher.test.ts`、`src/services/bulk/csv-parser.test.ts`、`src/services/bulk/xml-parser.test.ts`、`src/services/bulk/ingester.test.ts`
 - 関連する Issue: houki-egov-mcp #21（同じ法令の現行の版を 1 つにする変更は、#21 の `--sync` と同じ 0.8.0 で入った）
 

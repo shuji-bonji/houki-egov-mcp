@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: DB
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #PR-SPEC）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
 - 起こした元: v0.15.1 の `src/db/index.ts`、`src/db/schema.ts`、`src/config.ts`（`BULK_CONFIG`）、`src/cli/index.ts`（DB を開く箇所と `--help`）、`src/db/schema.test.ts`
 - 関連する Issue: なし
 
@@ -198,7 +198,7 @@ DB を開くと、ジャーナルの形式を WAL にする。
 4. **MCP サーバーが DB に書き込む場面がある。** → houki-egov-mcp #60
 5. **`sync_state.schema_version` 列。** → houki-egov-mcp #60
 6. **`laws_fts`・`revisions_meta`・`sync_state` の列。** → SPEC-EGOV-DB-SCHEMA-018・SPEC-EGOV-DB-SCHEMA-019・SPEC-EGOV-DB-SCHEMA-020
-7. **`laws` の既定値と必須の列。** `remain_in_force` の既定値は 0、`law_revision_id`・`law_id`・`law_type`・`law_num`・`law_title`・`promulgation_date`・`current_revision_status`・`repeal_status`・`updated`・`fetched_at`・`content_hash` は空にできない。テストが無い。ID を振るのは受入テストを書いてから。
+7. **`laws` の既定値と必須の列。** → houki-egov-mcp #71
 8. **`articles` の行を書き換えたときの `articles_fts`。** → SPEC-EGOV-DB-SCHEMA-021
 9. **取り込み中の読み取り。** → SPEC-EGOV-DB-SCHEMA-022・SPEC-EGOV-DB-SCHEMA-023
 10. **全データを消す機能がテストにだけある。** → houki-egov-mcp #60

@@ -61,12 +61,14 @@ PR #50 の初版起こしで、「未決」のうち 113 件は「今の振る�
 
 ## 見つかった問題（Issue にする）
 
-1. **db_schema:** `laws.law_revision_id` に NULL が入る。また `schema_meta.schema_version` が数字でない DB を開くと、作り直しに進まず `UNIQUE constraint failed: schema_meta.key` で開けない
-2. **e-Gov を呼ぶ全ツール:** 名前解決・接続の失敗が `SOURCE_UNAVAILABLE` にならない
-3. **cli_status:** 件数の区切りが環境の言語設定で変わる
-4. **list_attachments / get_attachment:** 附則の別表・様式にある図の `location` が `{ tag: "SupplProvision" }` になり、見出しが付かない
-5. **explain_law_type:** `name: "toString"` や `"constructor"` で `found: true` になり、`info` が無い
-6. **cli_bulk_download:** current の SPEC-EGOV-CLI-BULK-DOWNLOAD-006「取得が終わった時点の表示は 100%」が実装と合わない。推定より小さい zip では、終わったときの表示が 100% にならない
+1. **db_schema（#71）:** `laws.law_revision_id` に NULL が入る。また `schema_meta.schema_version` が数字でない DB を開くと、作り直しに進まず `UNIQUE constraint failed: schema_meta.key` で開けない
+2. **e-Gov を呼ぶ全ツール（#69）:** 名前解決・接続の失敗が `SOURCE_UNAVAILABLE` にならない
+3. **cli_status（#74）:** 件数の区切りが環境の言語設定で変わる
+4. **list_attachments / get_attachment（#72）:** 附則の別表・様式にある図の `location` が `{ tag: "SupplProvision" }` になり、見出しが付かない
+5. **explain_law_type（#73）:** `name: "toString"` や `"constructor"` で `found: true` になり、`info` が無い
+6. **cli_bulk_download（#75）:** current の SPEC-EGOV-CLI-BULK-DOWNLOAD-006「取得が終わった時点の表示は 100%」が実装と合わない。推定より小さい zip では、終わったときの表示が 100% にならない
+
+受入テストで見つかった問題: verify_citations で同じ未知の law_id が並ぶと、2 件目以降の keyword が law_name にならない（#70。SPEC-EGOV-VERIFY-CITATIONS-027 のこの場合のテストは外した）。
 
 既存の Issue に足すもの: search_fulltext の `limit` に小数を渡すと `SqliteError: datatype mismatch` で応答が返らない（#54）。引数の問題が 2 つ以上あるとき `detail.issues` が 1 件になり、2 つ目の `message` に `data` の前置きが残る（#57）。施行規則の条からの呼び名 `規則`（#63）。
 
