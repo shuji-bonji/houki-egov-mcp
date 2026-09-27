@@ -120,11 +120,11 @@ pdf のファイルを `save: true` で保存したときは、`content_type` �
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-1. **50 MB を超えるファイルを `INVALID_ARGUMENT` で返す。** 取得したファイルが 50 MB を超えると保存せず、エラー `INVALID_ARGUMENT`（`hint` は保存せず `url` を使う案内、`detail.url`）を返す。`INVALID_ARGUMENT` は呼び出し側の引数の誤りを表す code だが、呼び出し側の引数は正しく、ファイルの大きさはサーバーが取得してみるまで分からない。また上限を確かめるのはファイルを全部取得した後である。この場面の code を何にするか（`INVALID_ARGUMENT` のままか、別の code か）と、取得の前か途中で打ち切るかを決める必要がある。テストも無い。
-2. **`src` が空文字のときは zip、空白だけのときは `ATTACHMENT_NOT_FOUND`。** `src: ""` は省いたときと同じく zip を対象にするが、`src: " "` は前後の空白を除いた空文字を一覧と照らし、一致しないので `ATTACHMENT_NOT_FOUND`（`error` は「添付ファイルが見つかりません: 」）を返す。空白だけの `src` を省いたときと同じに扱うか、`INVALID_ARGUMENT` にするかを決める必要がある。
-3. **ファイル名だけで引いたとき、同じファイル名が複数あると先のものを返す。** SPEC-EGOV-GET-ATTACHMENT-002 のファイル名での照合は、同じファイル名が別のディレクトリの `src` に複数あっても、一覧で先にあるものを黙って返す。複数当たるときにエラーにするか、今のままでよいかを決める必要がある。
-4. **e-Gov の法令検索が失敗したときも `LAW_NOT_FOUND` を返す。** 法令名を e-Gov の法令検索で特定する段で、ネットワークの失敗や e-Gov の 5xx が起きても、`LAW_NOT_FOUND`（`retryable` なし）を返す。呼び出し側は表記の誤りと一時的な障害を見分けられない。検索の失敗を `SOURCE_API_ERROR` などにして `retryable` を付けるかを決める必要がある。
-5. **`at` の形を確かめない。** `at` は形を確かめずに e-Gov に渡す。形が違う値や法令の成立より前の日付のときに e-Gov が返す 4xx は `SOURCE_API_ERROR`（`retryable: false`）になる。`at` の形をこのサーバーで確かめて `INVALID_ARGUMENT` にするかを決める必要がある。
+1. **50 MB を超えるファイルを `INVALID_ARGUMENT` で返す。** → houki-egov-mcp #49
+2. **`src` が空文字のときは zip、空白だけのときは `ATTACHMENT_NOT_FOUND`。** → houki-egov-mcp #53
+3. **ファイル名だけで引いたとき、同じファイル名が複数あると先のものを返す。** → houki-egov-mcp #66
+4. **e-Gov の法令検索が失敗したときも `LAW_NOT_FOUND` を返す。** → houki-egov-mcp #46
+5. **`at` の形を確かめない。** → houki-egov-mcp #47
 6. **save なしで pdf を指したときの案内と、zip の note。** `save` なしで pdf のファイルを指したときは `next_actions` に `pdf-reader-mcp:read_url`（`example` は `{ url }`）を入れる。zip のときの `note` は「添付ファイル <件数> 件をまとめた zip の URL です。」で始まる。1 件のときの `note` には保存先のディレクトリを書く。テストが無い。ID を振るのは受入テストを書いてから。
 7. **時点（at）を渡したとき。** その時点の法令履歴の添付を対象にし、`meta.at` に渡した `at` を入れ、SPEC-EGOV-GET-ATTACHMENT-008 の `next_actions` の `list_attachments` の `example` にも `at` を入れる。このツールで確かめるテストが無い。テストが無い。ID を振るのは受入テストを書いてから。
 8. **特定できない法令と管轄外の資料。** 法令名から法令を特定できないときは `LAW_NOT_FOUND`、略称辞書で別の MCP サーバーの管轄の資料に当たるときは `OUT_OF_SCOPE` を返す。このツールで確かめるテストが無い。テストが無い。ID を振るのは受入テストを書いてから。

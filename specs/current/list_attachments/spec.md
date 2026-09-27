@@ -112,8 +112,8 @@ e-Gov の法令本文に付く添付ファイルの一覧（`attached_files_info
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-1. **e-Gov の法令検索が失敗したときも `LAW_NOT_FOUND` を返す。** 法令名を e-Gov の法令検索で特定する段で、ネットワークの失敗や e-Gov の 5xx が起きても、失敗を記録するだけで「法令が見つからない」として `LAW_NOT_FOUND`（`retryable` なし）を返す。呼び出し側は表記の誤りと一時的な障害を見分けられない。検索の失敗を `SOURCE_API_ERROR` などにして `retryable` を付けるかを決める必要がある。
-2. **`at` の形を確かめない。** `at` は `YYYY-MM-DD` 形式と説明しているが、形を確かめずに e-Gov に渡す。形が違う値や、法令の成立より前の日付を渡したときに e-Gov が返すエラーは、4xx なら `SOURCE_API_ERROR`（`retryable: false`）になり、何が悪いかが呼び出し側に伝わらない。`at` の形をこのサーバーで確かめて `INVALID_ARGUMENT` にするか、成立前の日付をどう返すかを決める必要がある。
+1. **e-Gov の法令検索が失敗したときも `LAW_NOT_FOUND` を返す。** → houki-egov-mcp #46
+2. **`at` の形を確かめない。** → houki-egov-mcp #47
 3. **一覧の並び順と重複の扱い。** `attached_files_info` の順に並べ、その後ろに本文にだけある図を本文の出現順に並べる。同じ `src` が 2 回出てきたら 1 件にする。テストは件数と先頭の 1 件だけを確かめている。テストが無い。ID を振るのは受入テストを書いてから。
 4. **別表・書式・別図・付録の置き場所と、どこにも当たらない図。** `location.tag` は別表（`AppdxTable`）・書式（`AppdxFormat`）・別図（`AppdxFig`）・付録（`Appdx`）にもなり、どこにも当たらない図は `tag: "Law"` になる。附則の中の別表・様式や条では `amend_law_num` も付く。テストは `AppdxNote`・`AppdxStyle`・`Article`・`SupplProvision` だけを確かめている。テストが無い。ID を振るのは受入テストを書いてから。
 5. **`meta` の `law_id`・`title`・`law_num`・`retrieved_at`・`url`。** 値を確かめるテストが無い。テストが無い。ID を振るのは受入テストを書いてから。

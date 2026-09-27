@@ -122,11 +122,11 @@ DB を開くと、次のテーブルを作る。
 
 1. **DB の置き場所と環境変数。** `HOUKI_EGOV_DB_PATH` が最優先、無ければ `$XDG_CACHE_HOME/houki-egov-mcp/laws.db`（`XDG_CACHE_HOME` が空文字のときも無いものとして扱う）、それも無ければ `~/.cache/houki-egov-mcp/laws.db`。置き場所のディレクトリが無いときは作る。テストが無い。ID を振るのは受入テストを書いてから。
 2. **版が違う DB を開いたときの作り直し。** `schema_version` が 2 でない DB を開くと、全テーブルを消して空のスキーマを作り直し、`schema_version` を 2 にする（CHANGELOG v0.5.0 と README は「旧 DB は起動時に自動初期化」と書く）。テストが無い。ID を振るのは受入テストを書いてから。
-3. **新しい版の DB を古い版のサーバーで開くと、取り込んだ中身が消える。** 作り直しは版が「違う」ときに起き、DB の版がサーバーより新しいとき（利用者が houki-egov-mcp を古い版に戻したとき）も全テーブルを消す。約 290 MB の取り込みをやり直すことになる。新しい版の DB には触らずにエラーにするかは人が決める。
-4. **MCP サーバーが DB に書き込む場面がある。** README は「書き込みは CLI だけが行い、MCP server は読むだけ」と書くが、`search_fulltext` が DB を開くと、DB ファイルやディレクトリが無ければ作り、スキーマを作り、版が違えば作り直す（未決 2・3）。`--status` も DB が無いと空の DB を作る。README を直すか、MCP サーバーからは作らない・作り直さないようにするかは人が決める。
-5. **`sync_state.schema_version` 列。** `sync_state` は `schema_version` 列を持ち既定値は 2 だが、スキーマの版が上がってもこの既定値は連動せず、取り込みもこの列に書かない。スキーマの版は `schema_meta` だけが持つ。列を残すか外すかは人が決める。
+3. **新しい版の DB を古い版のサーバーで開くと、取り込んだ中身が消える。** → houki-egov-mcp #60
+4. **MCP サーバーが DB に書き込む場面がある。** → houki-egov-mcp #60
+5. **`sync_state.schema_version` 列。** → houki-egov-mcp #60
 6. **`laws_fts`・`revisions_meta`・`sync_state` の列。** `laws_fts` は `law_revision_id`（索引に載せない）・`law_title`・`law_title_kana`・`abbrev`・`law_num`・`category`、`revisions_meta` は `law_revision_id`・`law_id`・`mission`・`updated`・`raw_revision_info_json`、`sync_state` は `id`・`last_sync_date`・`last_full_dl_at`・`total_laws`・`bulk_source`・`schema_version` を持つ。テーブルがあることはテスト済み（SPEC-EGOV-DB-SCHEMA-002）だが、列はテストが無い。ID を振るのは受入テストを書いてから。
 7. **`laws` の既定値と必須の列。** `remain_in_force` の既定値は 0、`law_revision_id`・`law_id`・`law_type`・`law_num`・`law_title`・`promulgation_date`・`current_revision_status`・`repeal_status`・`updated`・`fetched_at`・`content_hash` は空にできない。テストが無い。ID を振るのは受入テストを書いてから。
 8. **`articles` の行を書き換えたときの `articles_fts`。** 書き換えると `articles_fts` も新しい本文に入れ替わる。追加と削除はテスト済み（SPEC-EGOV-DB-SCHEMA-007・008）だが、書き換えはテストが無い。ID を振るのは受入テストを書いてから。
 9. **取り込み中の読み取り。** DB は WAL で開くので、CLI が取り込んでいる間も `search_fulltext` で読める（README に書いてある）。テストが無い。ID を振るのは受入テストを書いてから。
-10. **全データを消す機能がテストにだけある。** `laws`・`articles`・`revisions_meta`・`sync_state` の行を消し、`schema_meta` を残す機能はテストで確かめているが、CLI にもツールにも呼び出す入口が無い。利用者に出す（たとえば CLI のフラグにする）か、テスト用の内部の機能として仕様から外すかは人が決める。
+10. **全データを消す機能がテストにだけある。** → houki-egov-mcp #60

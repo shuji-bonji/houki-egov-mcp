@@ -59,12 +59,12 @@ MCP サーバーは `get_law_revisions` という名前のツールを持ち、`
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-1. **状態の値が説明と違う。** tool description は「状態（現行/旧法/未施行）」と書くが、`revisions[].current_revision_status` は e-Gov の値をそのまま返し、`CurrentEnforced` / `PreviousEnforced` / `UnEnforced` などの英語の値になる（2026-09-28 に `消法` で確かめた）。description を値に合わせるか、日本語の説明を別のフィールドで付けるかを決める必要がある。
-2. **`latest` の「最新」が何の順か決まっていない。** ツールは並べ替えず、e-Gov が返した順の先頭から `latest` 件を返す。2026-09-28 に `消法`・`latest: 3` で確かめると、施行日の新しい順で、まだ施行されていない改正（`UnEnforced`、施行日 2030-06-19 など）が先頭に来た。「最新」を施行日の新しい順（未施行を含む）とするのか、公布日の順や施行済みのものだけとするのか、e-Gov の順に頼るのでよいかを決める必要がある。
-3. **`latest` の値を確かめない。** `latest` が 0 や負の数なら全件を返し、`2.5` のような小数は整数に切り捨てた件数（2 件）になる。エラーにしない。0 以下と小数を `INVALID_ARGUMENT` にするか、今のままにするかを決める必要がある。
-4. **辞書に無い法令名は、e-Gov の法令検索の先頭の法令に決めてしまう。** `law_name` が略称辞書に無いときは e-Gov の法令名検索（最大 5 件）を引き、法令名が完全に一致するものが無ければ 1 件目の法令の改正履歴を返す。別の法令になっても応答の `meta.title` で分かるだけで、候補が複数あったことは返さない。完全一致しないときに `LAW_NOT_FOUND` や候補の一覧を返すかを決める必要がある。
-5. **法令を決めるための e-Gov の検索に失敗すると `LAW_NOT_FOUND` になる。** 辞書に無い法令名で e-Gov の法令検索が失敗した（タイムアウト・レート制限など）ときは、`SOURCE_*` のエラーではなく `LAW_NOT_FOUND` を返す。改正履歴の取得の失敗（未決 10）とエラーの code を揃えるかを決める必要がある。
-6. **e-Gov が返さなかった改正のフィールド。** `amendment_enforcement_comment` などは e-Gov の値が無ければ `null` になることも、フィールドが付かないこともある（e-Gov の応答のまま）。どちらかに揃えるかを決める必要がある。
+1. **状態の値が説明と違う。** → houki-egov-mcp #65
+2. **`latest` の「最新」が何の順か決まっていない。** → houki-egov-mcp #65
+3. **`latest` の値を確かめない。** → houki-egov-mcp #54
+4. **辞書に無い法令名は、e-Gov の法令検索の先頭の法令に決めてしまう。** → houki-egov-mcp #45
+5. **法令を決めるための e-Gov の検索に失敗すると `LAW_NOT_FOUND` になる。** → houki-egov-mcp #46
+6. **e-Gov が返さなかった改正のフィールド。** → houki-egov-mcp #65
 7. **応答の形。** 応答は `meta`（`law_id`・`title`・`law_num`・`retrieved_at`（呼び出した日時）・`url`（`https://laws.e-gov.go.jp/law/<law_id>`））、`total`（`latest` で絞る前の件数）、`revisions`（要素は `law_revision_id`・`amendment_promulgate_date`・`amendment_enforcement_date`・`amendment_enforcement_comment`・`amendment_law_num`・`amendment_law_title`・`amendment_law_id`・`current_revision_status`）を持つ。例: `消法` は `meta.law_id: "363AC0000000108"`、`total: 65`（2026-09-28 時点）。テストが無い。ID を振るのは受入テストを書いてから。
 8. **管轄外の名前は `OUT_OF_SCOPE`。** `law_name` が略称辞書で houki-egov-mcp 以外の管轄（例: `消基通` は houki-nta）のときは、e-Gov を引かずにエラー `OUT_OF_SCOPE` を返し、`next_actions[0]` に `action: "delegate_to_mcp"`、`example: { mcp: <管轄の MCP> }` を入れる。テストが無い。ID を振るのは受入テストを書いてから。
 9. **法令が見つからないときは `LAW_NOT_FOUND`。** 略称辞書にも e-Gov の法令検索にも該当が無いときは、エラー `LAW_NOT_FOUND` を返し、`next_actions` に `resolve_abbreviation`（`example: { abbr: <law_name> }`）と `search_law`（`example: { keyword: <law_name> }`）を入れる。テストが無い。ID を振るのは受入テストを書いてから。

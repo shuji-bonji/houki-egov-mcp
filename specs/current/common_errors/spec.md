@@ -173,12 +173,12 @@ initialize の応答の `serverInfo` は、`name` にパッケージ名（`@shuj
 
 1. **`arguments` を省いた呼び出し。** 空のオブジェクトを渡したものとして検査する（14 ツールとも必須の引数があるので `INVALID_ARGUMENT` になる）。テストが無い。ID を振るのは受入テストを書いてから。
 2. **inputSchema の検査で返す `INVALID_ARGUMENT` の `error`・`hint`・`next_actions`。** `error` は `引数が tools/list の inputSchema に合いません: ` の後に `detail.issues` を `<path>: <message>` の形（`path` が空なら `<message>` だけ）で `; ` 区切りに続けたもの、`hint` は `tools/list の <ツール名> の inputSchema を確認してください (型・必須・enum・未知の引数)`、`next_actions` は `{ action: "list_tools", reason: "inputSchema で引数の型と必須項目を確認できます" }` の 1 件。テストは `code` と `detail.issues[0].path` しか確かめていない。テストが無い。ID を振るのは受入テストを書いてから。
-3. **inputSchema の検査で返す `INVALID_ARGUMENT` に `tool` が付かない。** houki-nta-mcp は同じエラーに呼んだツールの名前を `tool` で付けるが、houki-egov-mcp は付けない。family で揃えるかは人が決める。
-4. **必須の引数が無いときの `path` と、検査の `message` の言語。** 必須の引数が無いときは `detail.issues[0].path` が空文字で、どの引数が無いかは `message`（`must have required property 'name'`）の中にしか無い。型・enum の違反の `message` も英語（`must be string`、`must be equal to one of the allowed values`）で、inputSchema に無い引数の `message`（`inputSchema に無い引数です`）だけが日本語である。`path` に引数名を入れるか、`message` を日本語に揃えるかは人が決める。
-5. **inputSchema に無い引数が 2 つ以上あるときの `path`。** `path` にそれらの名前がすべて `, ` 区切りで入り（例: `typo, foo`）、問題 1 件ごとにどの引数かを分けない。テストが無い。問題ごとに引数を分けるかは人が決める。
-6. **`UNKNOWN_TOOL` の `error` の文面と `retryable`。** `error` は英語の `Unknown tool: <name>` で、ほかのエラーと違い日本語でない。`retryable` は付かないが、README の表は `false` と書く。文面を揃えるか、README に合わせて `retryable: false` を付けるかは人が決める。
-7. **処理中の想定外の例外で返す `INTERNAL_ERROR` の `retryable` が README と違う。** 実際は `retryable: true` と `next_actions` に `retry_later` を付けるが、README の表は `INTERNAL_ERROR` の `retryable` を `false` と書く。また `hint` は「バグの可能性があります。再現手順を添えて GitHub issue でご報告ください」で、再試行の案内と報告の依頼が同じエラーに並ぶ。どちらに揃えるかは人が決める。
+3. **inputSchema の検査で返す `INVALID_ARGUMENT` に `tool` が付かない。** → houki-egov-mcp #57
+4. **必須の引数が無いときの `path` と、検査の `message` の言語。** → houki-egov-mcp #57
+5. **inputSchema に無い引数が 2 つ以上あるときの `path`。** → houki-egov-mcp #57
+6. **`UNKNOWN_TOOL` の `error` の文面と `retryable`。** → houki-egov-mcp #56
+7. **処理中の想定外の例外で返す `INTERNAL_ERROR` の `retryable` が README と違う。** → houki-egov-mcp #56
 8. **処理中の想定外の例外で返す `INTERNAL_ERROR` の `error`・`hint`・`next_actions`。** `error` は `内部エラーが発生しました: <例外の文>`、`hint` は上の文、`next_actions` は `action: "retry_later"` の 1 件。テストは `code`・`retryable`・`detail.cause` しか確かめていない。テストが無い。ID を振るのは受入テストを書いてから。
 9. **`hint` が空文字のときは付けない。** SPEC-EGOV-COMMON-ERRORS-008 のテストは `hint` を渡さない場合だけを確かめており、空文字を渡したときに付かないことは確かめていない。テストが無い。ID を振るのは受入テストを書いてから。
-10. **どのツールも返さない code。** `ABBREVIATION_NOT_FOUND`（`resolve_abbreviation` は辞書に無い名前でもエラーにせず `resolved: null` を返す）と、v0.2.x までの `EGOV_API_ERROR`・`EGOV_TIMEOUT`・`EGOV_RATE_LIMITED` は、code の語彙に残っているが v0.15.1 ではどのツールも返さない。語彙から外すか残すかは人が決める。
-11. **README の「まず試す」のツール数が実際と違う。** README は「9 ツールのうち 8 つはそのまま動きます」と書くが、tools/list が返すのは 14 ツールで、ローカル DB が要るのは `search_fulltext` の 1 つである（直後の表は 14 ツールを挙げている）。README を直すかは人が決める。
+10. **どのツールも返さない code。** → houki-egov-mcp #57
+11. **README の「まず試す」のツール数が実際と違う。** → houki-egov-mcp #56

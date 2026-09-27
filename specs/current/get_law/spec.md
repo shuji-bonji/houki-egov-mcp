@@ -209,12 +209,12 @@ markdown の応答では、項の直下の表（所得税法 第89条第1項の�
 9. **`OUT_OF_SCOPE` の `next_actions`。** `next_actions` に `delegate_to_mcp`（`example.mcp` に管轄の MCP の名前）を入れ、`error` に正式名称と管轄を書く。テストが無い。ID を振るのは受入テストを書いてから。
 10. **`format: "toc"` で `article` を渡したとき。** `article` を使わずに目次を返す。テストが無い。ID を振るのは受入テストを書いてから。
 11. **`at` による時点指定。** `at` を e-Gov にそのまま渡し、その時点の本文を返す。同じ法令でも `at` が違えば別の本文として扱う。テストが無い。ID を振るのは受入テストを書いてから。
-12. **法令名が完全一致しないとき、e-Gov の検索の先頭の法令を使う。** 略称辞書に法令 ID が無い名前は e-Gov の法令名検索で引き、題名が完全一致する法令が無ければ検索結果の 1 件目を黙って使う。求めたものと違う法令の条文を返しうる。完全一致しないときにエラーや候補の一覧を返すべきかを決める必要がある。
-13. **法令名の検索で e-Gov に問い合わせられなかったとき `LAW_NOT_FOUND` になる。** 法令名の検索が HTTP エラーや接続の失敗で終わっても、`SOURCE_*` ではなく `LAW_NOT_FOUND` を返す（本文の取得の失敗は `SOURCE_*`）。`retryable` も付かない。問い合わせの失敗を `SOURCE_*` にすべきかを決める必要がある。
-14. **空の `law_name` の code。** 空の `law_name` は `LAW_NOT_FOUND` になる。`search_law` は空の `keyword` に `INVALID_ARGUMENT` を返す。どちらの code にするかを決める必要がある。
-15. **条の探し方が本則に限られていない。** `article` の条は法令本文の全体から先に見つかったものを返し、本則と附則を区別しない。本則に無い条番号で附則の条が返りうる（`get_law` の応答には附則の条である印が付かない）。本則に限るか、附則の条である印を付けるかを決める必要がある。
-16. **削除された条の範囲表記を `article` に渡せる。** `article: "534:535"` や `"五百三十四:五百三十五"` を受け付け、範囲表記の条（本文は「削除」）を返す（`get_law_range` の `from_article` のための読み取りを共有しているため）。inputSchema の description には書いていない。`get_law` でも受け付ける入力として約束するかを決める必要がある。
-17. **目次の `meta` に `at` が付かない。** 条文の応答の `meta` には `at` が付くが、目次（`format: "toc"`、または `article` 省略）の `meta` には付かない（Markdown の `時点:` の行は付く）。そろえるかを決める必要がある。
-18. **`item` だけを指定して項を補ったとき、json の `paragraph_num` が付かない。** SPEC-EGOV-GET-LAW-011 で項が 1 つの条の号を返したとき、`data.paragraph_num` は無く、`data.node` は号である。補った項番号（`1`）を返すべきかを決める必要がある。
-19. **`paragraph` に 0・負の数・小数を渡したとき。** inputSchema は `number` とだけ書いており、0 や `1.5` も検査を通って `ARTICLE_NOT_FOUND`（項が見つからない）になる。`item` の同じ値は `INVALID_ARTICLE_NUM` になる。`INVALID_ARGUMENT` にするかを決める必要がある。
-20. **`at` の形を確かめない。** description は `YYYY-MM-DD` と書くが、形を確かめずに e-Gov に渡す。形の違う値は e-Gov のエラー（`SOURCE_API_ERROR`）になりうる。`INVALID_ARGUMENT` にするかを決める必要がある。
+12. **法令名が完全一致しないとき、e-Gov の検索の先頭の法令を使う。** → houki-egov-mcp #45
+13. **法令名の検索で e-Gov に問い合わせられなかったとき `LAW_NOT_FOUND` になる。** → houki-egov-mcp #46
+14. **空の `law_name` の code。** → houki-egov-mcp #53
+15. **条の探し方が本則に限られていない。** → houki-egov-mcp #51
+16. **削除された条の範囲表記を `article` に渡せる。** → houki-egov-mcp #54
+17. **目次の `meta` に `at` が付かない。** → houki-egov-mcp #64
+18. **`item` だけを指定して項を補ったとき、json の `paragraph_num` が付かない。** → houki-egov-mcp #64
+19. **`paragraph` に 0・負の数・小数を渡したとき。** → houki-egov-mcp #48
+20. **`at` の形を確かめない。** → houki-egov-mcp #47

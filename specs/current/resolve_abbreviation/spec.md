@@ -73,7 +73,7 @@ SPEC-EGOV-RESOLVE-ABBREVIATION-003 の応答には `next_actions` を付け、�
 
 1. **正式名称・別名からも引ける。** `abbr` が辞書の正式名称（例: `消費税法`）や別名（例: `消費税`、`インボイス`）と一致するときも、そのエントリを `resolved` に入れて返す。`resolved.abbr` は辞書の略称（`消法`）。inputSchema の説明は「略称」だけを挙げている。テストが無い。ID を振るのは受入テストを書いてから。
 2. **前後の空白を除いて引き、応答の `abbr` は渡した値のまま返す。** `abbr: " 消法 "` は `消法` のエントリを返し、応答の `abbr` は `" 消法 "`。テストが無い。ID を振るのは受入テストを書いてから。
-3. **全角と半角の違いを吸収しない。** `abbr: "ＰＬ法"`（全角英字）は `resolved: null`（辞書にあるのは半角の `PL法`）。辞書のパッケージは全角英数字を半角にして照合する指定（`normalize: true`）を持つが、このツールは使っていない。吸収するかを人が決める。
-4. **空の `abbr` に、同じく空の `keyword` で `search_law` を案内する。** `abbr: ""` は `resolved: null` と、`example: { keyword: "" }` の `search_law` の案内を返す。この案内どおりに呼ぶと `search_law` は `INVALID_ARGUMENT`（SPEC-EGOV-SEARCH-LAW-001）を返す。空の `abbr` を `INVALID_ARGUMENT` にするか、案内を付けないかを人が決める。
-5. **通達の略称も `resolved` に入れて返す。** `abbr: "消基通"` は `resolved.formal: "消費税法基本通達"`・`resolved.law_id: null`・`resolved.category: "kihon-tsutatsu"`・`resolved.source_mcp_hint: "houki-nta"` を返し、このサーバーの管轄外であることは `source_mcp_hint` でしか分からない。tool の説明は「正式な法令名と law_id を解決する」で、通達を返すことを書いていない。説明を直すか、管轄外の印を付けるかを人が決める。
+3. **全角と半角の違いを吸収しない。** → houki-egov-mcp #52
+4. **空の `abbr` に、同じく空の `keyword` で `search_law` を案内する。** → houki-egov-mcp #53
+5. **通達の略称も `resolved` に入れて返す。** → houki-egov-mcp #52
 6. **`resolved` のそのほかのフィールド。** `resolved` は辞書のエントリそのもので、`abbr`・`law_id`・`law_num`・`law_type`・`aliases`・`note` も付く（例: `消法` は `law_id: "363AC0000000108"`・`law_num: "昭和六十三年法律第百八号"`・`law_type: "Act"`）。どのフィールドが付くかは辞書のパッケージの版で決まる。テストが無い。ID を振るのは受入テストを書いてから。

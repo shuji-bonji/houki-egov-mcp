@@ -104,14 +104,14 @@ flowchart TD
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-1. **Content-Disposition が無いと、`saved.law_revision_id` に法令 ID が入る。** e-Gov の応答に Content-Disposition のファイル名が無いときは、`<law_id>.<file_type>` の名前で保存する。このとき `saved.file_name` は `null` だが、`saved.law_revision_id` にはこの名前の拡張子より前、つまり法令 ID（例: `129AC0000000089`）が入り、保存先のディレクトリも法令 ID の名前になる。inputSchema の説明と応答の型の説明は `law_revision_id` を法令履歴 ID としている。この場合に `law_revision_id` を `null` にするかを決める必要がある。テストも無い。
-2. **50 MB を超えるファイルを `INVALID_ARGUMENT` で返す。** 取得したファイルが 50 MB を超えると保存せず、エラー `INVALID_ARGUMENT`（`hint` は保存せず `url` を使う案内、`detail.url`）を返す。呼び出し側の引数は正しく、大きさは取得してみるまで分からない。上限を確かめるのはファイルを全部取得した後である。この場面の code を何にするかと、取得の前か途中で打ち切るかを決める必要がある。テストも無い。
-3. **e-Gov の法令検索が失敗したときも `LAW_NOT_FOUND` を返す。** 法令名を e-Gov の法令検索で特定する段で、ネットワークの失敗や e-Gov の 5xx が起きても、`LAW_NOT_FOUND`（`retryable` なし）を返す。呼び出し側は表記の誤りと一時的な障害を見分けられない。検索の失敗を `SOURCE_API_ERROR` などにして `retryable` を付けるかを決める必要がある。
-4. **`at` の形を確かめない。** `at` は形を確かめずに `asof` として URL に入れる。`save` なしでは e-Gov に問い合わせないので、形が違う値でも成功応答の URL が返り、開いたときに初めて失敗が分かる。`at` の形をこのサーバーで確かめて `INVALID_ARGUMENT` にするかを決める必要がある。
+1. **Content-Disposition が無いと、`saved.law_revision_id` に法令 ID が入る。** → houki-egov-mcp #66
+2. **50 MB を超えるファイルを `INVALID_ARGUMENT` で返す。** → houki-egov-mcp #49
+3. **e-Gov の法令検索が失敗したときも `LAW_NOT_FOUND` を返す。** → houki-egov-mcp #46
+4. **`at` の形を確かめない。** → houki-egov-mcp #47
 5. **テスト名「/law_data は引かない」と、テストが確かめていること。** テスト `save なしは URL だけ。/law_data は引かない` は、法令本文ファイルの取得を呼んでいないことだけを確かめ、法令本文（`/law_data`）を引いていないことは確かめていない。実装は `save` なしのとき法令名の解決（e-Gov の法令検索）だけを行う。テストが無い。ID を振るのは受入テストを書いてから。
 6. **json・html・rtf の `next_actions`。** `json` のときも `xml` と同じく `get_law`（`example` は `{ law_name, article: "1" }`）を入れ、`html`・`rtf` のときは付けない。テストは `xml` と `docx` だけを確かめている。テストが無い。ID を振るのは受入テストを書いてから。
 7. **`save` なしの `note` の中身。** 時点を渡したときは「時点 <at> 以前で最新の履歴」、渡さないときは「現時点で最新の履歴」の URL である旨と、保存先のディレクトリを書く。保存したときは「<ファイル名>（<サイズ>）を <パス> に保存しました。」。テストが無い。ID を振るのは受入テストを書いてから。
 8. **特定できない法令と管轄外の資料。** 法令名から法令を特定できないときは `LAW_NOT_FOUND`、略称辞書で別の MCP サーバーの管轄の資料に当たるときは `OUT_OF_SCOPE` を返す。`file_type` の検査はこれより先に行う。このツールで確かめるテストが無い。テストが無い。ID を振るのは受入テストを書いてから。
 9. **e-Gov からの取得に失敗したときの code。** 429 は `SOURCE_RATE_LIMITED`、時間切れは `SOURCE_TIMEOUT`、5xx は `SOURCE_API_ERROR`（`retryable: true`）、それ以外の 4xx は `SOURCE_API_ERROR`（`retryable: false`）を返す。429 と 5xx とネットワークの失敗は、返す前に取り直す。テストが無い。ID を振るのは受入テストを書いてから。
 10. **既定の保存先と、同じファイルの上書き。** `HOUKI_EGOV_FILES_DIR` が無いときの保存先は `${XDG_CACHE_HOME}/houki-egov-mcp/files`（`XDG_CACHE_HOME` が無ければ `~/.cache/houki-egov-mcp/files`）。同じ名前のファイルを保存すると上書きする。テストが無い。ID を振るのは受入テストを書いてから。
-11. **Content-Disposition に `filename` と `filename*` の両方があるとき。** ヘッダーの先に書かれたほうを使う（RFC 6266 は `filename*` を優先するよう勧めている）。e-Gov は `filename` だけを返す（2026-09-20 の実測）。どちらを優先するかを決める必要がある。テストも無い。
+11. **Content-Disposition に `filename` と `filename*` の両方があるとき。** → houki-egov-mcp #66

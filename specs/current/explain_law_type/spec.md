@@ -112,11 +112,11 @@ flowchart TD
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-1. **`通知` は `通達` の別名に入っているが、`通知` という別の種別の解説を返す。** 収録している種別は 9 種のほかに `通知` があり（計 10 種）、`通達` の別名にも `通知` がある。名前の一致を別名より先に確かめるので、`name: "通知"` は `info.name: "通知"` を返し、`通達` の別名の `通知` は使われない。`通知` を独立の種別にするか、`通達` の別名にするかを人が決める。
-2. **`Rule`・`ImperialOrdinance` などの法令種別コードを解決しない。** `search_law` の `law_type` が受け付ける `Rule`・`ImperialOrdinance` と、e-Gov が返す `Constitution` を渡すと `found: false`。コードで引けるのは `Act`・`CabinetOrder`・`MinisterialOrdinance` だけ（`規則` にはコードが結び付いていない）。`get_law` の応答の `law_type` をそのまま渡しても解説が返らない種別がある。コードを足すかを人が決める。
+1. **`通知` は `通達` の別名に入っているが、`通知` という別の種別の解説を返す。** → houki-egov-mcp #62
+2. **`Rule`・`ImperialOrdinance` などの法令種別コードを解決しない。** → houki-egov-mcp #62
 3. **`found: true` の応答の `related_tools` と `see_also`、`info` の任意のフィールド。** `related_tools: ["search_law", "get_law", "get_toc"]` と `see_also: "docs/LAW-HIERARCHY.md"` が付く。`info` には種別によって `aliases`（別名）・`law_type_code`（e-Gov の法令種別コード）・`notes`（補足の注意）が付き、`sources` の要素は `label` と `url`（空文字のことがある）を持つ。テストが無い。ID を振るのは受入テストを書いてから。
 4. **`found: false` の応答の `next_actions` と `see_also`。** `next_actions` は `action: "list_known_law_types"` の 1 件で、`example.names` に収録している種別の名前の配列が入る。`see_also: "docs/LAW-HIERARCHY.md"` も付く。テストが無い。ID を振るのは受入テストを書いてから。
 5. **応答の `name` は渡した値のまま返す。** `name: " 政令 "` は応答の `name` が `" 政令 "` で、`info.name` は `政令`。テストが無い。ID を振るのは受入テストを書いてから。
 6. **大文字と小文字、全角と半角を区別する。** `act`・`ＡＣＴ` は `found: false`。テストが無い。ID を振るのは受入テストを書いてから。
-7. **`see_also` がリポジトリの中の相対パスで、MCP クライアントからは開けない。** `docs/LAW-HIERARCHY.md` は npm パッケージを入れた利用者からは場所が分からず、URL でもない。URL にするか、外すかを人が決める。
+7. **`see_also` がリポジトリの中の相対パスで、MCP クライアントからは開けない。** → houki-egov-mcp #56
 8. **別名の一覧。** `省令` は `府令`・`内閣府令`・`施行規則`・`MinisterialOrdinance`、`政令` は `施行令`・`CabinetOrder`、`通達` は `基本通達`・`取扱通達`（と `通知`。未決 1）を別名に持ち、`府令` は `info.name: "省令"` を返す。テストが確かめているのは `施行令`・`施行規則`・`日本国憲法` だけ。ID を振るのは受入テストを書いてから。
