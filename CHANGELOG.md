@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.15.2] - 2026-09-28
+
+**patch リリース** — 実行されるコードは変えていない。仕様の正本 `specs/current/` に、テストが無かった振る舞い 200 件を仕様 ID 付きで足し、受入テストで固定した（houki-hub#26）。
+
+### Added
+
+- **受入テスト 20 本**（`src/spec-tests/untested-20260928/<単位>.test.ts`）: MCP ツール 14 本・common_errors・db_schema・CLI 4 単位の、今の振る舞いを確かめる。e-Gov への通信はすべて差し替える。`get_law` は、ツールを通したテストが無かった SPEC-EGOV-GET-LAW-004〜018 も tools/call で確かめる
+- **仕様**: 差分 `20260928-untested-behaviors`（ADDED 200 件）と `20260928-undecided-to-issues`（判断が要る未決 85 件を Issue #45〜#49・#51〜#67 に移した）を `specs/current/` に取り込み、`specs/releases/v0.15.2/` に移した
+
 ## [0.15.1] - 2026-09-21
 
 **patch リリース** — コードは変えていない。npm・公式 MCP Registry・GitHub の About に出る説明を揃えた（houki-hub#29 の続き）。
