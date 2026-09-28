@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.15.3] - 2026-09-29
+
+**patch リリース** — 実行されるコードは変えていない。業務の名前（税法・労働法など）で探す人に見つかるよう、npm の説明と keywords、README の冒頭を直した。
+
+### Changed
+
+- **npm の `description`**（`package.json`）: 日本語の文に「税法・労働法・会社法・民法など全分野の条文を LLM から引けます。」を足した（合計 211 文字。npm の上限 255 文字以内）。英語の 1 文と `server.json` の `description` は変えていない
+- **npm の `keywords`** と plugin の `keywords`: `japanese-law` `statute` `tax-law` `labor-law` `legal-research` `compliance` と、日本語の `法令` `条文` `法律` `税法` `労働法` `e-Gov法令検索` を足した
+- **README**: 冒頭に「できること」と「相談の形の問いでの使い方」（所得税法第 121 条第 1 項の例）を置いた。「まず試す」の「9 ツールのうち 8 つ」を、今のツール数に合わせて「14 ツールのうち 13」に直した
+
 ## [0.15.2] - 2026-09-28
 
 **patch リリース** — 実行されるコードは変えていない。仕様の正本 `specs/current/` に、テストが無かった振る舞い 200 件を仕様 ID 付きで足し、受入テストで固定した（houki-hub#26）。
