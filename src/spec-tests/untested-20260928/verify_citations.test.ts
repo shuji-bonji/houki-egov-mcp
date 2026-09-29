@@ -401,6 +401,22 @@ describe('found 以外の件の next_actions', () => {
     ]);
   });
 
+  it('SPEC-EGOV-VERIFY-CITATIONS-027 同じ未知の law_id が law_name の有無で並んでも、keyword は件ごとに決まる', async () => {
+    const res = await ok({
+      citations: [
+        { law_id: '999AC0000000999', article: '1' },
+        { law_name: '所得税法', law_id: '999AC0000000999', article: '1' },
+      ],
+    });
+    const [withoutName, withName] = res.results;
+    expect(withoutName.next_actions).toEqual([
+      { action: 'search_law', reason: expect.any(String), example: { keyword: '999AC0000000999' } },
+    ]);
+    expect(withName.next_actions).toEqual([
+      { action: 'search_law', reason: expect.any(String), example: { keyword: '所得税法' } },
+    ]);
+  });
+
   it('SPEC-EGOV-VERIFY-CITATIONS-028 管轄外の件は delegate_to_mcp の 1 件で、reason に管轄の MCP を書く', async () => {
     const res = await ok({ citations: [{ law_name: '消基通', article: '1' }] });
     const r = res.results[0];

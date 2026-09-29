@@ -221,6 +221,51 @@ describe('downloadZip', () => {
     expect(events.every((e) => e.ratio <= 1.0)).toBe(true);
   });
 
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-006 推定より小さい zip でも、取得が終わった時点の ratio は 1.0', async () => {
+    // 21 byte の zip を、既定の推定サイズ（約 290 MB）のまま取得する（houki-egov-mcp #75）
+    const mockFetch = (async () => makeMockResponse(VALID_ZIP_BYTES)) as unknown as typeof fetch;
+
+    const events: BulkProgress[] = [];
+    const result = await downloadZip({
+      url: 'https://example.com/zip',
+      dest,
+      fetchImpl: mockFetch,
+      maxRetries: 1,
+      onProgress: (e) => events.push(e),
+    });
+
+    expect(result.bytes).toBe(VALID_ZIP_BYTES.length);
+    expect(events.length).toBeGreaterThanOrEqual(1);
+    const last = events[events.length - 1];
+    expect(last.bytesDownloaded).toBe(VALID_ZIP_BYTES.length);
+    expect(last.ratio).toBe(1.0);
+  });
+
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-006 途中の ratio は推定に対する割合のままで、終わった時点だけ 1.0', async () => {
+    // 3 MB を 1 MB ずつ返し、推定は 10 MB。途中の通知は 0.1・0.2・0.3 で、最後の通知だけ 1.0
+    const mockFetch = (async () =>
+      makeChunkedResponse(3_000_000, 1_000_000, true)) as unknown as typeof fetch;
+
+    const events: BulkProgress[] = [];
+    await downloadZip({
+      url: 'https://example.com/zip',
+      dest,
+      fetchImpl: mockFetch,
+      maxRetries: 1,
+      expectedBytes: 10_000_000,
+      progressIntervalBytes: 1_000_000,
+      onProgress: (e) => events.push(e),
+    });
+
+    const last = events[events.length - 1];
+    expect(last.bytesDownloaded).toBe(3_000_000);
+    expect(last.ratio).toBe(1.0);
+    for (const e of events.slice(0, -1)) {
+      expect(e.ratio).toBeCloseTo(e.bytesDownloaded / 10_000_000, 5);
+      expect(e.ratio).toBeLessThan(1.0);
+    }
+  });
+
   it('AbortSignal で途中キャンセル', async () => {
     const controller = new AbortController();
     const mockFetch = (async (_url: unknown, init?: { signal?: AbortSignal }) => {
