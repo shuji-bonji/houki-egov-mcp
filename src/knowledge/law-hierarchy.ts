@@ -246,8 +246,8 @@ export const LAW_HIERARCHY: Record<string, LawHierarchyEntry> = {
  */
 export function findLawHierarchy(name: string): LawHierarchyEntry | null {
   const trimmed = name.trim();
-  // 完全一致
-  if (LAW_HIERARCHY[trimmed]) {
+  // 完全一致（Object.prototype の名前（toString・constructor など）を引かないよう、自身のキーだけを見る。#73）
+  if (Object.hasOwn(LAW_HIERARCHY, trimmed)) {
     return LAW_HIERARCHY[trimmed];
   }
   // aliases 検索

@@ -331,8 +331,9 @@ async function runStatus(): Promise<CliResult> {
       .c;
     const fresh = summarizeFreshness(db);
 
-    console.log(`  laws:     ${lawsCount.toLocaleString()}`);
-    console.log(`  articles: ${articlesCount.toLocaleString()}`);
+    // 区切りは環境の言語設定によらず `,`（#74）
+    console.log(`  laws:     ${lawsCount.toLocaleString('en-US')}`);
+    console.log(`  articles: ${articlesCount.toLocaleString('en-US')}`);
     if (!fresh) {
       console.log(`  sync:     (まだ bulk DL されていません — --bulk-download-everything を実行)`);
     } else {

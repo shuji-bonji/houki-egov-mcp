@@ -1497,12 +1497,18 @@ async function verifyOneCitation(
   const resolution = await pending;
 
   if (resolution.kind === 'not_found') {
+    // law_id で引いた判定は同じ law_id の件で使い回すので、search_law の keyword は
+    // 件ごとの law_name（無ければ law_id）で決め直す（#70）
+    const nextActions =
+      lawId && resolution.code === 'LAW_NOT_FOUND'
+        ? [NEXT_ACTIONS.searchLaw(lawName || lawId)]
+        : resolution.next_actions;
     return {
       ...base,
       status: 'not_found',
       code: resolution.code,
       reason: resolution.reason,
-      next_actions: resolution.next_actions,
+      next_actions: nextActions,
     };
   }
   if (resolution.kind === 'ambiguous') {

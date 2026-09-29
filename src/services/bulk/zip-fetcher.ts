@@ -231,10 +231,9 @@ async function streamToFile(args: {
 
   await pipeline(nodeStream, fileStream);
 
-  // 最後に 1 回 progress を呼んで完了率を 100% にする
+  // 最後に 1 回 progress を呼んで完了率を 100% にする（推定より小さい zip でも 1.0。#75）
   if (onProgress) {
-    const ratio = expectedBytes > 0 ? Math.min(bytesDownloaded / expectedBytes, 1.0) : 0;
-    onProgress({ bytesDownloaded, totalEstimated: expectedBytes, ratio });
+    onProgress({ bytesDownloaded, totalEstimated: expectedBytes, ratio: 1.0 });
   }
   return bytesDownloaded;
 }
