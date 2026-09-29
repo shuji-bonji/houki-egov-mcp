@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Changed
-
-- **`@shuji-bonji/houki-abbreviations` の依存を `^0.4.1` から `^0.6.1` に上げた**: 0.x の `^` は minor を跨がないため、0.4.1 のまま取り込んでいた。このサーバーが使う関数（`resolveAbbreviation` / `normalizeJpText` / `normalizeSearchQuery` / `listBySourceMcpHint` / `judgeStaleness` / `STALENESS_THRESHOLDS`）の結果は 0.4.1 と 0.6.1 で同じで、実行されるコードは変えていない。houki-hub `docs/notes/2026-09-29-plan-spec-issues.md` の段階 0
-
 ### In progress (Phase 2 — 残作業)
 
 - Phase 2-13: API enrichment（`category` / `revisions_meta` / PreviousEnforced・Repeal の精緻化）
@@ -18,6 +14,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Planned (Phase 1 磨き込み — 痛点ログ駆動 / Phase 2 着手前から残置)
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
+
+## [0.15.4] - 2026-09-30
+
+**patch リリース** — 差分 `20260928-untested-behaviors`（PR #76）で見つかった、判断の要らない不具合 4 件を直した。仕様の差分は `20260930-bugfix-batch`（#73・#74 の 2 件に仕様 ID を足す。#70・#75 は既存の仕様 ID に合わせて実装を直す）。
+
+### Fixed
+
+- **`verify_citations`**（#70）: 同じ e-Gov が知らない `law_id` の件が 1 回の呼び出しに並ぶと、2 件目以降の `next_actions` の `search_law` の `keyword` が 1 件目の判定のままで、`law_name` を書いた件でも `law_id` になっていた。`law_id` で引いて `LAW_NOT_FOUND` のときは、件ごとの `law_name`（無ければ `law_id`）で `keyword` を決め直す（SPEC-EGOV-VERIFY-CITATIONS-027）
+- **`explain_law_type`**（#73）: `name: "toString"` や `"constructor"` など `Object.prototype` のプロパティの名前で `found: true` を返し、`info` が無かった。自身のキーだけで引き、知らない名前と同じ `found: false`・`hint`・`next_actions` を返す（SPEC-EGOV-EXPLAIN-LAW-TYPE-018）
+- **`--status`**（#74）: `laws:`・`articles:` の件数の 3 桁の区切りが環境の言語設定で変わっていた（`LANG=de_DE.UTF-8` で `1.234.567`）。環境によらず `1,234,567` にした（SPEC-EGOV-CLI-STATUS-008）
+- **取得の進捗**（#75）: 推定の総バイト数より小さい zip では、取得が終わった時点の表示が 100% にならなかった。終わった時点の通知の割合を 1.0 にし、SPEC-EGOV-CLI-BULK-DOWNLOAD-006「取得が終わった時点の表示は 100%」に合わせた
+
+### Changed
+
+- **`@shuji-bonji/houki-abbreviations` の依存を `^0.4.1` から `^0.6.1` に上げた**: 0.x の `^` は minor を跨がないため、0.4.1 のまま取り込んでいた。このサーバーが使う関数（`resolveAbbreviation` / `normalizeJpText` / `normalizeSearchQuery` / `listBySourceMcpHint` / `judgeStaleness` / `STALENESS_THRESHOLDS`）の結果は 0.4.1 と 0.6.1 で同じで、実行されるコードは変えていない。houki-hub `docs/notes/2026-09-29-plan-spec-issues.md` の段階 0
+
+### Added
+
+- **受入テスト**: `src/spec-tests/bugfix-20260930/{explain_law_type,cli_status}.test.ts`（#73・#74）。#70 のテストは `src/spec-tests/untested-20260928/verify_citations.test.ts` に、#75 のテストは `src/services/bulk/zip-fetcher.test.ts` に足した
 
 ## [0.15.3] - 2026-09-29
 

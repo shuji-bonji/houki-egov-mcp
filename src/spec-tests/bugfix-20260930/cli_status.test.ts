@@ -75,11 +75,23 @@ function seedCounts(dbPath: string, lawsCount: number, articlesCount: number): v
     db.transaction(() => {
       for (let i = 0; i < lawsCount; i++) {
         const lawId = `500AC${String(i).padStart(10, '0')}`;
-        insertLaw.run(`${lawId}_20000101_000000000000000`, lawId, `法律第${i}号`, `テスト法${i}`, `h${i}`);
+        insertLaw.run(
+          `${lawId}_20000101_000000000000000`,
+          lawId,
+          `法律第${i}号`,
+          `テスト法${i}`,
+          `h${i}`
+        );
       }
       const firstRev = '500AC0000000000_20000101_000000000000000';
       for (let i = 0; i < articlesCount; i++) {
-        insertArticle.run(firstRev, String(i + 1), i + 1, `第${i + 1}条の本文`, `第${i + 1}条の本文`);
+        insertArticle.run(
+          firstRev,
+          String(i + 1),
+          i + 1,
+          `第${i + 1}条の本文`,
+          `第${i + 1}条の本文`
+        );
       }
     })();
   } finally {
