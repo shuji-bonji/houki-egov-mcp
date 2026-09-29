@@ -365,7 +365,7 @@ v0.13.0 からは、本則を `toc`、附則を `suppl_provisions` に分けて�
 - [x] e-Gov 法令API v2 クライアント（`searchLaws` / `getLawData` / `getLawRevisions` / `getAttachment` / `getLawFile`）
 - [x] 法令ツリー走査（条/項/号、目次抽出）+ LRU cache
 - [x] 14 ツール本実装
-- [x] 略称辞書を [`@shuji-bonji/houki-abbreviations`](https://github.com/shuji-bonji/houki-abbreviations) ^0.4.1 に分離
+- [x] 略称辞書を [`@shuji-bonji/houki-abbreviations`](https://github.com/shuji-bonji/houki-abbreviations) に分離（v0.15.4 から ^0.6.1）
 - [x] 法令階層ナレッジ（憲法・法律・政令・省令・規則・条例・告示・訓令・通達・通知 の10種別）
 - [x] houki-hub family 共通の error contract（`SOURCE_*` / `OUT_OF_SCOPE`）に準拠
 - [x] Phase 2 基盤：bulk DL → SQLite FTS5 の取り込みパイプライン（schema / CSV・XML parser / zip fetcher / ingester / freshness / CLI）
