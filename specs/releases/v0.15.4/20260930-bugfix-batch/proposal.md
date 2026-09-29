@@ -3,7 +3,7 @@
 - 対象: `specs/current/explain_law_type/spec.md`、`specs/current/cli_status/spec.md`（「できること」への追加）
 - 実装の変更: 要
 - 承認日: 2026-09-30（PR #81）
-- 状態: 草案
+- 状態: 取り込み済み。実装は v0.15.4、`specs/current/` への取り込みは 2026-09-30（JST、v0.15.4 の後の取り込みコミット）
 - 起こした日: 2026-09-30（JST）
 - 起こした役: Spec Steward
 - 関連: Issue #73・#74・#75（差分 `20260928-untested-behaviors` の「見つかった問題」5・3・6）。Issue #70 は同じ実装 PR で直すが、仕様は変えないので、この差分には含めない（下の「仕様を変えない Issue」）
