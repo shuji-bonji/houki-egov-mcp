@@ -123,7 +123,7 @@ export const getTocTool = {
         type: 'integer',
         minimum: 1,
         description:
-          '構造階層の打ち切り深さ（1 以上の整数）。1=編まで、2=章まで、3=節まで。省略時は全階層。例: 民法を depth=1 で取得すると「第一編 総則」「第二編 物権」のような大区分のみが返る',
+          '本則の構造階層（編・章・節・款・目）を上から何階層まで返すか（1 以上の整数）。最上位の階層から数えるので、編を持つ法令（民法など）では 1 が編まで、章から始まる法令（消費税法など）では 1 が章までです。省略時は全階層',
       },
       suppl: {
         type: 'string',
@@ -207,7 +207,7 @@ export const resolveAbbreviationTool = {
 export const getLawRevisionsTool = {
   name: 'get_law_revisions',
   description:
-    '法令の改正履歴を取得する。e-Gov v2 /law_revisions を使用。各改正の公布日・施行日・改正法令番号・状態（現行/旧法/未施行）等を返す。',
+    '法令の改正履歴を取得します。e-Gov v2 の /law_revisions を使います。各改正の公布日・施行日・改正法令番号・状態（current_revision_status。CurrentEnforced=現行、PreviousEnforced=旧法、UnEnforced=未施行）等を返します。並びは施行日の新しい順で、まだ施行されていない改正も含みます。',
   inputSchema: {
     type: 'object',
     properties: {

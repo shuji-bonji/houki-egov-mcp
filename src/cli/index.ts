@@ -375,9 +375,10 @@ USAGE:
   houki-egov-mcp --sync                           最終同期日から今日までの日次差分を DL + ingest。
                                                   差分が無い日は飛ばし、途中で失敗しても
                                                   成功した日までを記録する
+                                                  （--bulk-download-incremental も同じです）
   houki-egov-mcp --bulk-download-by-date YYYYMMDD  単日差分を DL + ingest (デバッグ用)
   houki-egov-mcp --status                         同期状態と DB 件数を表示
-  houki-egov-mcp --version                        バージョン表示
+  houki-egov-mcp --version, -v                    バージョン表示
   houki-egov-mcp --help                           この使い方を表示
 
 ENVIRONMENT:
@@ -386,10 +387,14 @@ ENVIRONMENT:
   HOUKI_EGOV_BULK_RETRY=3           bulk DL 失敗時のリトライ回数
   HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS=90
                                     --sync が差分で追える最大日数 (超えたら全件取り込みを促す)
+  HOUKI_EGOV_FILES_DIR=/path        get_attachment / get_law_file の save: true の保存先
+                                     (default: \${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/files)
 
 DOCS:
-  docs/PHASE2-DESIGN.md             設計詳細
-  docs/PHASE2-SPIKE.md              e-Gov bulk DL 仕様
+  https://github.com/shuji-bonji/houki-egov-mcp#readme
+                                    使い方と各ツールの説明
+  https://github.com/shuji-bonji/houki-egov-mcp/blob/main/docs/PHASE2-DESIGN.md
+                                    ローカル DB の設計
 `);
 }
 
