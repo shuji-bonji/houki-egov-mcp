@@ -189,7 +189,7 @@ export const searchFulltextTool = {
 export const resolveAbbreviationTool = {
   name: 'resolve_abbreviation',
   description:
-    '略称・通称から正式な法令名と law_id を解決する。略称辞書の内容を確認するための診断ツール。',
+    '略称・通称から正式な法令名と law_id を解決する。略称辞書の内容を確認するための診断ツール。全角英数字・ダッシュ類・全角空白は半角に揃えてから照合する。辞書のエントリはどの管轄でも返し（通達なら houki-nta の管轄）、in_scope と hint で管轄を示す。',
   inputSchema: {
     type: 'object',
     properties: {

@@ -67,7 +67,7 @@
 | `get_law_range` | 編・章・節・款・目のいずれか、または附則 1 本を範囲にして条を本文ごと取得。上限を超える範囲は条の単位で打ち切り、続きの条番号を返す（v0.14.0） |
 | `get_law_revisions` | 改正履歴を取得（公布日・施行日・状態） |
 | `search_fulltext` | 条文本文の横断全文検索（ローカル SQLite FTS5。bulk DB 未構築時は `search_law` にフォールバック） |
-| `resolve_abbreviation` | 略称→正式名解決の診断 |
+| `resolve_abbreviation` | 略称→正式名解決の診断。全角英数字・全角空白は揃えて照合し、辞書のエントリはどの管轄でも返して `in_scope` と `hint` で管轄を示す（v0.16.0） |
 | `explain_law_type` | 法令種別（憲法・法律・政令・省令・通達 等）の解説 |
 | `get_related_laws` | 法令名の規則で施行令・施行規則（施行令からは親の法律）を引き、e-Gov に実在するものだけを `law_id` 付きで返す（v0.10.0） |
 | `get_article_references` | 条文本文が引用している他法令の条（`law_id` 付き）・同一法令内の条項号・「政令で定める」の委任先を取り出し、`get_law` の引数を `next_actions` で付ける（v0.10.0） |
@@ -231,7 +231,7 @@ DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索
 ```
 
 - **中身は返しません**。バイナリを base64 にして応答に入れることはせず、URL（`https://laws.e-gov.go.jp/api/2/attachment/<law_revision_id>?src=…`、`…/law_file/<file_type>/<law_id>`）を返します。URL は認証なしで開けるので、pdf-reader-mcp の `read_url` や、利用者のブラウザーにそのまま渡せます
-- **保存先はサーバー側で決めます**。`save: true` のときだけファイルを取得し、`${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/files/<law_revision_id>/<ファイル名>` に書いて `saved.path` を返します。保存先は環境変数 `HOUKI_EGOV_FILES_DIR` で変えられますが、ツールの引数にはありません（LLM が渡した文字列をパスに使わないため）。1 ファイル 50 MB を超えるときは保存せず `INVALID_ARGUMENT` を返します
+- **保存先はサーバー側で決めます**。`save: true` のときだけファイルを取得し、`${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/files/<law_revision_id>/<ファイル名>` に書いて `saved.path` を返します。保存先は環境変数 `HOUKI_EGOV_FILES_DIR` で変えられますが、ツールの引数にはありません（LLM が渡した文字列をパスに使わないため）。1 ファイル 50 MB を超えるときは保存せず `FILE_TOO_LARGE` を返します。e-Gov の応答の Content-Length で分かるときは本文を読みません（v0.16.0）
 - **置き場所を付けます**。`list_attachments` は e-Gov の `attached_files_info`（src と更新日時）と本文の `Fig` 要素を `src` で突き合わせ、各ファイルに `location`（別表・様式の見出しと関係条文、条の中なら条番号、附則の中なら改正法番号）を付けます。一覧にだけあって本文に無いファイルは `location: null` です
 - 添付ファイルは法令履歴ごとに付くので、`at` で時点を変えると一覧も変わります。添付が無い法令は `list_attachments` では `count: 0` の成功応答、`get_attachment` では `ATTACHMENT_NOT_FOUND` です
 - `get_law_file` の `xml` / `json` は法令全体（民法で 1.6 MB）なので、条文を読むだけなら `get_law` / `get_law_range` を使ってください。`docx` / `html` / `rtf` は人が開く版です
@@ -432,31 +432,32 @@ houki-egov-mcp の [`src/errors.ts`](src/errors.ts) は family 全体の **リ�
 
 | code | 用途 | retryable |
 |---|---|---|
-| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・inputSchema に無い引数。`detail.issues[]` に内訳）、キーワード未指定、`get_law` で項が複数ある条に `paragraph` なしで `item` を指定した、`get_law_range` で範囲の指定が無い・2 通り同時・複数の章に当たった、`get_attachment` / `get_law_file` の保存でファイルが 50 MB を超えた 等 | `false` |
+| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・範囲・形式・inputSchema に無い引数。`detail.issues[]` に違反 1 件ごとの引数名と日本語の文、`tool` に呼んだツール名）、必須の文字列が空白だけ、`at` が暦に無い日付、`get_law` で項が複数ある条に `paragraph` なしで `item` を指定した、`get_law_range` で範囲の指定が無い・2 通り同時・複数の章に当たった 等 | `false` |
 | `INVALID_ARTICLE_NUM` | 条番号・号番号のフォーマットが不正 (例: "30-2"、位ごとに並べた "三〇") | `false` |
 | `OUT_OF_SCOPE` | 通達名で `get_law` を呼んだ等、別 MCP の管轄リソースが要求された | `false` |
-| `LAW_NOT_FOUND` | 略称解決・検索のいずれでも法令が見つからない | `false` |
+| `LAW_NOT_FOUND` | 略称辞書に無く、e-Gov の法令名の検索が成功して 0 件だった（検索が通信の失敗で終わったときは `SOURCE_*`。v0.16.0） | `false` |
 | `ARTICLE_NOT_FOUND` | 指定された条/項/号が見つからない（`get_law_range` の `from_article` がその範囲に無い場合を含む） | `false` |
 | `RANGE_NOT_FOUND` | `get_law_range` で指定された編・章・節（または附則の番号）が見つからない | `false` |
 | `ATTACHMENT_NOT_FOUND` | `get_attachment` で指定された `src` がその法令履歴の添付に無い、添付が 1 件も無い、または e-Gov の `/attachment` が「存在しない」（code 404003）を返した | `false` |
-| `SOURCE_API_ERROR` | e-Gov API がエラー応答 (4xx/5xx) | 状況による |
+| `SOURCE_API_ERROR` | e-Gov API がエラー応答（5xx は再試行できる、429 以外の 4xx は再試行できない）。法令名の検索の失敗も含む | 状況による |
 | `SOURCE_TIMEOUT` | e-Gov API がタイムアウト | `true` |
 | `SOURCE_RATE_LIMITED` | e-Gov API がレート制限 (HTTP 429) | `true` |
-| `SOURCE_UNAVAILABLE` | DNS 失敗 / ECONNREFUSED 等で e-Gov に到達不能 | `true` |
-| `INTERNAL_ERROR` | 内部エラー (バグ・予期せぬ例外) | `false` |
+| `SOURCE_UNAVAILABLE` | e-Gov に接続できない（`ENOTFOUND` / `EAI_AGAIN` / `ECONNREFUSED` / `ECONNRESET` / `ETIMEDOUT`。`detail.cause` にその code。v0.16.0 から `fetch failed` の `cause.code` も見る） | `true` |
+| `FILE_TOO_LARGE` | `get_attachment` / `get_law_file` の `save: true` で、ファイルが上限（50 MB）を超えている（`detail.bytes` に大きさ。v0.16.0。pdf-reader-mcp と同じ code） | `false` |
+| `INTERNAL_ERROR` | 内部エラー (バグ・予期せぬ例外)。`search_fulltext` でローカル DB の同期の記録の日付を読めないときも（v0.16.0。全件の取り込みを案内） | `false` |
 | `UNKNOWN_TOOL` | 存在しない tool 名が呼ばれた | `false` |
 
 ### `verify_citations` の code は件ごとに付きます（v0.11.0）
 
 `verify_citations` は、存在しない引用が混ざっていてもツール全体を `isError` にしません。上の表の `code` は `results[]` の 1 件ごとに付き、`LAW_NOT_FOUND` / `ARTICLE_NOT_FOUND` / `INVALID_ARTICLE_NUM` / `OUT_OF_SCOPE` / `INVALID_ARGUMENT` のいずれかです。法令名が完全一致せず候補が複数あった件は `status: "ambiguous"` と `candidates[]` だけを返し、`code` は付きません。
 
-ツール全体がエラーになるのは、引数の形が壊れているとき（`INVALID_ARGUMENT`）と、e-Gov に問い合わせられなかったとき（`SOURCE_*`）だけです。後者で件ごとの判定を返さないのは、「聞けなかった」を「存在しない」と書かないためです。
+ツール全体がエラーになるのは、引数の形が壊れているとき（`INVALID_ARGUMENT`）と、e-Gov に問い合わせられなかったとき（`SOURCE_*`）と、e-Gov との通信と関係の無い処理中の例外（`INTERNAL_ERROR`。v0.16.0）だけです。e-Gov に問い合わせられなかったときに件ごとの判定を返さないのは、「聞けなかった」を「存在しない」と書かないためです。
 
 ### Migration (v0.2.x → v0.3.0)
 
 - v0.2.x までは `EGOV_API_ERROR` / `EGOV_TIMEOUT` / `EGOV_RATE_LIMITED` を返していました。v0.3.0 からは family 共通の `SOURCE_API_ERROR` / `SOURCE_TIMEOUT` / `SOURCE_RATE_LIMITED` に切替。
-- `EGOV_*` は `LawErrorCode` の型としては残置していますが、本 MCP からはもう発行しません。次のメジャー (v1.0.0) で削除予定。
-- 構造化エラーの形 (`{ error, code, hint?, next_actions?, retryable?, detail? }`) は不変。クライアント側で `code` 文字列の比較をしている場合は `SOURCE_*` を受け付けるよう更新してください。
+- `EGOV_*` は v0.15.x まで `LawErrorCode` の型に残していましたが、v0.16.0 で型からも外しました（返さない `ABBREVIATION_NOT_FOUND` も同じ）。
+- 構造化エラーの形 (`{ error, code, tool?, hint?, next_actions?, retryable?, detail? }`) は不変（`tool` は v0.16.0 で引数の検査の `INVALID_ARGUMENT` に足した）。クライアント側で `code` 文字列の比較をしている場合は `SOURCE_*` を受け付けるよう更新してください。
 - `OUT_OF_SCOPE` を新たに受け取る可能性があります。例えば「消基通」(消費税法基本通達 / 国税庁の通達) を `get_law` の `law_name` に渡すと、`next_actions[0].example.mcp = "houki-nta"` を含む `OUT_OF_SCOPE` が返されるので、Skill 層は houki-nta-mcp に切り替えてください。
 
 ## ドキュメント
