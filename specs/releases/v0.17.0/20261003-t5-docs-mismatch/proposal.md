@@ -2,7 +2,7 @@
 
 - 対象: `specs/current/common_errors/spec.md`・`specs/current/explain_law_type/spec.md`（動きを変える行）と、README・CLI の使い方・tool description（文書だけを直す行。仕様 ID なし）
 - 実装の変更: 要（`INTERNAL_ERROR` の `retryable` と `next_actions`、`UNKNOWN_TOOL` の `error` と `retryable`、`explain_law_type` の `see_also`。文書だけの行は「実装 PR で直す文書」）
-- 承認日: 2026-10-01（PR #92）
+- 承認日: 2026-10-03（PR #92）
 - 状態: 取り込み済み（v0.17.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward
