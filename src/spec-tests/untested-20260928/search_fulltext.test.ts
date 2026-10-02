@@ -132,7 +132,8 @@ describe('search_fulltext — limit の既定と丸め', () => {
     expect(r.hits).toHaveLength(10);
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-025 limit が 0 や負の数なら 1 件にし、filters に limit は入らない', async () => {
+  // 差分 20261001-t1-argument-guards で REMOVED。テストは specs/current に取り込むコミットで外す
+  it.skip('SPEC-EGOV-SEARCH-FULLTEXT-025 limit が 0 や負の数なら 1 件にし、filters に limit は入らない', async () => {
     for (const limit of [0, -5]) {
       const r = (await handleSearchFulltext(
         { keyword: '試験用条文', limit },
@@ -145,7 +146,8 @@ describe('search_fulltext — limit の既定と丸め', () => {
     }
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-025 tools/call から limit: 0 を渡しても source: bulk、count: 1', async () => {
+  // 差分 20261001-t1-argument-guards で REMOVED。テストは specs/current に取り込むコミットで外す
+  it.skip('SPEC-EGOV-SEARCH-FULLTEXT-025 tools/call から limit: 0 を渡しても source: bulk、count: 1', async () => {
     const prev = process.env.HOUKI_EGOV_DB_PATH;
     process.env.HOUKI_EGOV_DB_PATH = DB_STD;
     vi.resetModules();
@@ -177,7 +179,8 @@ describe('search_fulltext — limit の既定と丸め', () => {
     }
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-026 limit が 30 を超えると 30 件にする', async () => {
+  // 差分 20261001-t1-argument-guards で REMOVED。テストは specs/current に取り込むコミットで外す
+  it.skip('SPEC-EGOV-SEARCH-FULLTEXT-026 limit が 30 を超えると 30 件にする', async () => {
     for (const limit of [31, 100]) {
       const r = (await handleSearchFulltext(
         { keyword: '試験用条文', limit },
@@ -247,7 +250,7 @@ describe('search_fulltext — search_law への切り替え', () => {
     expect(r.next_actions[1].example).toEqual({ keyword: '消法' });
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-029 e-Gov の /laws に law_title・law_type・丸めた後の limit を付ける', async () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-029 e-Gov の /laws に law_title・law_type・渡した limit（省けば 10）を付ける', async () => {
     const fn = stubLawsFetch();
     const params = () => new URL(String(fn.mock.calls.at(-1)?.[0])).searchParams;
 
@@ -260,7 +263,7 @@ describe('search_fulltext — search_law への切り替え', () => {
     expect(params().get('law_type')).toBe('Act');
     expect(params().get('limit')).toBe('3');
 
-    await handleSearchFulltext({ keyword: '所得税', limit: 99 }, { dbPath: DB_EMPTY });
+    await handleSearchFulltext({ keyword: '所得税', limit: 30 }, { dbPath: DB_EMPTY });
     expect(fn).toHaveBeenCalledTimes(2);
     expect(params().get('law_title')).toBe('所得税法');
     expect(params().get('limit')).toBe('30');

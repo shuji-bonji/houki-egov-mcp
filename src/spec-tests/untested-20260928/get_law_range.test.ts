@@ -304,16 +304,20 @@ describe('get_law_range の引数の検査', () => {
     }
   );
 
-  it('SPEC-EGOV-GET-LAW-RANGE-023 max_chars: 1999 は inputSchema の検査で INVALID_ARGUMENT', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-023 SPEC-EGOV-COMMON-ERRORS-022 max_chars: 1999 は inputSchema の検査で INVALID_ARGUMENT（message は日本語の文）', async () => {
     const e = await errRange({ law_name: TITLE, chapter: 1, max_chars: 1999 });
     expect(e.code).toBe('INVALID_ARGUMENT');
-    expect(e.detail.issues).toEqual([{ path: 'max_chars', message: 'must be >= 2000' }]);
+    expect(e.detail.issues).toEqual([
+      { path: 'max_chars', message: '2000 以上で指定してください' },
+    ]);
   });
 
-  it('SPEC-EGOV-GET-LAW-RANGE-023 max_chars: 120001 は inputSchema の検査で INVALID_ARGUMENT', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-023 SPEC-EGOV-COMMON-ERRORS-022 max_chars: 120001 は inputSchema の検査で INVALID_ARGUMENT（message は日本語の文）', async () => {
     const e = await errRange({ law_name: TITLE, chapter: 1, max_chars: 120001 });
     expect(e.code).toBe('INVALID_ARGUMENT');
-    expect(e.detail.issues).toEqual([{ path: 'max_chars', message: 'must be <= 120000' }]);
+    expect(e.detail.issues).toEqual([
+      { path: 'max_chars', message: '120000 以下で指定してください' },
+    ]);
   });
 });
 

@@ -337,7 +337,8 @@ describe('get_toc の附則と depth', () => {
     });
   });
 
-  it('SPEC-EGOV-GET-TOC-022 depth: 0 と depth: -1 は全階層を返し、truncated: false', async () => {
+  // 差分 20261001-t1-argument-guards で REMOVED。テストは specs/current に取り込むコミットで外す
+  it.skip('SPEC-EGOV-GET-TOC-022 depth: 0 と depth: -1 は全階層を返し、truncated: false', async () => {
     const full = await okToc({ law_name: TITLE });
     for (const depth of [0, -1]) {
       const r = await callToc({ law_name: TITLE, depth });

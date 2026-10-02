@@ -61,7 +61,7 @@ const LIST_TOOLS = {
 };
 
 function schemaHint(name: string): string {
-  return `tools/list の ${name} の inputSchema を確認してください (型・必須・enum・未知の引数)`;
+  return `tools/list の ${name} の inputSchema を確認してください (型・必須・enum・範囲・形式・未知の引数)`;
 }
 
 function expectedError(issues: Array<{ path: string; message: string }>): string {
@@ -98,12 +98,12 @@ describe('common_errors (20260928-untested-behaviors)', () => {
     return { res, text: firstText(res), body: JSON.parse(firstText(res)) as ErrorBody };
   }
 
-  it('SPEC-EGOV-COMMON-ERRORS-012 search_law を arguments なしで呼ぶと INVALID_ARGUMENT と決まった hint', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-012 search_law を arguments なしで呼ぶと INVALID_ARGUMENT と決まった hint（20261001-t1 で範囲・形式を足した文）', async () => {
     const { res, body } = await call('search_law');
     expect(res.isError).toBe(true);
     expect(body.code).toBe('INVALID_ARGUMENT');
     expect(body.hint).toBe(
-      'tools/list の search_law の inputSchema を確認してください (型・必須・enum・未知の引数)'
+      'tools/list の search_law の inputSchema を確認してください (型・必須・enum・範囲・形式・未知の引数)'
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -172,14 +172,14 @@ describe('common_errors (20260928-untested-behaviors)', () => {
     }
   });
 
-  it('SPEC-EGOV-COMMON-ERRORS-014 hint は呼んだツールの名前を入れた決まった文', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-014 hint は呼んだツールの名前を入れた決まった文（20261001-t1 で範囲・形式を足した文）', async () => {
     const a = await call('explain_law_type', { name: 123 });
     expect(a.body.hint).toBe(
-      'tools/list の explain_law_type の inputSchema を確認してください (型・必須・enum・未知の引数)'
+      'tools/list の explain_law_type の inputSchema を確認してください (型・必須・enum・範囲・形式・未知の引数)'
     );
     const b = await call('search_law', { keyword: '消費税', law_type: 'Bogus' });
     expect(b.body.hint).toBe(
-      'tools/list の search_law の inputSchema を確認してください (型・必須・enum・未知の引数)'
+      'tools/list の search_law の inputSchema を確認してください (型・必須・enum・範囲・形式・未知の引数)'
     );
     for (const t of tools) {
       const { body } = await call(t.name, { __unknown_arg__: 1 });
