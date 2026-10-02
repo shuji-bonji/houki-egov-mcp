@@ -316,8 +316,9 @@ export async function getAttachment(opts: {
 
   let entry: AttachmentEntry | null = null;
   let kind: 'file' | 'zip' = 'zip';
-  if (opts.src !== undefined && opts.src !== '') {
-    const wanted = opts.src.trim();
+  // 空文字・空白だけの src は省いたときと同じ（zip）にする（SPEC-EGOV-GET-ATTACHMENT-025）
+  const wanted = opts.src?.trim() ?? '';
+  if (wanted !== '') {
     entry =
       entries.find((e) => e.src === wanted) ??
       entries.find((e) => e.file_name === fileNameOf(wanted)) ??

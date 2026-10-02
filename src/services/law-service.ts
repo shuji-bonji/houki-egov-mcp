@@ -571,7 +571,8 @@ export async function getLawToc(opts: {
   const fullToc = extractToc(lawData.law_full_text);
   const fullCount = countTocNodes(fullToc);
   const toc = opts.depth && opts.depth > 0 ? limitTocDepth(fullToc, opts.depth) : fullToc;
-  const truncated = toc !== fullToc;
+  // 枝を刈ったときだけ true（SPEC-EGOV-GET-TOC-010）。depth が構造階層の深さ以上なら何も刈らないので false
+  const truncated = countTocNodes(toc) !== fullCount;
 
   const allSuppl = extractSupplProvisions(lawData.law_full_text);
   const mode: SupplMode = opts.suppl ?? 'list';

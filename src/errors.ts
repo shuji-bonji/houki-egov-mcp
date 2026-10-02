@@ -16,7 +16,8 @@
  * エラーコード — 安定した識別子。LLM の分岐用に用途別に分けてある。
  *
  * v0.3.0 で houki-hub family の共通語彙 (`SOURCE_*` / `OUT_OF_SCOPE`) を採用。
- * 既存の `EGOV_*` 系は **後方互換のため残置**しているが、新規実装では `SOURCE_*` を使うこと。
+ * v0.16.0 で、返さない code（`ABBREVIATION_NOT_FOUND`・`EGOV_API_ERROR`・`EGOV_TIMEOUT`・
+ * `EGOV_RATE_LIMITED`）を型から外した（#57）。
  *
  * @see https://github.com/shuji-bonji/houki-research-skill/blob/main/docs/ERROR-CODES.md
  */
@@ -35,8 +36,6 @@ export type LawErrorCode =
   | 'ARTICLE_NOT_FOUND'
   /** 指定された編・章・節（または附則の番号）が見つからなかった（#22、v0.14.0） */
   | 'RANGE_NOT_FOUND'
-  /** 略称辞書に該当なし */
-  | 'ABBREVIATION_NOT_FOUND'
   /** 指定された添付ファイル（src）がその法令の履歴に無い。e-Gov の code 404003（#19、v0.15.0） */
   | 'ATTACHMENT_NOT_FOUND'
   // --- 外部ソース由来 (family 共通) ---
@@ -48,13 +47,6 @@ export type LawErrorCode =
   | 'SOURCE_RATE_LIMITED'
   /** 外部リソースに接続不能（DNS 失敗・ネットワーク断） */
   | 'SOURCE_UNAVAILABLE'
-  // --- 旧コード (v0.2.x までの後方互換、新規実装では使わない) ---
-  /** @deprecated v0.3.0+ では `SOURCE_API_ERROR` を使う */
-  | 'EGOV_API_ERROR'
-  /** @deprecated v0.3.0+ では `SOURCE_TIMEOUT` を使う */
-  | 'EGOV_TIMEOUT'
-  /** @deprecated v0.3.0+ では `SOURCE_RATE_LIMITED` を使う */
-  | 'EGOV_RATE_LIMITED'
   // --- システム ---
   /** 未知のツール */
   | 'UNKNOWN_TOOL'
@@ -78,6 +70,8 @@ export interface NextAction {
 export interface LawServiceError {
   error: string;
   code: LawErrorCode;
+  /** エラーを返したツールの名前。引数の検査の INVALID_ARGUMENT に付く（SPEC-EGOV-COMMON-ERRORS-020・026） */
+  tool?: string;
   hint?: string;
   next_actions?: NextAction[];
   /** 一時的エラーで時間をおけば成功する可能性があるか */
@@ -100,6 +94,7 @@ export function makeError(
   code: LawErrorCode,
   message: string,
   options: {
+    tool?: string;
     hint?: string;
     next_actions?: NextAction[];
     retryable?: boolean;
@@ -107,6 +102,7 @@ export function makeError(
   } = {}
 ): LawServiceError {
   const err: LawServiceError = { error: message, code };
+  if (options.tool) err.tool = options.tool;
   if (options.hint) err.hint = options.hint;
   if (options.next_actions && options.next_actions.length > 0) {
     err.next_actions = options.next_actions;

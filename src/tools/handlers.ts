@@ -183,7 +183,8 @@ export async function handleSearchFulltext(
   deps: { dbPath?: string } = {}
 ): Promise<SearchFulltextBulkResponse | SearchFulltextFallbackResponse> {
   const keyword = (args.keyword ?? '').trim();
-  const limit = Math.min(Math.max(args.limit ?? LIMITS.fulltextDefault, 1), LIMITS.fulltextMax);
+  // limit は inputSchema の検査（1〜30 の整数）を通った値なので丸めない（SPEC-EGOV-SEARCH-FULLTEXT-033）
+  const limit = args.limit ?? LIMITS.fulltextDefault;
 
   let db: ReturnType<typeof openDb> | null = null;
   try {

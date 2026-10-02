@@ -12,7 +12,7 @@ describe('makeError', () => {
   });
 
   it('SPEC-EGOV-COMMON-ERRORS-008 attaches optional fields when provided', () => {
-    const err = makeError('EGOV_RATE_LIMITED', '429 returned', {
+    const err = makeError('SOURCE_RATE_LIMITED', '429 returned', {
       hint: 'wait',
       next_actions: [NEXT_ACTIONS.retryLater()],
       retryable: true,
@@ -113,19 +113,5 @@ describe('family-wide code 語彙 (v0.3.0+)', () => {
     });
     expect(err.code).toBe('OUT_OF_SCOPE');
     expect(err.next_actions?.[0].action).toBe('delegate_to_mcp');
-  });
-});
-
-describe('legacy EGOV_* code 後方互換 (v0.2.x からの移行期間)', () => {
-  it('EGOV_RATE_LIMITED still type-checks (deprecated)', () => {
-    expect(makeError('EGOV_RATE_LIMITED', 'legacy').code).toBe('EGOV_RATE_LIMITED');
-  });
-
-  it('EGOV_TIMEOUT still type-checks (deprecated)', () => {
-    expect(makeError('EGOV_TIMEOUT', 'legacy').code).toBe('EGOV_TIMEOUT');
-  });
-
-  it('EGOV_API_ERROR still type-checks (deprecated)', () => {
-    expect(makeError('EGOV_API_ERROR', 'legacy').code).toBe('EGOV_API_ERROR');
   });
 });

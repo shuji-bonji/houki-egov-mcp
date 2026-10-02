@@ -6,20 +6,24 @@
  *
  * - 引数の型は `json-schema-to-ts` の `FromSchema` で inputSchema から導く（手書きの型と
  *   inputSchema がずれないようにする）
- * - 検証は SDK の `fromJsonSchema`（同じ inputSchema から作る）。検証を通った値にだけ型を当てる
+ * - 検証は `input-validator.ts` の `validateInput`（同じ inputSchema を読む）。検証を通った値にだけ型を当てる
+ * - inputSchema で書けない検査（空白だけの必須の文字列・暦に無い日付）は、検証の後、handler の前に行う
+ *   （SPEC-EGOV-COMMON-ERRORS-024・026）
  * - 型を当てる箇所は `bindTool()` の中の 1 か所だけ
  *
  * v0.5.3〜v0.5.4 は server.ts の validateArgs() で検証し、handler 表は `(args: any) => …` だった。
+ * v0.6.0〜v0.15.4 は SDK の `fromJsonSchema`（ajv）で検証していた。
  */
 
-import {
-  fromJsonSchema,
-  type JsonSchemaType,
-  type StandardSchemaV1,
-  type Tool,
-} from '@modelcontextprotocol/server';
+import type { Tool } from '@modelcontextprotocol/server';
 import type { FromSchema, JSONSchema } from 'json-schema-to-ts';
 import { type LawServiceError, makeError } from '../errors.js';
+import {
+  assertSupportedSchema,
+  type InputIssue,
+  isCalendarDate,
+  validateInput,
+} from './input-validator.js';
 
 /**
  * inputSchema から導いた引数の型。
@@ -59,64 +63,121 @@ export function bindTool<T extends ToolSpec>(
   spec: T,
   handler: (args: NoInfer<ArgsOf<T['inputSchema']>>) => Promise<unknown>
 ): ToolHandler {
-  const validator = fromJsonSchema(spec.inputSchema as unknown as JsonSchemaType);
-  // 同じ inputSchema から作った validator を通った値だけを handler に渡すので、handler の引数の型
+  const schema = spec.inputSchema as unknown as Record<string, unknown>;
+  // 対応していないキーワードがあれば、検査を素通りさせないよう起動時に止める
+  assertSupportedSchema(schema, `${spec.name}.inputSchema`);
+  // 同じ inputSchema で検証した値だけを handler に渡すので、handler の引数の型
   // （inputSchema から導いた ArgsOf）は成り立つ。関数の中で ArgsOf<T['inputSchema']> を式に書くと、
   // 型引数 T のまま FromSchema を展開しようとして TS2589（型の展開が深すぎる）になるため、
   // 呼び出しの型だけを unknown で受ける形に置き換える
   const call = handler as unknown as ToolHandler;
   return async (raw) => {
-    const result = await validator['~standard'].validate(raw ?? {});
-    if (result.issues) return invalidArgument(spec, raw, result.issues);
-    return call(result.value);
+    const args = raw ?? {};
+    const issues = validateInput(schema, args);
+    if (issues.length > 0) return invalidArgument(spec.name, issues);
+    const guard = checkBeyondSchema(spec.name, schema, args as Record<string, unknown>);
+    if (guard) return guard;
+    return call(args);
   };
 }
 
-/** 検証の問題を INVALID_ARGUMENT の LawServiceError にする */
-function invalidArgument(
-  spec: ToolSpec,
-  raw: unknown,
-  issues: ReadonlyArray<StandardSchemaV1.Issue>
-): LawServiceError {
-  const name = spec.name;
-  // `additionalProperties: false` の違反は、既定バリデータの message（must NOT have additional properties）に
-  // 引数名が入らないので、inputSchema の properties に無い引数名をここで数えて path に入れる
-  const unknownArgs = listUnknownArgs(spec, raw);
-  // fromJsonSchema の既定バリデータは path を持たず、message が `data/name must be string` 形式で来る。
-  // 先頭の `data/` を剥がして path に、残りを message にする
-  const detail = issues.map((i) => {
-    const fromPath = (i.path ?? [])
-      .map((seg) => (typeof seg === 'object' ? String(seg.key) : String(seg)))
-      .join('.');
-    const m = /^data(?:\/([^\s]+))?\s+(.*)$/.exec(i.message);
-    const message = m ? m[2] : i.message;
-    const isAdditional = /additional properties/.test(message);
-    const path =
-      fromPath ||
-      (m?.[1] ?? '').replace(/\//g, '.') ||
-      (isAdditional ? unknownArgs.join(', ') : '');
-    return { path, message: isAdditional ? 'inputSchema に無い引数です' : message };
-  });
+/** inputSchema の検査の問題を INVALID_ARGUMENT の LawServiceError にする（SPEC-EGOV-COMMON-ERRORS-013・014・020） */
+function invalidArgument(name: string, issues: InputIssue[]): LawServiceError {
   return makeError(
     'INVALID_ARGUMENT',
-    `引数が tools/list の inputSchema に合いません: ${detail.map((d) => (d.path ? `${d.path}: ${d.message}` : d.message)).join('; ')}`,
+    `引数が tools/list の inputSchema に合いません: ${issues.map((d) => `${d.path}: ${d.message}`).join('; ')}`,
     {
-      hint: `tools/list の ${name} の inputSchema を確認してください (型・必須・enum・未知の引数)`,
+      tool: name,
+      hint: `tools/list の ${name} の inputSchema を確認してください (型・必須・enum・範囲・形式・未知の引数)`,
       next_actions: [
         { action: 'list_tools', reason: 'inputSchema で引数の型と必須項目を確認できます' },
       ],
-      detail: { issues: detail },
+      detail: { issues },
     }
   );
 }
 
-/** inputSchema の properties に無い引数名の一覧 */
-function listUnknownArgs(spec: ToolSpec, raw: unknown): string[] {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return [];
-  const schema = spec.inputSchema;
-  const known =
-    typeof schema === 'object' && schema !== null && 'properties' in schema && schema.properties
-      ? Object.keys(schema.properties)
-      : [];
-  return Object.keys(raw).filter((k) => !known.includes(k));
+// ========================================
+// inputSchema で書けない検査（SPEC-EGOV-COMMON-ERRORS-024・026）
+// ========================================
+
+/** 空白だけの必須の文字列に付ける hint（引数名ごと。ツールで変えるものはツール名を前に付けたキー） */
+const BLANK_HINTS: Record<string, string> = {
+  'search_law.keyword':
+    '検索したい法令名・略称・キーワード（例: "消費税", "労基"）を指定してください',
+  'search_fulltext.keyword':
+    '探したい語や法令名（例: "民法 不法行為", "適格請求書"）を指定してください',
+  law_name: '法令名か略称（例: "民法", "消法"）を指定してください',
+  abbr: '略称・正式名称・別名（例: "消法", "所得税法"）を指定してください',
+  name: '法令種別の名前・別名・法令種別コード（例: "政令", "施行令", "Act"）を指定してください',
+  article: '条番号（例: "30", "57の2"）を指定してください',
+};
+
+const AT_HINT = 'at には暦にある日付を YYYY-MM-DD の形で指定してください（例: "2024-04-01"）';
+
+/** 空白だけを調べる引数（必須で minLength: 1 の文字列）を、inputSchema から引数名の並びで集める */
+function blankTargets(schema: Record<string, unknown>): string[] {
+  const properties = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const required = (schema.required ?? []) as string[];
+  return Object.keys(properties).filter(
+    (name) =>
+      required.includes(name) &&
+      properties[name].type === 'string' &&
+      properties[name].minLength === 1
+  );
+}
+
+/**
+ * inputSchema の検査を通った引数を、e-Gov・DB・略称辞書に問い合わせる前に確かめる。
+ *
+ * 1. 必須の文字列が空白（半角・全角スペース、タブ、改行）だけ → `<引数名> が空です`（026）
+ *    配列の要素の中の必須の文字列（verify_citations の citations[].article）も同じ
+ * 2. `at` が暦に無い日付 → `at が暦に無い日付です: <値>`（024）
+ *
+ * 違反が 2 つ以上あっても、この順で最初の 1 件だけを返す。
+ */
+function checkBeyondSchema(
+  tool: string,
+  schema: Record<string, unknown>,
+  args: Record<string, unknown>
+): LawServiceError | null {
+  for (const name of blankTargets(schema)) {
+    const v = args[name];
+    if (typeof v === 'string' && v.trim() === '') {
+      return blankError(tool, name, name, name);
+    }
+  }
+  // 配列の要素（citations[].article）
+  const properties = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  for (const [name, sub] of Object.entries(properties)) {
+    if (sub.type !== 'array' || typeof sub.items !== 'object' || sub.items === null) continue;
+    const list = args[name];
+    if (!Array.isArray(list)) continue;
+    const fields = blankTargets(sub.items as Record<string, unknown>);
+    for (const [i, element] of list.entries()) {
+      for (const field of fields) {
+        const v = (element as Record<string, unknown>)[field];
+        if (typeof v === 'string' && v.trim() === '') {
+          return blankError(tool, field, `${name}.${i}.${field}`, `${name}[${i}].${field}`);
+        }
+      }
+    }
+  }
+  const at = args.at;
+  if (typeof at === 'string' && 'at' in properties && !isCalendarDate(at)) {
+    return makeError('INVALID_ARGUMENT', `at が暦に無い日付です: ${at}`, {
+      tool,
+      hint: AT_HINT,
+      detail: { issues: [{ path: 'at', message: '暦に無い日付です' }] },
+    });
+  }
+  return null;
+}
+
+function blankError(tool: string, field: string, path: string, label: string): LawServiceError {
+  return makeError('INVALID_ARGUMENT', `${label} が空です`, {
+    tool,
+    hint: BLANK_HINTS[`${tool}.${field}`] ?? BLANK_HINTS[field],
+    detail: { issues: [{ path, message: '空白だけは指定できません' }] },
+  });
 }

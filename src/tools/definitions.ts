@@ -14,6 +14,7 @@ import {
   SCAN_BODY_SECONDS,
   SUPPL_MODES,
 } from '../constants.js';
+import { AT_PATTERN } from './input-validator.js';
 import { type ToolSpec, toMcpTool } from './tool-args.js';
 
 // ========================================
@@ -28,6 +29,7 @@ export const searchLawTool = {
     properties: {
       keyword: {
         type: 'string',
+        minLength: 1,
         description:
           '検索キーワード。例: "消費税", "労働基準", "育児休業"。略称も可（例: "消法", "労基法"）',
       },
@@ -42,8 +44,10 @@ export const searchLawTool = {
         description: '分野タグで絞り込み（略称辞書ベース）',
       },
       limit: {
-        type: 'number',
-        description: `取得件数（デフォルト: ${LIMITS.searchDefault}、最大: ${LIMITS.searchMax}）`,
+        type: 'integer',
+        minimum: 1,
+        maximum: LIMITS.searchMax,
+        description: `取得件数（1〜${LIMITS.searchMax} の整数。デフォルト: ${LIMITS.searchDefault}）`,
         default: LIMITS.searchDefault,
       },
     },
@@ -61,6 +65,7 @@ export const getLawTool = {
     properties: {
       law_name: {
         type: 'string',
+        minLength: 1,
         description: '法令名または略称。例: "消費税法", "消法", "労基法", "民法"',
       },
       article: {
@@ -69,8 +74,9 @@ export const getLawTool = {
           '条番号。例: "30", "30の2", "第30条の2"。漢数字（"第三十条", "三十の二"）と全角数字も可（v0.7.0）。format="toc" の場合は省略可',
       },
       paragraph: {
-        type: 'number',
-        description: '項番号。省略時は条文全体',
+        type: 'integer',
+        minimum: 1,
+        description: '項番号（1 以上の整数）。省略時は条文全体',
       },
       item: {
         type: ['number', 'string'],
@@ -86,6 +92,7 @@ export const getLawTool = {
       },
       at: {
         type: 'string',
+        pattern: AT_PATTERN,
         description:
           '時点指定。YYYY-MM-DD 形式。例: "2024-04-01" でその時点の条文を取得（e-Gov v2 対応）',
       },
@@ -104,16 +111,19 @@ export const getTocTool = {
     properties: {
       law_name: {
         type: 'string',
+        minLength: 1,
         description: '法令名または略称',
       },
       at: {
         type: 'string',
+        pattern: AT_PATTERN,
         description: '時点指定（YYYY-MM-DD）',
       },
       depth: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
         description:
-          '構造階層の打ち切り深さ。1=編まで、2=章まで、3=節まで。省略時は全階層。例: 民法を depth=1 で取得すると「第一編 総則」「第二編 物権」のような大区分のみが返る',
+          '構造階層の打ち切り深さ（1 以上の整数）。1=編まで、2=章まで、3=節まで。省略時は全階層。例: 民法を depth=1 で取得すると「第一編 総則」「第二編 物権」のような大区分のみが返る',
       },
       suppl: {
         type: 'string',
@@ -143,6 +153,7 @@ export const searchFulltextTool = {
     properties: {
       keyword: {
         type: 'string',
+        minLength: 1,
         description:
           '検索キーワード。スペース区切りで AND 検索。法令名・略称を含めると（例: "民法 不法行為", "労基法 時間外"）その法令の条に絞って本文を検索する。「第30条」を含めると該当条番号のヒットを上位に寄せ、法令名 + 条番号だけ（例: "民法 第709条"）ならその条を直接返す（漢数字は未対応）。2 文字の語だけのとき（例: "相殺"）は索引を引けないため、既定では条本文を引かず法令名の照合だけを返す。法令名か 3 文字以上の語を添えると索引で本文を引ける',
       },
@@ -158,8 +169,10 @@ export const searchFulltextTool = {
         description: '法令種別で絞り込み',
       },
       limit: {
-        type: 'number',
-        description: `取得件数（デフォルト: ${LIMITS.fulltextDefault}、最大: ${LIMITS.fulltextMax}）`,
+        type: 'integer',
+        minimum: 1,
+        maximum: LIMITS.fulltextMax,
+        description: `取得件数（1〜${LIMITS.fulltextMax} の整数。デフォルト: ${LIMITS.fulltextDefault}）`,
         default: LIMITS.fulltextDefault,
       },
       scan_body: {
@@ -182,6 +195,7 @@ export const resolveAbbreviationTool = {
     properties: {
       abbr: {
         type: 'string',
+        minLength: 1,
         description: '略称。例: "消法", "所法", "労基法", "民"',
       },
     },
@@ -199,11 +213,13 @@ export const getLawRevisionsTool = {
     properties: {
       law_name: {
         type: 'string',
+        minLength: 1,
         description: '法令名または略称。例: "消費税法", "消法", "民法"',
       },
       latest: {
-        type: 'number',
-        description: '最新N件のみ返却（省略時は全件）。例: 5',
+        type: 'integer',
+        minimum: 1,
+        description: '最新N件のみ返却（1 以上の整数。省略時は全件）。例: 5',
       },
     },
     required: ['law_name'],
@@ -220,6 +236,7 @@ export const explainLawTypeTool = {
     properties: {
       name: {
         type: 'string',
+        minLength: 1,
         description:
           '法令種別の名前。例: "法律", "政令", "省令", "規則", "条例", "告示", "通達", "訓令", "憲法"。aliases も解決可（例: "施行令" → 政令、"施行規則" → 省令、"Act" → 法律）',
       },
@@ -241,6 +258,7 @@ export const getRelatedLawsTool = {
     properties: {
       law_name: {
         type: 'string',
+        minLength: 1,
         description: '法令名または略称。例: "所得税法", "所法", "所得税法施行令"',
       },
     },
@@ -258,18 +276,23 @@ export const getArticleReferencesTool = {
     properties: {
       law_name: {
         type: 'string',
+        minLength: 1,
         description: '法令名または略称。例: "所得税法", "所法"',
       },
       article: {
         type: 'string',
+        minLength: 1,
         description: '条番号。例: "57の2", "第57条の2", "第五十七条の二"',
       },
       paragraph: {
-        type: 'number',
-        description: '項番号。指定するとその項の本文だけを対象にする。省略時は条全体',
+        type: 'integer',
+        minimum: 1,
+        description:
+          '項番号（1 以上の整数）。指定するとその項の本文だけを対象にする。省略時は条全体',
       },
       at: {
         type: 'string',
+        pattern: AT_PATTERN,
         description: '時点指定。YYYY-MM-DD 形式（get_law と同じ）',
       },
     },
@@ -307,11 +330,13 @@ export const verifyCitationsTool = {
             },
             article: {
               type: 'string',
+              minLength: 1,
               description: '条番号。例: "30", "30の2", "第三十条の二"',
             },
             paragraph: {
-              type: 'number',
-              description: '項番号。省略すると条までを確かめる',
+              type: 'integer',
+              minimum: 1,
+              description: '項番号（1 以上の整数）。省略すると条までを確かめる',
             },
             item: {
               type: ['number', 'string'],
@@ -329,6 +354,7 @@ export const verifyCitationsTool = {
       },
       at: {
         type: 'string',
+        pattern: AT_PATTERN,
         description: '時点指定。YYYY-MM-DD 形式。全件に同じ時点を適用する',
       },
     },
@@ -349,6 +375,7 @@ export const getLawRangeTool = {
     properties: {
       law_name: {
         type: 'string',
+        minLength: 1,
         description: '法令名または略称。例: "民法", "会社法", "消法"',
       },
       part: {
@@ -379,9 +406,10 @@ export const getLawRangeTool = {
           '範囲のパス。get_toc が返す toc[].path をそのまま渡せる。例: "Part3/Chapter2"（民法第三編第二章）、"Chapter2/Section1/Subsection2"。編・章・節の番号との同時指定はできない',
       },
       suppl_index: {
-        type: 'number',
+        type: 'integer',
+        minimum: 1,
         description:
-          '附則の番号（1 始まり）。get_toc が返す suppl_provisions[].index と同じ番号で、search_fulltext が「附則(3) 1」と表示する番号でもある。条を持たず項だけで書かれた附則は、範囲の本文をそのまま返す',
+          '附則の番号（1 以上の整数）。get_toc が返す suppl_provisions[].index と同じ番号で、search_fulltext が「附則(3) 1」と表示する番号でもある。条を持たず項だけで書かれた附則は、範囲の本文をそのまま返す',
       },
       from_article: {
         type: 'string',
@@ -389,7 +417,7 @@ export const getLawRangeTool = {
           '範囲の中のこの条から返す。前の応答が truncated だったときに next_from_article の値を渡して続きを取る。例: "561", "548の4", "第五百六十一条"',
       },
       max_chars: {
-        type: 'number',
+        type: 'integer',
         description: `返す条本文の文字数の上限（デフォルト: ${RANGE_LIMITS.defaultMaxChars}、${RANGE_LIMITS.minMaxChars}〜${RANGE_LIMITS.maxMaxChars}）。条の途中では切らないため、1 条目だけは上限を超えても返す`,
         minimum: RANGE_LIMITS.minMaxChars,
         maximum: RANGE_LIMITS.maxMaxChars,
@@ -397,6 +425,7 @@ export const getLawRangeTool = {
       },
       at: {
         type: 'string',
+        pattern: AT_PATTERN,
         description: '時点指定。YYYY-MM-DD 形式（get_law と同じ）',
       },
     },
@@ -417,10 +446,12 @@ export const listAttachmentsTool = {
     properties: {
       law_name: {
         type: 'string',
+        minLength: 1,
         description: '法令名または略称。例: "戸籍法施行規則", "国旗及び国歌に関する法律"',
       },
       at: {
         type: 'string',
+        pattern: AT_PATTERN,
         description:
           '時点指定。YYYY-MM-DD 形式（get_law と同じ）。添付ファイルは法令履歴ごとに付くので、時点を変えると一覧も変わる',
       },
@@ -439,6 +470,7 @@ export const getAttachmentTool = {
     properties: {
       law_name: {
         type: 'string',
+        minLength: 1,
         description: '法令名または略称',
       },
       src: {
@@ -448,6 +480,7 @@ export const getAttachmentTool = {
       },
       at: {
         type: 'string',
+        pattern: AT_PATTERN,
         description: '時点指定。YYYY-MM-DD 形式。list_attachments と同じ時点を渡す',
       },
       save: {
@@ -471,6 +504,7 @@ export const getLawFileTool = {
     properties: {
       law_name: {
         type: 'string',
+        minLength: 1,
         description: '法令名または略称。例: "民法", "消法"',
       },
       file_type: {
@@ -481,6 +515,7 @@ export const getLawFileTool = {
       },
       at: {
         type: 'string',
+        pattern: AT_PATTERN,
         description:
           '時点指定。YYYY-MM-DD 形式。その時点以前で最新の履歴の本文ファイルになる（e-Gov の asof）',
       },
