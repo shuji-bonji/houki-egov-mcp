@@ -416,6 +416,8 @@ export async function getLawArticle(opts: {
         law_num: resolved.law_num,
         retrieved_at: retrievedAt,
         url: EGOV_API.publicLawUrl(resolved.law_id),
+        // 目次の meta にも時点を置く。渡さないときは null（SPEC-EGOV-GET-LAW-020）
+        at: opts.at ?? null,
       },
     };
   }
@@ -504,7 +506,8 @@ export async function getLawArticle(opts: {
     law_num: resolved.law_num,
     retrieved_at: retrievedAt,
     url: EGOV_API.publicLawUrl(resolved.law_id),
-    at: opts.at,
+    // undefined は JSON に出ないので、渡さないときは null を置く（SPEC-EGOV-GET-LAW-020）
+    at: opts.at ?? null,
   };
 
   if (opts.format === 'json') {
@@ -512,8 +515,9 @@ export async function getLawArticle(opts: {
       format: 'json',
       data: {
         article_num: articleNum,
-        paragraph_num: opts.paragraph,
-        item_num: opts.item,
+        // 渡さないときは null。item だけで項を補ったときは補った項番号 1（SPEC-EGOV-GET-LAW-024・040）
+        paragraph_num: opts.paragraph ?? (opts.item !== undefined ? 1 : null),
+        item_num: opts.item ?? null,
         node: item ?? paragraph ?? article,
       },
       meta,
@@ -656,7 +660,7 @@ export async function getLawToc(opts: {
       law_num: resolved.law_num,
       retrieved_at: retrievedAt,
       url: EGOV_API.publicLawUrl(resolved.law_id),
-      at: opts.at,
+      at: opts.at ?? null,
     },
     node_count: truncated ? countTocNodes(toc) : fullCount,
     truncated,
@@ -754,15 +758,17 @@ export interface ArticleMeta {
   law_num?: string;
   retrieved_at: string;
   url: string;
-  at?: string;
+  /** 渡した時点。渡さないとき（at を受け取らないツールを含む）は null で、キーは消さない（T4） */
+  at: string | null;
 }
 
 /** JSON 出力時の構造化データ */
 export interface ArticleJson {
   article_num: string;
-  paragraph_num?: number;
-  /** 指定された号番号（引数の値のまま。v0.6.0 から "8の2" のような文字列もありうる） */
-  item_num?: number | string;
+  /** 渡した項番号。渡さないときは null、item だけで項を補ったときは 1 */
+  paragraph_num: number | null;
+  /** 指定された号番号（引数の値のまま。v0.6.0 から "8の2" のような文字列もありうる）。渡さないときは null */
+  item_num: number | string | null;
   node: LawNode;
 }
 
@@ -777,16 +783,7 @@ export async function getLawRevisionsByName(opts: { law_name: string; latest?: n
   LawServiceResult<{
     meta: ArticleMeta;
     total: number;
-    revisions: Array<{
-      law_revision_id: string;
-      amendment_promulgate_date?: string;
-      amendment_enforcement_date?: string;
-      amendment_enforcement_comment?: string | null;
-      amendment_law_num?: string | null;
-      amendment_law_title?: string | null;
-      amendment_law_id?: string | null;
-      current_revision_status?: string;
-    }>;
+    revisions: RevisionEntry[];
   }>
 > {
   const scopeError = checkAbbreviationScope(opts.law_name);
@@ -812,7 +809,8 @@ export async function getLawRevisionsByName(opts: { law_name: string; latest?: n
   } catch (err) {
     return egovHttpErrorToLawError(err);
   }
-  const all = res.revisions ?? [];
+  const all = sortRevisionsByEnforcementDate((res.revisions ?? []).map(toRevisionEntry));
+  // 「最新」は施行日の新しい順の先頭（SPEC-EGOV-GET-LAW-REVISIONS-009・016）
   const trimmed = opts.latest && opts.latest > 0 ? all.slice(0, opts.latest) : all;
   const retrievedAt = new Date().toISOString();
   return {
@@ -822,19 +820,55 @@ export async function getLawRevisionsByName(opts: { law_name: string; latest?: n
       law_num: resolved.law_num,
       retrieved_at: retrievedAt,
       url: EGOV_API.publicLawUrl(resolved.law_id),
+      // at を受け取らないツールも meta のキーを揃える（SPEC-EGOV-GET-LAW-REVISIONS-002）
+      at: null,
     },
     total: all.length,
-    revisions: trimmed.map((r: RevisionInfo) => ({
-      law_revision_id: r.law_revision_id,
-      amendment_promulgate_date: r.amendment_promulgate_date,
-      amendment_enforcement_date: r.amendment_enforcement_date,
-      amendment_enforcement_comment: r.amendment_enforcement_comment,
-      amendment_law_num: r.amendment_law_num,
-      amendment_law_title: r.amendment_law_title,
-      amendment_law_id: r.amendment_law_id,
-      current_revision_status: r.current_revision_status,
-    })),
+    revisions: trimmed,
   };
+}
+
+/** get_law_revisions の revisions[] の要素。8 つのキーを常に持ち、値の無いキーは null（SPEC-EGOV-GET-LAW-REVISIONS-002） */
+export interface RevisionEntry {
+  law_revision_id: string | null;
+  amendment_promulgate_date: string | null;
+  amendment_enforcement_date: string | null;
+  amendment_enforcement_comment: string | null;
+  amendment_law_num: string | null;
+  amendment_law_title: string | null;
+  amendment_law_id: string | null;
+  /** e-Gov の値のまま（CurrentEnforced / PreviousEnforced / UnEnforced。SPEC-EGOV-GET-LAW-REVISIONS-017） */
+  current_revision_status: string | null;
+}
+
+/** e-Gov の改正の要素から 8 つのキーだけを取り出し、無いキーは null にする。ほかのフィールドは入れない */
+function toRevisionEntry(r: RevisionInfo): RevisionEntry {
+  return {
+    law_revision_id: r.law_revision_id ?? null,
+    amendment_promulgate_date: r.amendment_promulgate_date ?? null,
+    amendment_enforcement_date: r.amendment_enforcement_date ?? null,
+    amendment_enforcement_comment: r.amendment_enforcement_comment ?? null,
+    amendment_law_num: r.amendment_law_num ?? null,
+    amendment_law_title: r.amendment_law_title ?? null,
+    amendment_law_id: r.amendment_law_id ?? null,
+    current_revision_status: r.current_revision_status ?? null,
+  };
+}
+
+/**
+ * 施行日の新しい順に並べる（SPEC-EGOV-GET-LAW-REVISIONS-016）。e-Gov が返す順には頼らない。
+ * 施行日が決まっていない（null の）改正は先頭に置く。施行日が同じ改正どうし、null どうしは
+ * e-Gov が返した順のまま（Array.prototype.sort は安定ソート）。施行日は YYYY-MM-DD なので文字列で比べる
+ */
+function sortRevisionsByEnforcementDate(revisions: RevisionEntry[]): RevisionEntry[] {
+  return [...revisions].sort((a, b) => {
+    const da = a.amendment_enforcement_date;
+    const db = b.amendment_enforcement_date;
+    if (da === db) return 0;
+    if (da === null) return -1;
+    if (db === null) return 1;
+    return da < db ? 1 : -1;
+  });
 }
 
 /** テスト用にキャッシュをクリアする */
@@ -908,7 +942,8 @@ export interface RelatedLawsResponse {
   method: 'law_name_rule';
   note: string;
   next_actions: NextAction[];
-  meta: { retrieved_at: string };
+  /** at を受け取らないので at は常に null（SPEC-EGOV-GET-RELATED-LAWS-010） */
+  meta: { retrieved_at: string; at: null };
 }
 
 /**
@@ -980,13 +1015,14 @@ export async function getRelatedLaws(opts: {
     method: 'law_name_rule',
     note: RELATED_LAWS_NOTE,
     next_actions,
-    meta: { retrieved_at: new Date().toISOString() },
+    meta: { retrieved_at: new Date().toISOString(), at: null },
   };
 }
 
 /** `get_article_references` の応答 */
 export interface ArticleReferencesResponse {
-  meta: ArticleMeta & { article: string; paragraph?: number };
+  /** paragraph は指定しないとき null（SPEC-EGOV-GET-ARTICLE-REFERENCES-022） */
+  meta: ArticleMeta & { article: string; paragraph: number | null };
   references: ExtractedReference[];
   delegations: Array<
     Delegation & {
@@ -1190,9 +1226,9 @@ export async function getArticleReferences(opts: {
         law_num: resolved.law_num,
         retrieved_at: retrievedAt,
         url: EGOV_API.publicLawUrl(resolved.law_id),
-        at: opts.at,
+        at: opts.at ?? null,
         article: fromEgovArticleNum(articleNum),
-        ...(opts.paragraph !== undefined ? { paragraph: opts.paragraph } : {}),
+        paragraph: opts.paragraph ?? null,
       },
       references: extracted.references,
       delegations,
@@ -1421,7 +1457,8 @@ export interface VerifyCitationsResponse {
   results: CitationVerdict[];
   method: 'per_citation_lookup';
   note: string;
-  meta: { retrieved_at: string; at?: string };
+  /** at は渡さないとき null（SPEC-EGOV-VERIFY-CITATIONS-021） */
+  meta: { retrieved_at: string; at: string | null };
 }
 
 /** ambiguous のときに返す候補の上限 */
@@ -1530,7 +1567,7 @@ export async function verifyCitations(opts: {
     note: VERIFY_CITATIONS_NOTE,
     meta: {
       retrieved_at: new Date().toISOString(),
-      ...(opts.at ? { at: opts.at } : {}),
+      at: opts.at ?? null,
     },
   };
 }
@@ -2034,6 +2071,10 @@ export async function getLawRange(opts: {
           ...(range.path ? { path: range.path } : {}),
           ...(range.suppl_index ? { suppl_index: range.suppl_index } : {}),
           from_article: nextFrom,
+          // 例のとおりに呼び直しても上限と時点が変わらないように、渡された値だけをそのまま写す
+          // （SPEC-EGOV-GET-LAW-RANGE-008）
+          ...(opts.max_chars !== undefined ? { max_chars: opts.max_chars } : {}),
+          ...(opts.at !== undefined ? { at: opts.at } : {}),
         },
       },
     ];
@@ -2063,7 +2104,7 @@ export async function getLawRange(opts: {
       law_num: resolved.law_num,
       retrieved_at: retrievedAt,
       url: EGOV_API.publicLawUrl(resolved.law_id),
-      at: opts.at,
+      at: opts.at ?? null,
     },
   };
 }

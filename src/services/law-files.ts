@@ -206,7 +206,8 @@ async function loadAttachments(opts: {
     law_revision_id: revisionId,
     retrieved_at: new Date().toISOString(),
     url: EGOV_API.publicLawUrl(resolved.law_id),
-    ...(opts.at ? { at: opts.at } : {}),
+    // 渡さないときは null。キーは消さない（SPEC-EGOV-LIST-ATTACHMENTS-015・SPEC-EGOV-GET-ATTACHMENT-014）
+    at: opts.at ?? null,
   };
   return { meta, entries };
 }
@@ -330,10 +331,15 @@ export async function getAttachment(opts: {
   // 空文字・空白だけの src は省いたときと同じ（zip）にする（SPEC-EGOV-GET-ATTACHMENT-025）
   const wanted = opts.src?.trim() ?? '';
   if (wanted !== '') {
-    entry =
-      entries.find((e) => e.src === wanted) ??
-      entries.find((e) => e.file_name === fileNameOf(wanted)) ??
-      null;
+    // 一覧の src に一致しなければ、末尾のファイル名で照らす。1 件だけに当たるときだけ選ぶ
+    // （SPEC-EGOV-GET-ATTACHMENT-002）。2 件以上なら先のものを選ばずにエラー（029）
+    entry = entries.find((e) => e.src === wanted) ?? null;
+    if (!entry) {
+      const wantedName = fileNameOf(wanted);
+      const byName = entries.filter((e) => e.file_name === wantedName);
+      if (byName.length > 1) return ambiguousAttachment(wantedName, byName, opts);
+      entry = byName[0] ?? null;
+    }
     if (!entry) {
       return makeError(
         'ATTACHMENT_NOT_FOUND',
@@ -450,7 +456,8 @@ export async function getLawFile(opts: {
     law_num: resolved.law_num,
     retrieved_at: new Date().toISOString(),
     url: EGOV_API.publicLawUrl(resolved.law_id),
-    ...(opts.at ? { at: opts.at } : {}),
+    // 渡さないときは null。キーは消さない（SPEC-EGOV-GET-LAW-FILE-001）
+    at: opts.at ?? null,
   };
   const res: GetLawFileResponse = {
     meta,
@@ -481,8 +488,13 @@ export async function getLawFile(opts: {
   const sizeError = checkSize(bin, url);
   if (sizeError) return sizeError;
 
+  // 法令履歴 ID は Content-Disposition のファイル名からだけ読む。読めないときに法令 ID を入れない
+  // （SPEC-EGOV-GET-LAW-FILE-003）。保存先は <law_id>/<law_id>.<file_type> のまま
+  const revisionId =
+    bin.fileName === null
+      ? null
+      : (/^([0-9A-Za-z_]+)\.[A-Za-z0-9]+$/.exec(bin.fileName)?.[1] ?? null);
   const fileName = bin.fileName ?? `${resolved.law_id}.${fileType}`;
-  const revisionId = /^([0-9A-Za-z_]+)\.[A-Za-z0-9]+$/.exec(fileName)?.[1] ?? null;
   const path = saveFile(revisionId ?? resolved.law_id, fileName, bin.bytes);
   res.saved = {
     path,
@@ -494,6 +506,42 @@ export async function getLawFile(opts: {
   const actions = lawFileNextActions(opts.law_name, fileType);
   if (actions.length > 0) res.next_actions = actions;
   return res;
+}
+
+/** 候補として示す添付ファイルの上限（hint と next_actions） */
+const MAX_ATTACHMENT_CANDIDATES = 10;
+
+/**
+ * ファイル名だけの src が 2 件以上の添付に当たったときのエラー（SPEC-EGOV-GET-ATTACHMENT-029）。
+ * 引数が 1 件に決まらない形なので INVALID_ARGUMENT。候補の src を一覧の順に最大 10 件示す
+ */
+function ambiguousAttachment(
+  fileName: string,
+  matches: AttachmentEntry[],
+  opts: { law_name: string; at?: string; save?: boolean }
+): LawServiceError {
+  const shown = matches.slice(0, MAX_ATTACHMENT_CANDIDATES);
+  const more = matches.length > MAX_ATTACHMENT_CANDIDATES ? ', …' : '';
+  return makeError(
+    'INVALID_ARGUMENT',
+    `ファイル名 "${fileName}" の添付ファイルが ${matches.length} 件あります。src を一覧の形で指定してください`,
+    {
+      tool: 'get_attachment',
+      hint: `同じファイル名の添付ファイル: ${shown.map((e) => e.src).join(', ')}${more}`,
+      retryable: false,
+      detail: { issues: [{ path: 'src', message: '同じファイル名の添付ファイルが複数あります' }] },
+      next_actions: shown.map((e) => ({
+        action: 'get_attachment',
+        reason: 'この src を指定して取れます',
+        example: {
+          law_name: opts.law_name,
+          src: e.src,
+          ...(opts.at !== undefined ? { at: opts.at } : {}),
+          ...(opts.save !== undefined ? { save: opts.save } : {}),
+        },
+      })),
+    }
+  );
 }
 
 function lawFileNextActions(lawName: string, fileType: LawFileType): NextAction[] {

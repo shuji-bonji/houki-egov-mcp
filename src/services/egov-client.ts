@@ -353,16 +353,25 @@ async function fetchBinaryWithRetry(
   }
 }
 
-/** Content-Disposition の filename="…" を取り出す。無ければ null */
+/**
+ * Content-Disposition のファイル名を取り出す。無ければ null（SPEC-EGOV-GET-LAW-FILE-004）。
+ *
+ * `filename*=UTF-8''…` があればそれを URL デコードして使い、無ければ `filename="…"`
+ * （引用符の無い `filename=…` を含む）を使う。両方あるときは、ヘッダーの中の順によらず `filename*`
+ * （RFC 6266 の 4.3 節）。
+ */
 export function parseContentDispositionFileName(header: string | null): string | null {
   if (!header) return null;
-  const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header);
-  if (!m) return null;
-  try {
-    return decodeURIComponent(m[1]);
-  } catch {
-    return m[1];
+  const extended = /filename\*\s*=\s*(?:UTF-8'[^']*')?"?([^";]+)"?/i.exec(header);
+  if (extended) {
+    try {
+      return decodeURIComponent(extended[1].trim());
+    } catch {
+      return extended[1].trim();
+    }
   }
+  const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(header);
+  return plain ? plain[1].trim() : null;
 }
 
 /**
