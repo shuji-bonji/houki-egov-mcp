@@ -64,12 +64,29 @@ export function buildWarning(
 }
 
 /**
+ * `sync_state.last_sync_date` が日付・時刻として解釈できないことを表す（SPEC-EGOV-COMMON-ERRORS-031）。
+ *
+ * houki-abbreviations 0.7.0 の `computeDaysSince` は、解釈できない日付に `RangeError` を投げる
+ * （0.6.1 までは 0 を返して `fresh` になっていた）。`value` に DB の値、`message` に元の例外の文を持つ。
+ */
+export class SyncDateError extends Error {
+  constructor(
+    public readonly value: string,
+    message: string
+  ) {
+    super(message);
+    this.name = 'SyncDateError';
+  }
+}
+
+/**
  * sync_state テーブルから FreshnessInfo を構築。
  *
  * @param db SQLite DB (initSchema 済み)
  * @param bulkDownloadHint 警告に埋め込む CLI コマンド表記の上書き
  * @param nowMs テスト用に Date.now() を差し替えるためのフック
  * @returns sync_state がない (初回 DL 前) なら null
+ * @throws {SyncDateError} last_sync_date を日付・時刻として解釈できないとき
  */
 export function summarizeFreshness(
   db: DatabaseT.Database,
@@ -82,8 +99,14 @@ export function summarizeFreshness(
 
   if (!row) return null;
 
-  const days_since_sync = computeDaysSince(row.last_sync_date, nowMs);
-  const staleness = judgeStaleness(days_since_sync);
+  let days_since_sync: number;
+  let staleness: StalenessLevel;
+  try {
+    days_since_sync = computeDaysSince(row.last_sync_date, nowMs);
+    staleness = judgeStaleness(days_since_sync);
+  } catch (err) {
+    throw new SyncDateError(row.last_sync_date, err instanceof Error ? err.message : String(err));
+  }
   const result: FreshnessInfo = {
     last_sync_date: row.last_sync_date,
     last_full_dl_at: row.last_full_dl_at,

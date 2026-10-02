@@ -13,10 +13,17 @@
 import { EGOV_API, FILES_CONFIG } from '../config.js';
 import type { LawFileType } from '../constants.js';
 import { LAW_FILE_TYPES } from '../constants.js';
-import { type LawServiceError, makeError, NEXT_ACTIONS, type NextAction } from '../errors.js';
+import {
+  isLawServiceError,
+  type LawServiceError,
+  makeError,
+  NEXT_ACTIONS,
+  type NextAction,
+} from '../errors.js';
 import {
   type AttachedFile,
   type EgovBinaryResponse,
+  EgovFileTooLargeError,
   EgovHttpError,
   getAttachment as fetchAttachment,
   getLawFile as fetchLawFile,
@@ -150,6 +157,10 @@ async function loadAttachments(opts: {
   if (scopeError) return scopeError;
 
   const resolved = await resolveLawId(opts.law_name);
+
+  // 法令名の検索が通信の失敗で終わったときは SOURCE_*（SPEC-EGOV-COMMON-ERRORS-029）
+
+  if (isLawServiceError(resolved)) return resolved;
   if (!resolved) return lawNotFound(opts.law_name);
 
   let lawData: Awaited<ReturnType<typeof fetchLawData>>;
@@ -381,8 +392,11 @@ export async function getAttachment(opts: {
 
   let bin: EgovBinaryResponse;
   try {
-    bin = await fetchAttachment(meta.law_revision_id, entry?.src);
+    bin = await fetchAttachment(meta.law_revision_id, entry?.src, {
+      maxBytes: FILES_CONFIG.maxBytes,
+    });
   } catch (err) {
+    if (err instanceof EgovFileTooLargeError) return fileTooLarge(err.bytes, url);
     return attachmentErrorToLawError(err, meta, opts);
   }
   const sizeError = checkSize(bin, url);
@@ -425,6 +439,8 @@ export async function getLawFile(opts: {
   const scopeError = checkAbbreviationScope(opts.law_name);
   if (scopeError) return scopeError;
   const resolved = await resolveLawId(opts.law_name);
+  // 法令名の検索が通信の失敗で終わったときは SOURCE_*（SPEC-EGOV-COMMON-ERRORS-029）
+  if (isLawServiceError(resolved)) return resolved;
   if (!resolved) return lawNotFound(opts.law_name);
 
   const url = EGOV_API.lawFile(fileType, resolved.law_id, opts.at);
@@ -455,8 +471,11 @@ export async function getLawFile(opts: {
 
   let bin: EgovBinaryResponse;
   try {
-    bin = await fetchLawFile(fileType, resolved.law_id, opts.at);
+    bin = await fetchLawFile(fileType, resolved.law_id, opts.at, {
+      maxBytes: FILES_CONFIG.maxBytes,
+    });
   } catch (err) {
+    if (err instanceof EgovFileTooLargeError) return fileTooLarge(err.bytes, url);
     return egovHttpErrorToLawError(err);
   }
   const sizeError = checkSize(bin, url);
@@ -517,14 +536,24 @@ function attachmentErrorToLawError(
   return egovHttpErrorToLawError(err);
 }
 
+/**
+ * 読み終えたファイルの大きさを確かめる。Content-Length が無いか上限以下だったときに、
+ * 読み終えた大きさが上限を超えていれば FILE_TOO_LARGE（SPEC-EGOV-GET-ATTACHMENT-027・SPEC-EGOV-GET-LAW-FILE-021）
+ */
 function checkSize(bin: EgovBinaryResponse, url: string): LawServiceError | null {
   if (bin.bytes.length <= FILES_CONFIG.maxBytes) return null;
+  return fileTooLarge(bin.bytes.length, url);
+}
+
+/** 上限を超えるファイルを断る（SPEC-EGOV-COMMON-ERRORS-030）。引数の誤りではないので INVALID_ARGUMENT にしない */
+function fileTooLarge(bytes: number, url: string): LawServiceError {
   return makeError(
-    'INVALID_ARGUMENT',
-    `ファイルが大きすぎます: ${formatBytes(bin.bytes.length)}（上限 ${formatBytes(FILES_CONFIG.maxBytes)}）`,
+    'FILE_TOO_LARGE',
+    `ファイルが大きすぎます: ${formatBytes(bytes)}（上限 ${formatBytes(FILES_CONFIG.maxBytes)}）`,
     {
       hint: '保存せず url をそのまま使ってください',
-      detail: { url },
+      retryable: false,
+      detail: { url, bytes },
     }
   );
 }

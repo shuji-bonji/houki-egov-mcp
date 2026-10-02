@@ -9,9 +9,9 @@
 import { resolveAbbreviation } from '@shuji-bonji/houki-abbreviations';
 import { LIMITS } from '../constants.js';
 import { closeDb, openDb } from '../db/index.js';
-import { NEXT_ACTIONS } from '../errors.js';
+import { type LawServiceError, makeError, NEXT_ACTIONS } from '../errors.js';
 import { findLawHierarchy, listLawHierarchyNames } from '../knowledge/law-hierarchy.js';
-import { type FreshnessInfo, summarizeFreshness } from '../services/freshness.js';
+import { type FreshnessInfo, SyncDateError, summarizeFreshness } from '../services/freshness.js';
 import { getAttachment, getLawFile, listAttachments } from '../services/law-files.js';
 import {
   hasAnyArticle,
@@ -181,7 +181,7 @@ const DOMAIN_NOT_APPLIED_NOTE =
 export async function handleSearchFulltext(
   args: SearchFulltextArgs,
   deps: { dbPath?: string } = {}
-): Promise<SearchFulltextBulkResponse | SearchFulltextFallbackResponse> {
+): Promise<SearchFulltextBulkResponse | SearchFulltextFallbackResponse | LawServiceError> {
   const keyword = (args.keyword ?? '').trim();
   // limit は inputSchema の検査（1〜30 の整数）を通った値なので丸めない（SPEC-EGOV-SEARCH-FULLTEXT-033）
   const limit = args.limit ?? LIMITS.fulltextDefault;
@@ -205,7 +205,13 @@ export async function handleSearchFulltext(
       lawType: args.law_type,
       scanBody: args.scan_body === true,
     });
-    const freshness = summarizeFreshness(db);
+    let freshness: FreshnessInfo | null;
+    try {
+      freshness = summarizeFreshness(db);
+    } catch (err) {
+      if (err instanceof SyncDateError) return syncDateError(err);
+      throw err;
+    }
 
     const response: SearchFulltextBulkResponse = {
       keyword,
@@ -229,6 +235,18 @@ export async function handleSearchFulltext(
   } finally {
     closeDb(db);
   }
+}
+
+/**
+ * 同期の記録の日付を解釈できないとき（SPEC-EGOV-COMMON-ERRORS-031・SPEC-EGOV-SEARCH-FULLTEXT-035）。
+ * 時間をおいても DB の値は変わらないので retryable: false。CLI を案内する action の名前が無いので next_actions は付けない
+ */
+function syncDateError(err: SyncDateError): LawServiceError {
+  return makeError('INTERNAL_ERROR', `同期の記録の日付を読めません: ${err.value}`, {
+    hint: '`houki-egov-mcp --bulk-download-everything` で全件を取り込み直し、同期の記録を作り直してください',
+    retryable: false,
+    detail: { cause: err.message },
+  });
 }
 
 /** bulk DB が使えないときの search_law フォールバック */

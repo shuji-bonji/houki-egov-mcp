@@ -11,6 +11,7 @@ import { CACHE_CONFIG, EGOV_API, HTTP_CONFIG } from '../config.js';
 import { LIMITS, RANGE_LIMITS } from '../constants.js';
 import {
   isLawServiceError as _isLawServiceError,
+  internalError,
   type LawErrorCode,
   type LawServiceError,
   makeError,
@@ -40,6 +41,7 @@ import { logger } from '../utils/logger.js';
 import {
   EgovHttpError,
   type EgovLawDataResponse,
+  EgovNetworkError,
   getLawData,
   getLawRevisions,
   type LawListItem,
@@ -127,26 +129,51 @@ export function egovHttpErrorToLawError(err: unknown): LawServiceError {
       detail: { status: err.status, url: err.url },
     });
   }
-  // ネットワーク到達不能 (DNS 失敗・接続拒否) は SOURCE_UNAVAILABLE
-  const cause = err instanceof Error ? err.message : String(err);
-  if (
-    cause.includes('ECONNREFUSED') ||
-    cause.includes('ENOTFOUND') ||
-    cause.includes('EAI_AGAIN') ||
-    cause.includes('getaddrinfo')
-  ) {
-    return makeError('SOURCE_UNAVAILABLE', `e-Gov API に接続できません: ${cause}`, {
-      hint: 'ネットワーク接続または DNS 解決に問題がある可能性があります',
+  // e-Gov との通信と関係の無い処理中の例外は SOURCE_* にしない（SPEC-EGOV-COMMON-ERRORS-027）。
+  // EgovNetworkError（egov-client が取り直しても失敗したネットワークの例外）か、接続の失敗の code を
+  // 持つ例外だけを通信の失敗として扱う
+  const unavailable = unavailableCodeOf(err);
+  if (unavailable) {
+    const cause = err instanceof Error ? err.message : String(err);
+    return makeError(
+      'SOURCE_UNAVAILABLE',
+      `e-Gov API に接続できません: ${cause} (${unavailable})`,
+      {
+        hint: 'ネットワーク接続または DNS 解決に問題がある可能性があります',
+        retryable: true,
+        next_actions: [NEXT_ACTIONS.retryLater(), NEXT_ACTIONS.visitEgovSite()],
+        detail: { cause: unavailable },
+      }
+    );
+  }
+  if (err instanceof EgovNetworkError) {
+    return makeError('SOURCE_API_ERROR', `e-Gov API 呼び出しに失敗しました: ${err.message}`, {
       retryable: true,
-      next_actions: [NEXT_ACTIONS.retryLater(), NEXT_ACTIONS.visitEgovSite()],
-      detail: { cause },
+      next_actions: [NEXT_ACTIONS.retryLater()],
+      detail: { cause: err.message },
     });
   }
-  return makeError('SOURCE_API_ERROR', `e-Gov API 呼び出しに失敗しました: ${cause}`, {
-    retryable: true,
-    next_actions: [NEXT_ACTIONS.retryLater()],
-    detail: { cause },
-  });
+  return internalError(err);
+}
+
+/**
+ * 接続できないことを表す code（SPEC-EGOV-COMMON-ERRORS-028 の表）。
+ * 例外の `cause.code`（Node の fetch が入れる）を先に見て、無ければ例外の文に含まれる code を探す。
+ */
+const UNAVAILABLE_CODES = ['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT'];
+
+function unavailableCodeOf(err: unknown): string | null {
+  const code =
+    err instanceof EgovNetworkError
+      ? err.code
+      : ((err as { cause?: { code?: unknown } } | null)?.cause?.code as string | undefined);
+  if (typeof code === 'string' && UNAVAILABLE_CODES.includes(code)) return code;
+  const message = err instanceof Error ? err.message : String(err);
+  const inMessage = UNAVAILABLE_CODES.find((c) => message.includes(c));
+  if (inMessage) return inMessage;
+  // getaddrinfo の失敗は名前解決の失敗（v0.15.4 までも例外の文で SOURCE_UNAVAILABLE にしていた）
+  if (message.includes('getaddrinfo')) return 'ENOTFOUND';
+  return null;
 }
 
 /**
@@ -200,10 +227,13 @@ export function isError<T>(r: LawServiceResult<T>): r is LawServiceError {
  * 1. 略称辞書で law_id が直接取れる場合はそれを返す
  * 2. 取れない場合、formal で検索 API を叩く
  * 3. 完全一致を最優先、なければ先頭結果
+ *
+ * 検索が成功して 0 件なら null（呼び出し側が LAW_NOT_FOUND にする）。検索が通信の失敗で終わったら、
+ * LAW_NOT_FOUND にせず SOURCE_* の LawServiceError を返す（SPEC-EGOV-COMMON-ERRORS-029、#46）。
  */
 export async function resolveLawId(
   lawName: string
-): Promise<{ law_id: string; title: string; law_num?: string } | null> {
+): Promise<{ law_id: string; title: string; law_num?: string } | LawServiceError | null> {
   const trimmed = lawName.trim();
   if (!trimmed) return null;
 
@@ -213,21 +243,22 @@ export async function resolveLawId(
   }
 
   const searchTitle = abbr?.formal ?? trimmed;
+  let res: Awaited<ReturnType<typeof searchLaws>>;
   try {
-    const res = await searchLaws({ law_title: searchTitle, limit: 5 });
-    if (res.laws.length === 0) return null;
-    // 完全一致を優先
-    const exact = res.laws.find((l) => l.revision_info.law_title === searchTitle);
-    const top = exact ?? res.laws[0];
-    return {
-      law_id: top.law_info.law_id,
-      title: top.revision_info.law_title,
-      law_num: top.law_info.law_num,
-    };
+    res = await searchLaws({ law_title: searchTitle, limit: 5 });
   } catch (err) {
     logger.warn('law-service', `resolveLawId failed: ${(err as Error).message}`);
-    return null;
+    return egovHttpErrorToLawError(err);
   }
+  if (res.laws.length === 0) return null;
+  // 完全一致を優先
+  const exact = res.laws.find((l) => l.revision_info.law_title === searchTitle);
+  const top = exact ?? res.laws[0];
+  return {
+    law_id: top.law_info.law_id,
+    title: top.revision_info.law_title,
+    law_num: top.law_info.law_num,
+  };
 }
 
 /**
@@ -331,6 +362,10 @@ export async function getLawArticle(opts: {
   if (scopeError) return scopeError;
 
   const resolved = await resolveLawId(opts.law_name);
+
+  // 法令名の検索が通信の失敗で終わったときは SOURCE_*（SPEC-EGOV-COMMON-ERRORS-029）
+
+  if (_isLawServiceError(resolved)) return resolved;
   if (!resolved) {
     return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
       hint: '略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください',
@@ -552,6 +587,10 @@ export async function getLawToc(opts: {
   if (scopeError) return scopeError;
 
   const resolved = await resolveLawId(opts.law_name);
+
+  // 法令名の検索が通信の失敗で終わったときは SOURCE_*（SPEC-EGOV-COMMON-ERRORS-029）
+
+  if (_isLawServiceError(resolved)) return resolved;
   if (!resolved) {
     return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
       hint: '略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください',
@@ -748,6 +787,10 @@ export async function getLawRevisionsByName(opts: { law_name: string; latest?: n
   if (scopeError) return scopeError;
 
   const resolved = await resolveLawId(opts.law_name);
+
+  // 法令名の検索が通信の失敗で終わったときは SOURCE_*（SPEC-EGOV-COMMON-ERRORS-029）
+
+  if (_isLawServiceError(resolved)) return resolved;
   if (!resolved) {
     return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
       hint: '略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください',
@@ -876,6 +919,10 @@ export async function getRelatedLaws(opts: {
   if (scopeError) return scopeError;
 
   const resolved = await resolveLawId(opts.law_name);
+
+  // 法令名の検索が通信の失敗で終わったときは SOURCE_*（SPEC-EGOV-COMMON-ERRORS-029）
+
+  if (_isLawServiceError(resolved)) return resolved;
   if (!resolved) {
     return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
       hint: '略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください',
@@ -976,6 +1023,10 @@ export async function getArticleReferences(opts: {
   if (scopeError) return scopeError;
 
   const resolved = await resolveLawId(opts.law_name);
+
+  // 法令名の検索が通信の失敗で終わったときは SOURCE_*（SPEC-EGOV-COMMON-ERRORS-029）
+
+  if (_isLawServiceError(resolved)) return resolved;
   if (!resolved) {
     return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
       hint: '略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください',
@@ -1865,6 +1916,8 @@ export async function getLawRange(opts: {
 
   // 2. 法令を引く
   const resolved = await resolveLawId(opts.law_name);
+  // 法令名の検索が通信の失敗で終わったときは SOURCE_*（SPEC-EGOV-COMMON-ERRORS-029）
+  if (_isLawServiceError(resolved)) return resolved;
   if (!resolved) {
     return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${opts.law_name}`, {
       hint: '略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください',

@@ -47,6 +47,9 @@ export type LawErrorCode =
   | 'SOURCE_RATE_LIMITED'
   /** 外部リソースに接続不能（DNS 失敗・ネットワーク断） */
   | 'SOURCE_UNAVAILABLE'
+  // --- ファイル ---
+  /** save: true で取るファイルが上限（50 MB）を超えている。pdf-reader-mcp と同じ code（#49、v0.16.0） */
+  | 'FILE_TOO_LARGE'
   // --- システム ---
   /** 未知のツール */
   | 'UNKNOWN_TOOL'
@@ -81,6 +84,8 @@ export interface LawServiceError {
     status?: number;
     url?: string;
     cause?: string;
+    /** FILE_TOO_LARGE: ファイルの大きさ（Content-Length の値、または読み終えた大きさ） */
+    bytes?: number;
     /** INVALID_ARGUMENT: inputSchema 違反の一覧 (path は `limit` / `filters.domain` のようなドット区切り) */
     issues?: Array<{ path: string; message: string }>;
   };
@@ -110,6 +115,20 @@ export function makeError(
   if (options.retryable !== undefined) err.retryable = options.retryable;
   if (options.detail) err.detail = options.detail;
   return err;
+}
+
+/**
+ * 想定外の例外（e-Gov との通信と関係の無い処理中の例外）を INTERNAL_ERROR にする（SPEC-EGOV-COMMON-ERRORS-007）。
+ * tools/call の受け口（server.ts）と、e-Gov の失敗を code にする関数（law-service.ts）が同じ形で返す。
+ */
+export function internalError(error: unknown): LawServiceError {
+  const cause = error instanceof Error ? error.message : String(error);
+  return makeError('INTERNAL_ERROR', `内部エラーが発生しました: ${cause}`, {
+    hint: 'バグの可能性があります。再現手順を添えて GitHub issue でご報告ください',
+    retryable: true,
+    next_actions: [NEXT_ACTIONS.retryLater()],
+    detail: { cause },
+  });
 }
 
 /** オブジェクトが LawServiceError かどうかの type guard */

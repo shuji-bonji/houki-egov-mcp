@@ -169,6 +169,55 @@ export class EgovHttpError extends Error {
 /**
  * /laws を叩く（法令一覧・検索）
  */
+/**
+ * HTTP の応答を受け取る前に、e-Gov への要求がネットワークの段階で失敗した（取り直しても失敗した）ことを表す。
+ *
+ * Node の `fetch` は接続できないとき `TypeError: fetch failed` を投げ、`ENOTFOUND` のような code は
+ * `cause.code` にしか入らない（#69）。`code` に `cause.code`（無ければ undefined）を、`message` に元の例外の文を持つ。
+ * 呼び出し側はこの型で「e-Gov との通信の失敗」と、それ以外の処理中の例外を見分ける（SPEC-EGOV-COMMON-ERRORS-027）。
+ */
+export class EgovNetworkError extends Error {
+  constructor(
+    public readonly url: string,
+    message: string,
+    /** 元の例外の `cause.code`（`ENOTFOUND` など）。無ければ undefined */
+    public readonly code: string | undefined,
+    options?: { cause?: unknown }
+  ) {
+    super(message, options);
+    this.name = 'EgovNetworkError';
+  }
+}
+
+/**
+ * 応答のファイルが上限を超えていることを表す（SPEC-EGOV-COMMON-ERRORS-030）。
+ * Content-Length で分かったときは本文を読まずに投げる。
+ */
+export class EgovFileTooLargeError extends Error {
+  constructor(
+    public readonly url: string,
+    public readonly bytes: number,
+    public readonly maxBytes: number
+  ) {
+    super(`file too large: ${bytes} bytes (max ${maxBytes})`);
+    this.name = 'EgovFileTooLargeError';
+  }
+}
+
+/** 例外の `cause.code`（Node の fetch が接続の失敗で入れる文字列）を取り出す */
+function causeCodeOf(err: unknown): string | undefined {
+  const cause = (err as { cause?: unknown } | null)?.cause;
+  const code = (cause as { code?: unknown } | null | undefined)?.code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+/** 取り直しても失敗したネットワークの例外を EgovNetworkError にする */
+function toNetworkError(url: string, err: unknown): EgovNetworkError {
+  if (err instanceof EgovNetworkError) return err;
+  const message = err instanceof Error ? err.message : String(err);
+  return new EgovNetworkError(url, message, causeCodeOf(err), { cause: err });
+}
+
 export async function searchLaws(params: SearchLawsParams): Promise<EgovLawSearchResponse> {
   const url = new URL(EGOV_API.laws);
   for (const [k, v] of Object.entries(params)) {
@@ -202,12 +251,22 @@ export async function getLawRevisions(lawId: string): Promise<EgovLawRevisionsRe
 /**
  * /attachment/{law_revision_id}?src= を叩く（添付ファイル 1 件。src 省略で zip）
  */
+/** バイナリの取得の任意の指定 */
+export interface BinaryFetchOptions {
+  /**
+   * 上限（バイト）。応答の Content-Length がこれを超えていれば、本文を読まずに EgovFileTooLargeError を投げる。
+   * Content-Length が無いか上限以下なら本文を読む（読み終えた大きさの確認は呼び出し側）
+   */
+  maxBytes?: number;
+}
+
 export async function getAttachment(
   lawRevisionId: string,
-  src?: string
+  src?: string,
+  options: BinaryFetchOptions = {}
 ): Promise<EgovBinaryResponse> {
   const url = EGOV_API.attachment(lawRevisionId, src);
-  return limit(() => fetchBinaryWithRetry(url));
+  return limit(() => fetchBinaryWithRetry(url, options));
 }
 
 /**
@@ -216,10 +275,11 @@ export async function getAttachment(
 export async function getLawFile(
   fileType: string,
   lawIdOrRevisionId: string,
-  asof?: string
+  asof?: string,
+  options: BinaryFetchOptions = {}
 ): Promise<EgovBinaryResponse> {
   const url = EGOV_API.lawFile(fileType, lawIdOrRevisionId, asof);
-  return limit(() => fetchBinaryWithRetry(url));
+  return limit(() => fetchBinaryWithRetry(url, options));
 }
 
 /**
@@ -228,7 +288,11 @@ export async function getLawFile(
  * e-Gov は「添付ファイルが無い」を 400 または 404 の JSON（code 404003）で返すので、
  * 4xx の本文は EgovHttpError.body に残し、呼び出し側が code を読めるようにする。
  */
-async function fetchBinaryWithRetry(url: string, attempt = 0): Promise<EgovBinaryResponse> {
+async function fetchBinaryWithRetry(
+  url: string,
+  options: BinaryFetchOptions,
+  attempt = 0
+): Promise<EgovBinaryResponse> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), HTTP_CONFIG.timeout);
   try {
@@ -238,6 +302,16 @@ async function fetchBinaryWithRetry(url: string, attempt = 0): Promise<EgovBinar
     });
 
     if (res.ok) {
+      const declared = Number.parseInt(res.headers.get('content-length') ?? '', 10);
+      if (
+        options.maxBytes !== undefined &&
+        Number.isFinite(declared) &&
+        declared > options.maxBytes
+      ) {
+        // 本文は読まない（SPEC-EGOV-GET-ATTACHMENT-027・SPEC-EGOV-GET-LAW-FILE-021）
+        await res.body?.cancel().catch(() => undefined);
+        throw new EgovFileTooLargeError(url, declared, options.maxBytes);
+      }
       const bytes = new Uint8Array(await res.arrayBuffer());
       return {
         url,
@@ -252,7 +326,7 @@ async function fetchBinaryWithRetry(url: string, attempt = 0): Promise<EgovBinar
       const delay = 500 * 2 ** attempt;
       logger.warn('egov-client', `${res.status} ${url} — retry in ${delay}ms`);
       await sleep(delay);
-      return fetchBinaryWithRetry(url, attempt + 1);
+      return fetchBinaryWithRetry(url, options, attempt + 1);
     }
 
     let body: string | undefined;
@@ -263,7 +337,7 @@ async function fetchBinaryWithRetry(url: string, attempt = 0): Promise<EgovBinar
     }
     throw new EgovHttpError(res.status, url, `e-Gov API returned ${res.status}`, body);
   } catch (err) {
-    if (err instanceof EgovHttpError) throw err;
+    if (err instanceof EgovHttpError || err instanceof EgovFileTooLargeError) throw err;
     if (err instanceof Error && err.name === 'AbortError') {
       throw new EgovHttpError(0, url, `e-Gov API request timeout: ${url}`);
     }
@@ -271,9 +345,9 @@ async function fetchBinaryWithRetry(url: string, attempt = 0): Promise<EgovBinar
       const delay = 500 * 2 ** attempt;
       logger.warn('egov-client', `network error: ${(err as Error).message} — retry in ${delay}ms`);
       await sleep(delay);
-      return fetchBinaryWithRetry(url, attempt + 1);
+      return fetchBinaryWithRetry(url, options, attempt + 1);
     }
-    throw err;
+    throw toNetworkError(url, err);
   } finally {
     clearTimeout(timeoutId);
   }
@@ -334,7 +408,7 @@ async function fetchJsonWithRetry<T>(url: string, attempt = 0): Promise<T> {
       await sleep(delay);
       return fetchJsonWithRetry<T>(url, attempt + 1);
     }
-    throw err;
+    throw toNetworkError(url, err);
   } finally {
     clearTimeout(timeoutId);
   }

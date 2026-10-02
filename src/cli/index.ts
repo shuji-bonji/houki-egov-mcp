@@ -32,7 +32,7 @@ import {
   downloadIncrementalZip,
 } from '../services/bulk/zip-fetcher.js';
 import { openZipFile } from '../services/bulk/zip-reader.js';
-import { summarizeFreshness } from '../services/freshness.js';
+import { SyncDateError, summarizeFreshness } from '../services/freshness.js';
 
 /** CLI ハンドラの戻り値 */
 export interface CliResult {
@@ -329,11 +329,21 @@ async function runStatus(): Promise<CliResult> {
     const lawsCount = (db.prepare('SELECT count(*) as c FROM laws').get() as { c: number }).c;
     const articlesCount = (db.prepare('SELECT count(*) as c FROM articles').get() as { c: number })
       .c;
-    const fresh = summarizeFreshness(db);
-
     // 区切りは環境の言語設定によらず `,`（#74）
     console.log(`  laws:     ${lawsCount.toLocaleString('en-US')}`);
     console.log(`  articles: ${articlesCount.toLocaleString('en-US')}`);
+
+    let fresh: ReturnType<typeof summarizeFreshness>;
+    try {
+      fresh = summarizeFreshness(db);
+    } catch (err) {
+      // 同期の記録の日付を解釈できないときは例外のまま終わらない（SPEC-EGOV-CLI-STATUS-009）
+      if (!(err instanceof SyncDateError)) throw err;
+      console.error(
+        `[ERROR] 同期の記録を読めません: ${err.value}（houki-egov-mcp --bulk-download-everything で作り直してください）`
+      );
+      return { exitCode: 1, command: 'status' };
+    }
     if (!fresh) {
       console.log(`  sync:     (まだ bulk DL されていません — --bulk-download-everything を実行)`);
     } else {
