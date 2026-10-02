@@ -3,7 +3,7 @@
 - 対象: `specs/current/common_errors/spec.md`（SPEC-EGOV-COMMON-ERRORS-022）、`specs/current/get_law_range/spec.md`（SPEC-EGOV-GET-LAW-RANGE-023）、`specs/current/get_toc/spec.md` と `specs/current/search_fulltext/spec.md`（「未決」の各 1 行）
 - 実装の変更: 要（テストを 1 件足すだけ。実装は `feat/20261001-0.16.0` に入っている。下の「実装の変更」）
 - 承認日: 2026-10-01（PR #89）
-- 状態: 提案中
+- 状態: 取り込み済み（v0.16.0）
 - 起こした日: 2026-10-02（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: なし（差分 `20261001-t1-argument-guards`、PR #84 の書き残し）

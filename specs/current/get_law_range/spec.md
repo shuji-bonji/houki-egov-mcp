@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`（`get_law_range`）、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-tree.ts`、`src/formatters/markdown.ts`、`src/utils/article-num.ts`、`src/constants.ts`、`src/services/law-service.range.test.ts`、`src/services/law-tree.test.ts`、`src/utils/article-num.test.ts`
 - 関連する Issue: houki-egov-mcp #22（章・節単位の分割取得）
 
@@ -26,10 +26,10 @@
 | `subsection`   | 任意 | 款の番号                                                                                                     |
 | `division`     | 任意 | 目の番号                                                                                                     |
 | `path`         | 任意 | 範囲のパス。`get_toc` の `toc[].path` をそのまま渡せる。例: `"Part3/Chapter2"`                               |
-| `suppl_index`  | 任意 | 附則の番号（1 始まり）。`get_toc` の `suppl_provisions[].index` と同じ                                       |
+| `suppl_index`  | 任意 | 附則の番号。1 以上の整数（SPEC-EGOV-GET-LAW-RANGE-030）。`get_toc` の `suppl_provisions[].index` と同じ |
 | `from_article` | 任意 | 範囲の中のこの条から返す。前の応答の `next_from_article` を渡す。例: `"561"`、`"548の4"`、`"第五百六十一条"` |
 | `max_chars`    | 任意 | 返す条本文の文字数の上限。既定 30,000、2,000〜120,000                                                        |
-| `at`           | 任意 | 時点指定（`YYYY-MM-DD`）                                                                                     |
+| `at`           | 任意 | 時点指定（`YYYY-MM-DD`。SPEC-EGOV-GET-LAW-RANGE-031） |
 
 ## 処理の流れ
 
@@ -228,9 +228,9 @@ flowchart TD
 
 ### SPEC-EGOV-GET-LAW-RANGE-023 範囲外の `max_chars` は tools/call で INVALID_ARGUMENT にする
 
-tools/call（`get_law_range`）で、`max_chars` に 2,000 未満または 120,000 を超える値を渡すと、inputSchema の検査でエラー `INVALID_ARGUMENT` を返す。`detail.issues[0].path` は `max_chars`。
+tools/call（`get_law_range`）で、`max_chars` に 2,000 未満または 120,000 を超える値を渡すと、inputSchema の検査でエラー `INVALID_ARGUMENT` を返す。`detail.issues[0].path` は `max_chars`。`detail.issues[0].message` は SPEC-EGOV-COMMON-ERRORS-022 の表の `minimum` / `maximum` の行の文で、検査の部品が作る英文（`must be >= 2000` など）は返さない。
 
-例: `max_chars: 1999` では `code: "INVALID_ARGUMENT"`、`detail.issues` は `[{ path: "max_chars", message: "must be >= 2000" }]`。`max_chars: 120001` では `detail.issues` は `[{ path: "max_chars", message: "must be <= 120000" }]`。
+例: `max_chars: 1999` では `code: "INVALID_ARGUMENT"`、`detail.issues` は `[{ path: "max_chars", message: "2000 以上で指定してください" }]`。`max_chars: 120001` では `detail.issues` は `[{ path: "max_chars", message: "120000 以下で指定してください" }]`。
 
 ### SPEC-EGOV-GET-LAW-RANGE-024 款・目（`subsection` / `division`）で範囲を指す
 
@@ -276,6 +276,36 @@ tools/call（`get_law_range`）で、`max_chars` に 2,000 未満または 120,0
 SPEC-EGOV-GET-LAW-RANGE-004 で指定が 6 か所以上の範囲に当たるとき、`hint` には当たった範囲のパスを全部書くが、`next_actions` には法令の中での出現順で先頭の 5 件だけを入れる。`error` の件数は当たった全部の数。
 
 例: 第1編〜第6編のどれにも第一章がある法令で `chapter: 1` だけを渡すと、`code: "INVALID_ARGUMENT"`、`error` は `指定された範囲が 6 か所あります。上位の階層も指定してください`、`hint` に `Part1/Chapter1` から `Part6/Chapter1` までの 6 件を含み、`next_actions` は 5 件で `example.path` は `["Part1/Chapter1", "Part2/Chapter1", "Part3/Chapter1", "Part4/Chapter1", "Part5/Chapter1"]`（`Part6/Chapter1` は入らない）。
+
+### SPEC-EGOV-GET-LAW-RANGE-029 law_name が空文字・空白だけのときは略称辞書と e-Gov に問い合わせずに `INVALID_ARGUMENT` を返す
+
+空文字は inputSchema の `minLength: 1` の検査（SPEC-EGOV-COMMON-ERRORS-025）で止まり、`INVALID_ARGUMENT`（`tool: "get_law_range"`、`detail.issues: [{ path: "law_name", message: "空文字は指定できません" }]`）を返す。空白（半角スペース・全角スペース・タブ・改行）だけのときは、ツールの処理が略称辞書と e-Gov に問い合わせる前に、SPEC-EGOV-COMMON-ERRORS-026 の形の `INVALID_ARGUMENT`（`tool: "get_law_range"`、`error: "law_name が空です"`、`detail.issues: [{ path: "law_name", message: "空白だけは指定できません" }]`、`hint` に法令名か略称を渡すよう書く）を返す。
+
+例: `law_name: ""` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].message: "空文字は指定できません"`。`law_name: "　"`（全角スペース）と `law_name: " \n"` は `code: "INVALID_ARGUMENT"`・`error: "law_name が空です"`。どれも略称辞書と e-Gov への問い合わせは 0 回。
+
+### SPEC-EGOV-GET-LAW-RANGE-030 `suppl_index` は 1 以上の整数で、0・負の数・小数は `INVALID_ARGUMENT` にして法令を取らない
+
+tools/list の inputSchema の `suppl_index` は `type: "integer"`、`minimum: 1` を持つ（SPEC-EGOV-COMMON-ERRORS-023）。0・負の数・小数・数値でない値を渡すと、inputSchema の検査で `INVALID_ARGUMENT`（`tool: "get_law_range"`、`detail.issues[0].path: "suppl_index"`）を返し、e-Gov に問い合わせない。`RANGE_NOT_FOUND` は、法令を取った後でその番号の附則が無いときだけになる（SPEC-EGOV-GET-LAW-RANGE-005）。
+
+例: `law_name: "民法", suppl_index: 0` は `code: "INVALID_ARGUMENT"`、`detail.issues` は `[{ path: "suppl_index", message: "1 以上で指定してください" }]` で、e-Gov への問い合わせは 0 回。`suppl_index: 1.5` は `整数で指定してください`。`suppl_index: 1` は SPEC-EGOV-GET-LAW-RANGE-012 のとおり。
+
+### SPEC-EGOV-GET-LAW-RANGE-031 `at` は `YYYY-MM-DD` の形だけを受け付け、形に合わない値と暦に無い日付は `INVALID_ARGUMENT`
+
+`at` は SPEC-EGOV-COMMON-ERRORS-024 に従う。tools/list の inputSchema の `at` は `pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"` を持ち、形に合わない値は inputSchema の検査で `INVALID_ARGUMENT`（`tool: "get_law_range"`、`detail.issues: [{ path: "at", message: "YYYY-MM-DD の形で指定してください" }]`）になる。形は合うが暦に無い日付は、ツールの処理が e-Gov に問い合わせる前に `INVALID_ARGUMENT`（`detail.issues: [{ path: "at", message: "暦に無い日付です" }]`）を返す。
+
+例: `law_name: "民法", path: "Part3/Chapter2", at: "2024/04/01"` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].path: "at"` で、e-Gov への問い合わせは 0 回。`at: "20240401"`・`at: "2024-4-1"` も同じ。`at: "2026-02-30"` は `detail.issues[0].message: "暦に無い日付です"` で、e-Gov への問い合わせは 0 回。`at: "2024-04-01"` は SPEC-EGOV-GET-LAW-RANGE-027 のとおり。
+
+### SPEC-EGOV-GET-LAW-RANGE-032 法令名の検索が通信の失敗で終わったときは `LAW_NOT_FOUND` ではなく `SOURCE_*` を返す
+
+`law_name` が略称辞書に law_id 付きで無く、e-Gov の法令名検索で law_id を決めるとき、その検索が通信の失敗（接続できない・時間切れ・5xx・429・429 以外の 4xx）で終わったときは、SPEC-EGOV-COMMON-ERRORS-027 の表の code（`SOURCE_UNAVAILABLE` / `SOURCE_TIMEOUT` / `SOURCE_API_ERROR` / `SOURCE_RATE_LIMITED`）を、表の `retryable` と `detail` 付きで返す（SPEC-EGOV-COMMON-ERRORS-029）。`LAW_NOT_FOUND`（SPEC-EGOV-GET-LAW-RANGE-017）は、検索が成功して 0 件だったときだけ返す。`SOURCE_*` のときの `next_actions` に `resolve_abbreviation` / `search_law` は入れない。
+
+例: 法令名の検索が 503 を返す状態で `{ law_name: "架空の法律", chapter: "1" }` を渡すと、`code: "SOURCE_API_ERROR"`、`retryable: true`、`detail.status: 503`（v0.15.4 では `LAW_NOT_FOUND` だった）。検索が時間切れなら `SOURCE_TIMEOUT`、接続できなければ `SOURCE_UNAVAILABLE`（`detail.cause: "ENOTFOUND"` など）、400 なら `SOURCE_API_ERROR`・`retryable: false`。検索が 0 件で成功したときは `LAW_NOT_FOUND` のまま。
+
+### SPEC-EGOV-GET-LAW-RANGE-033 `law_name` の全角英数字・ダッシュ類・全角空白は半角に揃えてから略称辞書と照合する
+
+`law_name` を略称辞書で引くときは、houki-abbreviations の `resolveAbbreviation(name, { normalize: true })` の規則（全角英数字を半角に、ダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` を `-` に、全角チルダを `~` に、全角空白を半角空白にし、前後の空白を除く。大文字と小文字は区別する）で揃えてから照合する。管轄の判定（`OUT_OF_SCOPE`）も同じ規則で引く。辞書に無いときに e-Gov の法令名検索へ渡す値は、前後の空白を除いた渡した値のままで、揃えない。
+
+例: `{ law_name: "ＰＬ法", suppl_index: 1 }` は `製造物責任法の附則 1 を返す（辞書に当たって law_id が決まる。無い附則の番号なら `RANGE_NOT_FOUND` で、`LAW_NOT_FOUND` ではない）`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
 
 ## できないこと
 

@@ -3,7 +3,7 @@
 - 対象: `specs/current/common_errors/spec.md` と、tools/call で呼べる 14 ツールすべての `specs/current/<tool>/spec.md`
 - 実装の変更: 要
 - 承認日: 2026-10-01（PR #84）
-- 状態: 提案中
+- 状態: 取り込み済み（v0.16.0）
 - 起こした日: 2026-10-01（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #47（`at` の形）、#48（`paragraph` の 0・負・小数）、#53（必須の文字列の空文字・空白だけ）、#54（`limit` / `latest` / `depth` の上限と整数）、#57（`INVALID_ARGUMENT` の `detail` の形と返さない code）

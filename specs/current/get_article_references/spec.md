@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/reference-extractor.ts`、`src/services/law-relations.ts`、`src/services/law-service.references.test.ts`、`src/services/reference-extractor.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: houki-egov-mcp #20（施行令・施行規則の関連付けと条文内の参照抽出。v0.10.1 の条の引き継ぎを含む）
 
@@ -19,8 +19,8 @@
 | ----------- | ---- | ---------------------------------------------------------------------------- |
 | `law_name`  | 必須 | 法令名または略称。例: `"所得税法"`、`"所法"`、`"所得税法施行令"`             |
 | `article`   | 必須 | 条番号。例: `"57の2"`、`"第57条の2"`、`"第五十七条の二"`                     |
-| `paragraph` | 任意 | 項番号（1 始まり）。指定するとその項の本文だけを対象にする。省略すると条全体 |
-| `at`        | 任意 | 時点指定。`YYYY-MM-DD`（`get_law` と同じ）                                   |
+| `paragraph` | 任意 | 項番号。1 以上の整数（SPEC-EGOV-GET-ARTICLE-REFERENCES-040）。指定するとその項の本文だけを対象にする。省略すると条全体 |
+| `at`        | 任意 | 時点指定。`YYYY-MM-DD`（SPEC-EGOV-GET-ARTICLE-REFERENCES-041。`get_law` と同じ） |
 
 ## 処理の流れ
 
@@ -327,6 +327,36 @@ SPEC-EGOV-GET-ARTICLE-REFERENCES-012 の `target_law.url` は、委任先の法�
 
 例: `law_name: "所得税法施行令"`、`article: "1"` で本文が「財務省令で定める書類とする。」のとき、`delegations` は `財務省令で定める`（`target_law` は所得税法施行規則 `340M50000040011`）の 1 件、`next_actions` は `[{ action: "search_fulltext", example: { keyword: "所得税法施行規則 令第一条" }, … }]`。
 
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-039 law_name・article が空文字・空白だけのときは e-Gov に問い合わせずに `INVALID_ARGUMENT` を返す
+
+`law_name` と `article` は必須の文字列で、空文字は inputSchema の `minLength: 1` の検査（SPEC-EGOV-COMMON-ERRORS-025）で止まり、`INVALID_ARGUMENT`（`tool: "get_article_references"`、`detail.issues[0].path` はその引数名、`message: "空文字は指定できません"`）を返す。空白（半角スペース・全角スペース・タブ・改行）だけのときは、ツールの処理が略称辞書と e-Gov に問い合わせる前に、SPEC-EGOV-COMMON-ERRORS-026 の形の `INVALID_ARGUMENT`（`error: "<引数名> が空です"`、`detail.issues: [{ path: "<引数名>", message: "空白だけは指定できません" }]`）を返す。空白だけの `article` は `INVALID_ARTICLE_NUM` ではない。
+
+例: `law_name: "", article: "57の2"` は `detail.issues` が `[{ path: "law_name", message: "空文字は指定できません" }]`。`law_name: "所得税法", article: ""` は `[{ path: "article", message: "空文字は指定できません" }]`。`law_name: "所得税法", article: "  "` は `error: "article が空です"`。どれも `code: "INVALID_ARGUMENT"` で、e-Gov への問い合わせは 0 回。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-040 `paragraph` は 1 以上の整数で、0・負の数・小数は `INVALID_ARGUMENT` にして法令を取らない
+
+tools/list の inputSchema の `paragraph` は `type: "integer"`、`minimum: 1` を持つ（SPEC-EGOV-COMMON-ERRORS-023）。0・負の数・小数・数値でない値を渡すと、inputSchema の検査で `INVALID_ARGUMENT`（`tool: "get_article_references"`、`detail.issues[0].path: "paragraph"`）を返し、e-Gov に問い合わせない。`ARTICLE_NOT_FOUND` は、法令を取った後で求めた項が無いときだけになる。
+
+例: `law_name: "所得税法", article: "57の2", paragraph: 0` は `code: "INVALID_ARGUMENT"`、`detail.issues` は `[{ path: "paragraph", message: "1 以上で指定してください" }]` で、e-Gov への問い合わせは 0 回（v0.15.4 では法令を取ってから `ARTICLE_NOT_FOUND`）。`paragraph: 1.5` は `整数で指定してください`。`paragraph: 1` は SPEC-EGOV-GET-ARTICLE-REFERENCES-014 のとおり。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-041 `at` は `YYYY-MM-DD` の形だけを受け付け、形に合わない値と暦に無い日付は `INVALID_ARGUMENT`
+
+`at` は SPEC-EGOV-COMMON-ERRORS-024 に従う。tools/list の inputSchema の `at` は `pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"` を持ち、形に合わない値は inputSchema の検査で `INVALID_ARGUMENT`（`tool: "get_article_references"`、`detail.issues: [{ path: "at", message: "YYYY-MM-DD の形で指定してください" }]`）になる。形は合うが暦に無い日付は、ツールの処理が e-Gov に問い合わせる前に `INVALID_ARGUMENT`（`detail.issues: [{ path: "at", message: "暦に無い日付です" }]`）を返す。
+
+例: `law_name: "所得税法", article: "57の2", at: "2024/04/01"` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].path: "at"` で、e-Gov への問い合わせは 0 回。`at: "20240401"`・`at: "2024-4-1"` も同じ。`at: "2026-02-30"` は `detail.issues[0].message: "暦に無い日付です"` で、e-Gov への問い合わせは 0 回。`at: "2024-04-01"` は SPEC-EGOV-GET-ARTICLE-REFERENCES-034 のとおり。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-042 法令名の検索が通信の失敗で終わったときは `LAW_NOT_FOUND` ではなく `SOURCE_*` を返す
+
+`law_name` が略称辞書に law_id 付きで無く、e-Gov の法令名検索で law_id を決めるとき、その検索が通信の失敗（接続できない・時間切れ・5xx・429・429 以外の 4xx）で終わったときは、SPEC-EGOV-COMMON-ERRORS-027 の表の code（`SOURCE_UNAVAILABLE` / `SOURCE_TIMEOUT` / `SOURCE_API_ERROR` / `SOURCE_RATE_LIMITED`）を、表の `retryable` と `detail` 付きで返す（SPEC-EGOV-COMMON-ERRORS-029）。`LAW_NOT_FOUND`（SPEC-EGOV-GET-ARTICLE-REFERENCES-023）は、検索が成功して 0 件だったときだけ返す。`SOURCE_*` のときの `next_actions` に `resolve_abbreviation` / `search_law` は入れない。
+
+例: 法令名の検索が 503 を返す状態で `{ law_name: "架空の法律", article: "1" }` を渡すと、`code: "SOURCE_API_ERROR"`、`retryable: true`、`detail.status: 503`（v0.15.4 では `LAW_NOT_FOUND` だった）。検索が時間切れなら `SOURCE_TIMEOUT`、接続できなければ `SOURCE_UNAVAILABLE`（`detail.cause: "ENOTFOUND"` など）、400 なら `SOURCE_API_ERROR`・`retryable: false`。検索が 0 件で成功したときは `LAW_NOT_FOUND` のまま。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-043 `law_name` の全角英数字・ダッシュ類・全角空白は半角に揃えてから略称辞書と照合する
+
+`law_name` を略称辞書で引くときは、houki-abbreviations の `resolveAbbreviation(name, { normalize: true })` の規則（全角英数字を半角に、ダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` を `-` に、全角チルダを `~` に、全角空白を半角空白にし、前後の空白を除く。大文字と小文字は区別する）で揃えてから照合する。管轄の判定（`OUT_OF_SCOPE`）も同じ規則で引く。辞書に無いときに e-Gov の法令名検索へ渡す値は、前後の空白を除いた渡した値のままで、揃えない。
+
+例: `{ law_name: "ＰＬ法", article: "3" }` は `製造物責任法第 3 条の参照を返す`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
+
 ## できないこと
 
 - 「前項」「同法」「同条」「次条」などが指す条・法令を特定すること（`relative` で `resolved: false` のまま返す）
@@ -352,8 +382,6 @@ SPEC-EGOV-GET-ARTICLE-REFERENCES-012 の `target_law.url` は、委任先の法�
 8. **`next_actions` の重複を除くこと。** → SPEC-EGOV-GET-ARTICLE-REFERENCES-032
 9. **複数の項にまたがる同じ委任の文言。** → SPEC-EGOV-GET-ARTICLE-REFERENCES-033
 10. **応答のフィールドのうちテストで確かめていないもの。** → SPEC-EGOV-GET-ARTICLE-REFERENCES-034・SPEC-EGOV-GET-ARTICLE-REFERENCES-035・SPEC-EGOV-GET-ARTICLE-REFERENCES-036・SPEC-EGOV-GET-ARTICLE-REFERENCES-037・SPEC-EGOV-GET-ARTICLE-REFERENCES-038（一部は約束にしていない。差分 `20260928-untested-behaviors` の proposal.md を参照）
-11. **`at` の形を確かめない。** → houki-egov-mcp #47
-12. **法令名の解決で e-Gov の検索に失敗すると `LAW_NOT_FOUND` になる。** → houki-egov-mcp #46
 13. **法令名が完全一致しないとき、部分一致の先頭の法令を採る。** → houki-egov-mcp #45
 14. **「附則第三条」が本則の条への internal になる。** → houki-egov-mcp #51
 15. **施行規則の本文の「令第N条」「規則第N条」を解決しない。** → houki-egov-mcp #63

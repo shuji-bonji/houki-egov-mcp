@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/errors.ts`、`src/tools/handlers.test.ts`、`src/server.test.ts`（辞書は `@shuji-bonji/houki-abbreviations` 0.x）
 - 関連する Issue: なし
 
@@ -17,7 +17,7 @@
 
 | 引数   | 必須 | 内容                                             |
 | ------ | ---- | ------------------------------------------------ |
-| `abbr` | 必須 | 略称。例: `"消法"`、`"所法"`、`"労基法"`、`"民"` |
+| `abbr` | 必須 | 略称。例: `"消法"`、`"所法"`、`"労基法"`、`"民"`。全角英数字・ダッシュ類・全角空白は半角に揃えて照合する（011） |
 
 ## 処理の流れ
 
@@ -25,8 +25,12 @@
 
 ```mermaid
 flowchart TD
-  A["呼び出し（abbr）"] --> B{"abbr が略称辞書にあるか"}
+  A["呼び出し（abbr）"] --> N["全角英数字・ダッシュ類・全角空白を揃える（011）"]
+  N --> B{"abbr が略称辞書にあるか"}
   B -- ある --> C["abbr と resolved（辞書のエントリ）を返す（001・002）"]
+  C --> S{"source_mcp_hint が houki-egov か"}
+  S -- はい --> S1["in_scope: true を付ける（012）"]
+  S -- いいえ --> S2["in_scope: false と、管轄先を書いた hint を付ける（013）"]
   B -- 無い --> D["resolved: null と note を返す（003）"]
   D --> E["next_actions で search_law を案内する（004）"]
 ```
@@ -87,6 +91,32 @@ SPEC-EGOV-RESOLVE-ABBREVIATION-003 の応答には `next_actions` を付け、�
 
 例: `abbr: "消法"` の `resolved` は、`resolveAbbreviation("消法")` の戻り値と同じ内容（深く比べて等しい）。辞書 0.4.1 では `abbr: "消法"`・`formal: "消費税法"`・`law_id: "363AC0000000108"`・`law_num: "昭和六十三年法律第百八号"`・`law_type: "Act"`・`domain: "tax"`・`category: "law"`・`source_mcp_hint: "houki-egov"`・`aliases`（先頭は `消費税`、`インボイス` を含む 10 件）・`note` を持つ。
 
+### SPEC-EGOV-RESOLVE-ABBREVIATION-010 abbr が空文字・空白だけのときは略称辞書を引かずに `INVALID_ARGUMENT` を返す
+
+空文字は inputSchema の `minLength: 1` の検査（SPEC-EGOV-COMMON-ERRORS-025）で止まり、`INVALID_ARGUMENT`（`tool: "resolve_abbreviation"`、`detail.issues: [{ path: "abbr", message: "空文字は指定できません" }]`）を返す。空白（半角スペース・全角スペース・タブ・改行）だけのときは、ツールの処理が略称辞書を引く前に、SPEC-EGOV-COMMON-ERRORS-026 の形の `INVALID_ARGUMENT`（`tool: "resolve_abbreviation"`、`error: "abbr が空です"`、`detail.issues: [{ path: "abbr", message: "空白だけは指定できません" }]`、`hint` に略称・正式名称・別名を渡すよう書く）を返す。
+
+例: `abbr: ""` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].message: "空文字は指定できません"`。`abbr: "　"`（全角スペース）と `abbr: " \n"` は `code: "INVALID_ARGUMENT"`・`error: "abbr が空です"`。どれも略称辞書は引かない。
+
+v0.15.4 では `abbr: ""` に `resolved: null` と `example: { keyword: "" }` の `search_law` の案内（SPEC-EGOV-RESOLVE-ABBREVIATION-003・004 の形）を返していたが、空の `abbr` は辞書に無い略称ではなく引数の誤りなので、003・004 の対象から外れる。
+
+### SPEC-EGOV-RESOLVE-ABBREVIATION-011 `abbr` の全角英数字・ダッシュ類・全角空白は半角に揃えてから辞書と照合する
+
+`abbr` は、houki-abbreviations の `resolveAbbreviation(name, { normalize: true })` の規則（全角英数字を半角に、ダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` を `-` に、全角チルダを `~` に、全角空白を半角空白にし、前後の空白を除く。大文字と小文字は区別する）で揃えてから、略称・正式名称・別名と照合する。応答の `abbr` は渡した値のまま（SPEC-EGOV-RESOLVE-ABBREVIATION-008）。
+
+例: `abbr: "ＰＬ法"` は `resolved.formal: "製造物責任法"` で、応答の `abbr` は `"ＰＬ法"`（v0.15.4 では `resolved: null` だった）。`abbr: "pl法"` は大文字小文字が違うので `resolved: null` のまま。`abbr: "消　法"`（内側が全角空白）は `消 法` として引くので `resolved: null`。
+
+### SPEC-EGOV-RESOLVE-ABBREVIATION-012 houki-egov の管轄のエントリには `in_scope: true` を付ける
+
+解決したエントリの `source_mcp_hint` が `houki-egov` のとき、応答に `in_scope: true` を付ける。`hint` は付けない。
+
+例: `abbr: "消法"` の応答は `resolved.source_mcp_hint: "houki-egov"`、`in_scope: true` で、`hint` は無い。
+
+### SPEC-EGOV-RESOLVE-ABBREVIATION-013 管轄外のエントリには `in_scope: false` と管轄先を書いた `hint` を付ける
+
+解決したエントリの `source_mcp_hint` が `houki-egov` でないとき（通達など）は、`resolved` にエントリを入れたうえで `in_scope: false` を付け、`hint` を `このエントリは <source_mcp_hint> の管轄です。<source_mcp_hint>-mcp で取得してください。` にする。エラー（`OUT_OF_SCOPE`）にはしない。houki-nta-mcp の SPEC-NTA-RESOLVE-ABBREVIATION-003 と同じ形である。
+
+例: `abbr: "消基通"` の応答は `resolved.formal: "消費税法基本通達"`、`resolved.source_mcp_hint: "houki-nta"`、`in_scope: false`、`hint: "このエントリは houki-nta の管轄です。houki-nta-mcp で取得してください。"`（v0.15.4 では `in_scope` と `hint` が無かった）。
+
 ## できないこと
 
 - 略称を渡して条文を返すこと（条文は `get_law`。`get_law` も略称を受け付ける）
@@ -103,7 +133,4 @@ SPEC-EGOV-RESOLVE-ABBREVIATION-003 の応答には `next_actions` を付け、�
 
 1. **正式名称・別名からも引ける。** → SPEC-EGOV-RESOLVE-ABBREVIATION-005・SPEC-EGOV-RESOLVE-ABBREVIATION-006
 2. **前後の空白を除いて引き、応答の `abbr` は渡した値のまま返す。** → SPEC-EGOV-RESOLVE-ABBREVIATION-007・SPEC-EGOV-RESOLVE-ABBREVIATION-008
-3. **全角と半角の違いを吸収しない。** → houki-egov-mcp #52
-4. **空の `abbr` に、同じく空の `keyword` で `search_law` を案内する。** → houki-egov-mcp #53
-5. **通達の略称も `resolved` に入れて返す。** → houki-egov-mcp #52
 6. **`resolved` のそのほかのフィールド。** → SPEC-EGOV-RESOLVE-ABBREVIATION-009

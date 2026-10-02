@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: DB
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
 - 起こした元: v0.15.1 の `src/db/index.ts`、`src/db/schema.ts`、`src/config.ts`（`BULK_CONFIG`）、`src/cli/index.ts`（DB を開く箇所と `--help`）、`src/db/schema.test.ts`
 - 関連する Issue: なし
 
@@ -178,6 +178,12 @@ DB を開くと、ジャーナルの形式を WAL にする。
 1 つの接続が書き込みのトランザクションを開いたままでも、同じファイルを別の接続で開いて読める。読んだ側には、確定（COMMIT）した行だけが見え、確定する前の行は見えない。CLI が取り込んでいる間に `search_fulltext` で引けるのはこのため。
 
 例: `articles` に 2 行ある DB で、接続 A が `BEGIN IMMEDIATE` の後に `articles` へ 1 行を入れ、まだ COMMIT していない間に、接続 B で同じファイルを開いて `SELECT count(*) FROM articles` を読むと、エラーにならず 2。接続 A が COMMIT した後に接続 B で読むと 3。
+
+### SPEC-EGOV-DB-SCHEMA-024 0.16.0 はスキーマの版 2 のままで、既存の行の検索用列を入れ直さない
+
+0.16.0 で houki-abbreviations を 0.7.0 に上げ、取り込みの揃え方（`normalizeJpText`）がダッシュ類も `-` にするようになっても、スキーマの版は 2 のまま（SPEC-EGOV-DB-SCHEMA-001）で、0.15.4 以前に取り込んだ `articles.body` と `laws_fts` の行は書き換えない。版 2 の DB を 0.16.0 で開いても、中身は変わらず、取り込みもやり直さない。ダッシュ類を含む本文の揃え直しは、スキーマの版を上げる 0.19.0 の取り込みで行う（SPEC-EGOV-SEARCH-FULLTEXT-036）。
+
+例: `articles.body` に `183―2` を含む版 2 の DB を 0.16.0 で開くと、`schema_meta` の `schema_version` は `2` のままで、その行の `body` も `183―2` のまま。`--sync` でその法令が更新されたときだけ、新しい本文が `183-2` で入る。
 
 ## できないこと
 

@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: 共通
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）
 - 起こした元: v0.15.1 の `src/server.ts`、`src/errors.ts`、`src/tools/tool-args.ts`、`src/tools/handlers.ts`（ツールの登録の表）、`src/tools/definitions.ts`（tools/list の一覧）、`src/server.test.ts`、`src/errors.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: なし
 
@@ -50,10 +50,11 @@
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `error`        | 1 文のエラーの説明（人も LLM も読む）                                                                                                                                                                                          |
 | `code`         | 失敗の種類を表す文字列（下の表）                                                                                                                                                                                               |
+| `tool`         | エラーを返したツールの名前。引数の検査の `INVALID_ARGUMENT` には必ず付く（SPEC-EGOV-COMMON-ERRORS-020・026）                                                                                                                   |
 | `hint`         | 次に何を確かめるかの案内                                                                                                                                                                                                       |
 | `next_actions` | 次に呼ぶツールや取る手段の候補の配列。要素は `action`（ツール名、または `list_tools` / `retry_later` / `visit_egov_site` / `delegate_to_mcp` のような手段の名前）・`reason`（どんなときに有効か）・`example`（引数の例。任意） |
 | `retryable`    | `true` なら、時間をおいて同じ呼び出しをやり直すと結果が変わりうる                                                                                                                                                              |
-| `detail`       | 調べるための詳細。`status`（HTTP ステータス）・`url`・`cause`（元の例外の文）・`issues`（引数の検査の問題の一覧）                                                                                                              |
+| `detail`       | 調べるための詳細。`status`（HTTP ステータス）・`url`・`cause`（元の例外の文）・`issues`（引数の検査の問題の一覧。要素は `path` と `message`）                                                                                  |
 
 ### エラーの code
 
@@ -65,11 +66,12 @@
 | `INVALID_ARTICLE_NUM`                                                                | 条番号・号番号の書き方が受け付ける形でない                                                  |
 | `UNKNOWN_TOOL`                                                                       | 存在しないツール名を呼んだ（呼び出し側の誤り）                                              |
 | `OUT_OF_SCOPE`                                                                       | このサーバーの管轄でない資料を求めた（通達名など。別の MCP サーバーで取る）                 |
-| `LAW_NOT_FOUND`                                                                      | 法令が見つからない                                                                          |
+| `LAW_NOT_FOUND`                                                                      | 法令名の検索が成功して 0 件だった（法令が見つからない）。検索が通信の失敗で終わったときは `SOURCE_*` |
 | `ARTICLE_NOT_FOUND`                                                                  | 法令はあるが、求めた条・項・号が無い                                                        |
 | `RANGE_NOT_FOUND`                                                                    | 求めた編・章・節、または附則の番号が無い                                                    |
 | `ATTACHMENT_NOT_FOUND`                                                               | 求めた添付ファイルが無い                                                                    |
-| `SOURCE_API_ERROR` / `SOURCE_TIMEOUT` / `SOURCE_RATE_LIMITED` / `SOURCE_UNAVAILABLE` | e-Gov からの取得の失敗 / 時間切れ / 回数制限 / 接続できない                                 |
+| `SOURCE_API_ERROR` / `SOURCE_TIMEOUT` / `SOURCE_RATE_LIMITED` / `SOURCE_UNAVAILABLE` | e-Gov との通信が失敗した: HTTP エラー（5xx は再試行できる、429 以外の 4xx は再試行できない）/ 応答の時間切れ / 429 / 接続できない（DNS の失敗・接続拒否・接続の切断） |
+| `FILE_TOO_LARGE`                                                                     | `save: true` で取るファイルが上限（50 MB）を超えている（`get_attachment` / `get_law_file`）。pdf-reader-mcp と同じ code |
 | `INTERNAL_ERROR`                                                                     | サーバー内部の失敗（処理中の想定外の例外）                                                  |
 
 ## 処理の流れ
@@ -112,11 +114,12 @@ tools/call の `name` が 14 ツールのどれでもないときは、エラー
 
 ### SPEC-EGOV-COMMON-ERRORS-003 inputSchema に合わない引数はエラー `INVALID_ARGUMENT`
 
-引数の型が違う、必須の引数が無い、`enum` に無い値を渡した、のどれかのときは、エラー `INVALID_ARGUMENT` を返す（`isError: true`）。14 ツールすべてが、tools/list に出している inputSchema と同じものでこの検査を行う。
+引数の型が違う、必須の引数が無い、`enum` に無い値を渡した、数値が `minimum` / `maximum` の範囲の外にある、文字列が `pattern` / `minLength` に合わない、配列の件数が `minItems` / `maxItems` の範囲の外にある、のどれかのときは、エラー `INVALID_ARGUMENT` を返す（`isError: true`）。14 ツールすべてが、tools/list に出している inputSchema と同じものでこの検査を行う。
 
-- `detail.issues` に問題の一覧を入れる。要素は `path`（問題のある引数名。入れ子なら `a.b` の形。特定できなければ空文字）と `message`
+- `tool` に呼んだツールの名前を入れる（SPEC-EGOV-COMMON-ERRORS-020）
+- `detail.issues` に問題の一覧を入れる。要素は `path`（問題のある引数名。入れ子なら `citations.0.paragraph` の形）と `message`（日本語の 1 文。SPEC-EGOV-COMMON-ERRORS-022）。違反 1 件ごとに要素を分ける（021）
 
-例: `explain_law_type` に `name: 123` を渡すと、`code: "INVALID_ARGUMENT"` で、`detail.issues[0].path` は `name`。`search_law` に引数を 1 つも渡さない（必須の `keyword` が無い）とき、`keyword: "消費税", law_type: "Bogus"` を渡したとき、`get_article_references` に `law_name: "所得税法"` だけを渡した（必須の `article` が無い）ときも、`INVALID_ARGUMENT` を返す。
+例: `explain_law_type` に `name: 123` を渡すと、`code: "INVALID_ARGUMENT"`・`tool: "explain_law_type"` で、`detail.issues[0].path` は `name`。`search_law` に引数を 1 つも渡さない（必須の `keyword` が無い）とき、`keyword: "消費税", law_type: "Bogus"` を渡したとき、`keyword: "消費税", limit: 100` を渡したとき（SPEC-EGOV-SEARCH-LAW-013）、`get_article_references` に `law_name: "所得税法"` だけを渡した（必須の `article` が無い）ときも、`INVALID_ARGUMENT` を返す。
 
 ### SPEC-EGOV-COMMON-ERRORS-004 inputSchema に無い引数はエラー `INVALID_ARGUMENT` で、`path` にその引数名を入れる
 
@@ -161,27 +164,26 @@ initialize の応答の `serverInfo` は、`name` にパッケージ名（`@shuj
 
 tools/call の `arguments` を省くと、空のオブジェクト `{}` を渡したものとして inputSchema で検査する。14 ツールはどれも必須の引数を 1 つ以上持つので、どのツールでもエラー `INVALID_ARGUMENT` を返す（`isError: true`）。ツールの処理には進まない。
 
-例: `name: "search_law"` を `arguments` なしで呼ぶと、`isError: true`、`code: "INVALID_ARGUMENT"`、`hint` は `tools/list の search_law の inputSchema を確認してください (型・必須・enum・未知の引数)`。`explain_law_type`・`get_law`・`resolve_abbreviation`・`verify_citations`・`list_attachments`・`get_law_file` を `arguments` なしで呼んでも、どれも `code: "INVALID_ARGUMENT"`。`arguments: {}` を渡したときと同じ本文になる。
+例: `name: "search_law"` を `arguments` なしで呼ぶと、`isError: true`、`code: "INVALID_ARGUMENT"`、`tool: "search_law"`、`hint` は `tools/list の search_law の inputSchema を確認してください (型・必須・enum・範囲・形式・未知の引数)`、`detail.issues` は `[{ path: "keyword", message: "必須の引数です" }]`。`explain_law_type`・`get_law`・`resolve_abbreviation`・`verify_citations`・`list_attachments`・`get_law_file` を `arguments` なしで呼んでも、どれも `code: "INVALID_ARGUMENT"`。`arguments: {}` を渡したときと同じ本文になる。
 
 ### SPEC-EGOV-COMMON-ERRORS-013 inputSchema の検査で返す `INVALID_ARGUMENT` の `error` は、決まった前置きの後に問題を `<path>: <message>` の形で続ける
 
-SPEC-EGOV-COMMON-ERRORS-003・004 のエラーの `error` は、`引数が tools/list の inputSchema に合いません: ` の後に、`detail.issues` の各要素を `<path>: <message>` の形にして `; ` 区切りで続けた文字列である。`path` が空の要素は `<message>` だけを書く。
-
-`message` の文言（英語の検査の文を含む）そのものは約束にしない（言語と必須の引数の `path` は houki-egov-mcp #57 で決める）。`error` が、同じ応答の `detail.issues` から上の規則で組み立てた文字列と一致することを約束する。
+SPEC-EGOV-COMMON-ERRORS-003・004 のエラーの `error` は、`引数が tools/list の inputSchema に合いません: ` の後に、`detail.issues` の各要素を `<path>: <message>` の形にして `; ` 区切りで続けた文字列である。`path` は空にならない（SPEC-EGOV-COMMON-ERRORS-021）ので、`<message>` だけの要素は無い。`message` は SPEC-EGOV-COMMON-ERRORS-022 の文である。
 
 例:
 
-| 呼び出し                                                            | `error`                                                                                     | `detail.issues`                                                               |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `explain_law_type` に `name: 123`                                   | `引数が tools/list の inputSchema に合いません: name: must be string`                       | `[{ path: "name", message: "must be string" }]`                               |
-| `explain_law_type` に `name: "政令", typo: 1`                       | `引数が tools/list の inputSchema に合いません: typo: inputSchema に無い引数です`           | `[{ path: "typo", message: "inputSchema に無い引数です" }]`                   |
-| `search_law` に `keyword: "消費税", law_type: "Bogus"`              | `引数が tools/list の inputSchema に合いません: law_type: must be equal to one of the allowed values` | `[{ path: "law_type", message: "must be equal to one of the allowed values" }]` |
+| 呼び出し                                               | `error`                                                                                                                              | `detail.issues`                                                                                                  |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `explain_law_type` に `name: 123`                      | `引数が tools/list の inputSchema に合いません: name: 文字列で指定してください`                                                      | `[{ path: "name", message: "文字列で指定してください" }]`                                                        |
+| `explain_law_type` に `name: "政令", typo: 1`          | `引数が tools/list の inputSchema に合いません: typo: inputSchema に無い引数です`                                                    | `[{ path: "typo", message: "inputSchema に無い引数です" }]`                                                      |
+| `search_law` に `keyword: "消費税", law_type: "Bogus"` | `引数が tools/list の inputSchema に合いません: law_type: Act・CabinetOrder・ImperialOrdinance・MinisterialOrdinance・Rule のどれかで指定してください` | `[{ path: "law_type", message: "Act・CabinetOrder・ImperialOrdinance・MinisterialOrdinance・Rule のどれかで指定してください" }]` |
+| `search_law` に `keyword: 1, limit: "x"`               | `引数が tools/list の inputSchema に合いません: keyword: 文字列で指定してください; limit: 整数で指定してください`                    | `[{ path: "keyword", message: "文字列で指定してください" }, { path: "limit", message: "整数で指定してください" }]` |
 
 ### SPEC-EGOV-COMMON-ERRORS-014 inputSchema の検査で返す `INVALID_ARGUMENT` の `hint` は、呼んだツールの名前を入れた決まった文
 
-SPEC-EGOV-COMMON-ERRORS-003・004 のエラーの `hint` は `tools/list の <ツール名> の inputSchema を確認してください (型・必須・enum・未知の引数)` で、`<ツール名>` は tools/call の `name` である。
+SPEC-EGOV-COMMON-ERRORS-003・004 のエラーの `hint` は `tools/list の <ツール名> の inputSchema を確認してください (型・必須・enum・範囲・形式・未知の引数)` で、`<ツール名>` は tools/call の `name` である。
 
-例: `explain_law_type` に `name: 123` を渡すと、`hint` は `tools/list の explain_law_type の inputSchema を確認してください (型・必須・enum・未知の引数)`。`search_law` に `keyword: "消費税", law_type: "Bogus"` を渡すと、`hint` は `tools/list の search_law の inputSchema を確認してください (型・必須・enum・未知の引数)`。
+例: `explain_law_type` に `name: 123` を渡すと、`hint` は `tools/list の explain_law_type の inputSchema を確認してください (型・必須・enum・範囲・形式・未知の引数)`。`search_law` に `keyword: "消費税", limit: 0` を渡すと、`hint` は `tools/list の search_law の inputSchema を確認してください (型・必須・enum・範囲・形式・未知の引数)`。
 
 ### SPEC-EGOV-COMMON-ERRORS-015 inputSchema の検査で返す `INVALID_ARGUMENT` の `next_actions` は `list_tools` の 1 件
 
@@ -213,6 +215,169 @@ SPEC-EGOV-COMMON-ERRORS-007 のエラーの `next_actions` は、`{ action: "ret
 
 例: ツールの処理が `code: "LAW_NOT_FOUND"`・`error: "x"`・`hint: ""` のエラーを返すと、結果は `isError: true` で、本文は `{ "error": "x", "code": "LAW_NOT_FOUND" }` だけを持つ（`hint` のキーは無い）。
 
+### SPEC-EGOV-COMMON-ERRORS-020 inputSchema の検査で返す `INVALID_ARGUMENT` は `tool` に呼んだツールの名前を持つ
+
+SPEC-EGOV-COMMON-ERRORS-003・004・012 のエラーの本文は、`code` と並ぶ位置に `tool` を持ち、値は tools/call の `name` である。houki-nta-mcp の同じエラー（SPEC-NTA-COMMON-ERRORS-003）と同じ置き場で、`detail` の中ではない。
+
+例: `explain_law_type` に `name: 123` を渡すと `tool: "explain_law_type"`。`get_related_laws` に `law_name: "所得税法", mcp: "houki-egov"` を渡すと `tool: "get_related_laws"`。`verify_citations` を `arguments` なしで呼ぶと `tool: "verify_citations"`。
+
+### SPEC-EGOV-COMMON-ERRORS-021 `detail.issues` は違反 1 件ごとに要素を分け、`path` には引数名を入れる
+
+SPEC-EGOV-COMMON-ERRORS-003・004 のエラーの `detail.issues` は、違反 1 件につき 1 要素である。`path` は、その違反のあった引数の名前で、空文字にならない。
+
+- 必須の引数が無いときも、`path` はその引数の名前である（`""` ではない）。必須の引数が 2 つ無ければ、要素も 2 つ
+- inputSchema に無い引数が 2 つ以上あるときも、1 つずつ別の要素にする（`typo, foo` のようにまとめない）
+- 型の違反と inputSchema に無い引数が同時にあるときは、両方の要素を返す
+- 配列の要素の中の引数は、`citations.0.paragraph` のように、引数名・添字・フィールド名を `.` でつなぐ
+
+例: `explain_law_type` に `name: "政令", typo: 1, foo: 2` を渡すと、`detail.issues` は `[{ path: "typo", … }, { path: "foo", … }]` の 2 要素で、どちらの `message` も `inputSchema に無い引数です`。`get_article_references` に `{}` を渡すと `[{ path: "law_name", message: "必須の引数です" }, { path: "article", message: "必須の引数です" }]`。`search_law` に `keyword: "a", limit: "x", zz: 1` を渡すと `path` が `limit` と `zz` の 2 要素。`verify_citations` に `citations: [{ law_name: "民法", article: "1", paragraph: 0 }]` を渡すと `[{ path: "citations.0.paragraph", message: "1 以上で指定してください" }]`。
+
+### SPEC-EGOV-COMMON-ERRORS-022 `detail.issues[].message` は違反の種類ごとに決まった日本語の 1 文
+
+SPEC-EGOV-COMMON-ERRORS-003・004 のエラーの `message` は、次の表の文である。検査の部品が作る英文（`must be string` など）はそのまま返さない。
+
+| 違反                                     | `message`                                                                                            |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 型が `string` でない                     | `文字列で指定してください`                                                                           |
+| 型が `integer` でない（小数を含む）      | `整数で指定してください`                                                                             |
+| 型が `number` でない                     | `数値で指定してください`                                                                             |
+| 型が `number` と `string` の和（`type: ["number", "string"]` / `["string", "number"]`）で、そのどちらでもない（`null`・配列・`true` など） | `数値か文字列で指定してください`（`type` の並びによらずこの文） |
+| 型が `boolean` でない                    | `true か false で指定してください`                                                                   |
+| 型が `array` でない                      | `配列で指定してください`                                                                             |
+| 型が `object` でない                     | `オブジェクトで指定してください`                                                                     |
+| 必須の引数が無い                         | `必須の引数です`                                                                                     |
+| `enum` に無い値                          | `<値1>・<値2>・… のどれかで指定してください`（`enum` の値を `・` でつなぐ）                          |
+| `minimum` を下回る                       | `<minimum> 以上で指定してください`（例: `1 以上で指定してください`）                                 |
+| `maximum` を上回る                       | `<maximum> 以下で指定してください`（例: `50 以下で指定してください`）                                |
+| `pattern` に合わない（`at`）             | `YYYY-MM-DD の形で指定してください`                                                                  |
+| `minLength: 1` に合わない（空文字）      | `空文字は指定できません`                                                                             |
+| `minItems` を下回る                      | `<minItems> 件以上で指定してください`                                                                |
+| `maxItems` を上回る                      | `<maxItems> 件以下で指定してください`                                                                |
+| inputSchema に無い引数                   | `inputSchema に無い引数です`                                                                         |
+
+例: `get_law` に `law_name: "民法", paragraph: 1.5` を渡すと `message` は `整数で指定してください`。`paragraph: 0` なら `1 以上で指定してください`。`search_law` に `keyword: "民法", limit: 51` を渡すと `50 以下で指定してください`。`get_law` に `law_name: "民法", at: "2024/04/01"` を渡すと `YYYY-MM-DD の形で指定してください`。`get_law` に `law_name: ""` を渡すと `空文字は指定できません`。`get_law_file` に `law_name: "民法", file_type: "pdf"` を渡すと `xml・json・html・rtf・docx のどれかで指定してください`。`verify_citations` に `citations: []` を渡すと `1 件以上で指定してください`。`get_law` に `law_name: "民法", article: "1", item: null` を渡すと `数値か文字列で指定してください`（`item` は `type: ["number", "string"]`）。
+
+### SPEC-EGOV-COMMON-ERRORS-023 数値の引数は inputSchema に整数と範囲を書き、範囲の外は `INVALID_ARGUMENT` にして丸めない
+
+数値の引数は、tools/list の inputSchema に `type: "integer"` と `minimum`（上限があるものは `maximum` も）を書く。0・負の数・小数・上限を超える値・数値でない値は、SPEC-EGOV-COMMON-ERRORS-003 の検査で `INVALID_ARGUMENT` になり、ツールの処理に進まない。既定値に丸めたり、上限に切り詰めたり、切り捨てたりしない。
+
+| ツール                   | 引数                    | `minimum` | `maximum` | 省いたとき                    | 仕様 ID                                |
+| ------------------------ | ----------------------- | --------- | --------- | ----------------------------- | -------------------------------------- |
+| `search_law`             | `limit`                 | 1         | 50        | 10                            | SPEC-EGOV-SEARCH-LAW-013               |
+| `search_fulltext`        | `limit`                 | 1         | 30        | 10                            | SPEC-EGOV-SEARCH-FULLTEXT-033          |
+| `get_law_revisions`      | `latest`                | 1         | なし      | 全件                          | SPEC-EGOV-GET-LAW-REVISIONS-012        |
+| `get_toc`                | `depth`                 | 1         | なし      | 全階層                        | SPEC-EGOV-GET-TOC-023                  |
+| `get_law`                | `paragraph`             | 1         | なし      | 条全体                        | SPEC-EGOV-GET-LAW-036                  |
+| `get_article_references` | `paragraph`             | 1         | なし      | 条全体                        | SPEC-EGOV-GET-ARTICLE-REFERENCES-040   |
+| `verify_citations`       | `citations[].paragraph` | 1         | なし      | 条まで                        | SPEC-EGOV-VERIFY-CITATIONS-041         |
+| `get_law_range`          | `suppl_index`           | 1         | なし      | （附則を範囲にしない）        | SPEC-EGOV-GET-LAW-RANGE-030            |
+| `get_law_range`          | `max_chars`             | 2,000     | 120,000   | 30,000                        | SPEC-EGOV-GET-LAW-RANGE-023（既存）    |
+
+`get_law` / `verify_citations` の `item` は文字列（`"8の2"`）も受け付けるので、この表に入れない（読めない形は `INVALID_ARTICLE_NUM`。SPEC-EGOV-GET-LAW-011）。
+
+例: tools/list の `search_law` の inputSchema は `properties.limit` が `type: "integer"`、`minimum: 1`、`maximum: 50` を持つ。`get_toc` の `properties.depth` は `type: "integer"`、`minimum: 1` を持ち、`maximum` を持たない。
+
+### SPEC-EGOV-COMMON-ERRORS-024 `at` は `YYYY-MM-DD` の形を inputSchema の `pattern` で確かめ、暦に無い日付はツールの処理で `INVALID_ARGUMENT` にする
+
+時点の引数 `at` を持つ 8 ツール（`get_law` / `get_toc` / `get_law_range` / `get_article_references` / `verify_citations` / `list_attachments` / `get_attachment` / `get_law_file`）は、inputSchema の `at` に `pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"` を書く。形に合わない値（`2024/04/01`、`20240401`、`2024-4-1`、`2024-04-01T00:00:00Z`）は SPEC-EGOV-COMMON-ERRORS-003 の検査で `INVALID_ARGUMENT`（`path: "at"`、`message: "YYYY-MM-DD の形で指定してください"`）になり、ツールの処理に進まない。
+
+形は合うが暦に無い日付（`2026-02-30`、`2026-13-01`、`2026-04-31`）は、ツールの処理が e-Gov に問い合わせる前に、SPEC-EGOV-COMMON-ERRORS-026 と同じ形の `INVALID_ARGUMENT`（`tool`・`detail.issues: [{ path: "at", message: "暦に無い日付です" }]`）を返す。`error` は `at が暦に無い日付です: <渡した値>`。
+
+例: `get_law` に `law_name: "民法", at: "2024/04/01"` を渡すと `code: "INVALID_ARGUMENT"`、`tool: "get_law"`、`detail.issues` は `[{ path: "at", message: "YYYY-MM-DD の形で指定してください" }]` で、e-Gov への問い合わせは 0 回。`at: "2026-02-30"` を渡すと `detail.issues` は `[{ path: "at", message: "暦に無い日付です" }]` で、e-Gov への問い合わせは 0 回。`at: "2024-04-01"` は検査を通る。
+
+### SPEC-EGOV-COMMON-ERRORS-025 必須の文字列の引数は inputSchema に `minLength: 1` を書き、空文字は `INVALID_ARGUMENT`
+
+必須の文字列の引数（`search_law` / `search_fulltext` の `keyword`、`get_law` / `get_toc` / `get_law_range` / `get_law_revisions` / `get_related_laws` / `get_article_references` / `list_attachments` / `get_attachment` / `get_law_file` の `law_name`、`resolve_abbreviation` の `abbr`、`explain_law_type` の `name`、`get_article_references` の `article`、`verify_citations` の `citations[].article`）は、inputSchema に `minLength: 1` を書く。空文字は SPEC-EGOV-COMMON-ERRORS-003 の検査で `INVALID_ARGUMENT`（`message: "空文字は指定できません"`）になり、ツールの処理に進まない。`enum` を持つ必須の文字列（`get_law_file` の `file_type`）は `enum` で止まるので `minLength` は書かない。`verify_citations` の `law_name` / `law_id` は片方が必須なので `minLength` を書かず、SPEC-EGOV-VERIFY-CITATIONS-003・032 のままである。
+
+例: `get_law` に `law_name: ""` を渡すと `code: "INVALID_ARGUMENT"`、`tool: "get_law"`、`detail.issues` は `[{ path: "law_name", message: "空文字は指定できません" }]` で、e-Gov への問い合わせは 0 回（v0.15.4 の `LAW_NOT_FOUND` ではない）。`resolve_abbreviation` に `abbr: ""` を渡しても `INVALID_ARGUMENT`（v0.15.4 の `resolved: null` ではない）。`search_fulltext` に `keyword: ""` を渡しても `INVALID_ARGUMENT`（v0.15.4 の `hits: []` ではない）。
+
+### SPEC-EGOV-COMMON-ERRORS-026 空白だけの必須の文字列は、ツールの処理で同じ形の `INVALID_ARGUMENT` にする
+
+必須の文字列の引数が空白（半角スペース・全角スペース・タブ・改行）だけのときは、inputSchema では止まらないので、各ツールの処理が、e-Gov・ローカル DB・略称辞書のどれにも問い合わせる前に `INVALID_ARGUMENT` を返す。本文は次の形で、inputSchema の検査のエラーと同じ `tool`・`detail.issues` を持つ。
+
+- `tool`: 呼んだツールの名前
+- `error`: `<引数名> が空です`
+- `detail.issues`: `[{ path: "<引数名>", message: "空白だけは指定できません" }]`
+- `hint`: 各ツールが決める（その引数に何を渡すかの案内）
+- `next_actions`: 各ツールが決める（付けなくてもよい）
+
+対象の引数は SPEC-EGOV-COMMON-ERRORS-025 と同じ。各ツールの仕様 ID は、`search_law` 007、`get_law` 003、`get_toc` 025、`search_fulltext` 034、`resolve_abbreviation` 010、`get_law_revisions` 013、`explain_law_type` 019、`get_related_laws` 016、`get_article_references` 039、`verify_citations` 042、`get_law_range` 029、`list_attachments` 020、`get_attachment` 023、`get_law_file` 018。
+
+例: `get_law` に `law_name: "   "` を渡すと `code: "INVALID_ARGUMENT"`、`tool: "get_law"`、`error: "law_name が空です"`、`detail.issues` は `[{ path: "law_name", message: "空白だけは指定できません" }]` で、e-Gov への問い合わせは 0 回。`explain_law_type` に `name: "\t\n"` を渡しても `INVALID_ARGUMENT`（`found: false` の応答ではない）。
+
+### SPEC-EGOV-COMMON-ERRORS-027 `SOURCE_*` は e-Gov との通信が失敗したときだけ返し、`*_NOT_FOUND` は問い合わせが成功して求めたものが無かったときだけ返す
+
+`SOURCE_API_ERROR` / `SOURCE_TIMEOUT` / `SOURCE_RATE_LIMITED` / `SOURCE_UNAVAILABLE` は、e-Gov への要求が次の表のどれかで終わったときだけ返す。`LAW_NOT_FOUND` / `ARTICLE_NOT_FOUND` / `RANGE_NOT_FOUND` / `ATTACHMENT_NOT_FOUND` は、e-Gov への要求（法令名の検索、法令本文の取得など）が成功し、その応答の中に求めたものが無かったときだけ返す。通信の失敗を `*_NOT_FOUND` にしない。e-Gov と関係の無い処理中の例外は `SOURCE_*` にせず `INTERNAL_ERROR`（SPEC-EGOV-COMMON-ERRORS-007）にする。
+
+| e-Gov への要求の終わり方                                           | `code`                | `retryable` | `detail`                                  |
+| ------------------------------------------------------------------ | --------------------- | ----------- | ----------------------------------------- |
+| HTTP 429                                                           | `SOURCE_RATE_LIMITED` | `true`      | `status: 429`、`url`                      |
+| 応答を待ちきれなかった（時間切れ）                                 | `SOURCE_TIMEOUT`      | `true`      | `url`                                     |
+| HTTP 5xx                                                           | `SOURCE_API_ERROR`    | `true`      | `status`、`url`                           |
+| HTTP 4xx（429 を除く）                                             | `SOURCE_API_ERROR`    | `false`     | `status`、`url`                           |
+| 接続できない（SPEC-EGOV-COMMON-ERRORS-028）                        | `SOURCE_UNAVAILABLE`  | `true`      | `cause`（`ENOTFOUND` などの code）        |
+| そのほかのネットワークの失敗（例外の `cause.code` が表に無いもの） | `SOURCE_API_ERROR`    | `true`      | `cause`（例外の文）                       |
+
+この表は、法令本文の取得（SPEC-EGOV-GET-LAW-028〜031 など）でも、法令名の検索（SPEC-EGOV-COMMON-ERRORS-029）でも、ファイルの取得（SPEC-EGOV-GET-ATTACHMENT-019、SPEC-EGOV-GET-LAW-FILE-014）でも同じである。4xx の一部を別の code にするツール（`get_attachment` の 404003 は `ATTACHMENT_NOT_FOUND`。SPEC-EGOV-GET-ATTACHMENT-010）は、そのツールの spec.md に書く。
+
+例: `get_law` に `{ law_name: "ほげほげ法", article: "1" }` を渡し、法令名の検索が 0 件で成功したときは `LAW_NOT_FOUND`。同じ引数で法令名の検索が 503 で終わったときは `SOURCE_API_ERROR`・`retryable: true` で、`LAW_NOT_FOUND` にはならない。
+
+### SPEC-EGOV-COMMON-ERRORS-028 e-Gov に接続できないときは、例外の `cause.code` を見て `SOURCE_UNAVAILABLE` を返す
+
+e-Gov への要求で、HTTP の応答を受け取る前に接続の失敗で例外が起きたときは、例外の `message` だけでなく `cause.code`（Node の `fetch` が投げる `TypeError: fetch failed` の `cause` に入る、`ENOTFOUND` のような文字列）も見て、次の表の code のどれかなら `SOURCE_UNAVAILABLE`（`retryable: true`）を返す。`detail.cause` にその code を入れ、`hint` にネットワークか DNS を確かめる案内、`next_actions` に `retry_later` と `visit_egov_site` を入れる。e-Gov を呼ぶ 11 ツール（`search_law` / `get_law` / `get_toc` / `get_law_range` / `get_law_revisions` / `get_related_laws` / `get_article_references` / `verify_citations` / `list_attachments` / `get_attachment` / `get_law_file`）で同じである。取り直しの回数は、429・5xx のときと同じ（3 回）で、取り直しても接続できなかったときにこのエラーになる。
+
+| `cause.code`   | 意味                       |
+| -------------- | -------------------------- |
+| `ENOTFOUND`    | ホスト名を解決できない     |
+| `EAI_AGAIN`    | DNS が一時的に答えない     |
+| `ECONNREFUSED` | 接続を拒否された           |
+| `ECONNRESET`   | 接続が途中で切れた         |
+| `ETIMEDOUT`    | TCP の接続が時間切れになった |
+
+`cause.code` がこの表に無く、`message` にもこれらの文字列が無いネットワークの失敗は、SPEC-EGOV-COMMON-ERRORS-027 の表の最後の行（`SOURCE_API_ERROR`、`retryable: true`）のままである。
+
+例: `fetch` が `TypeError("fetch failed")` を投げ、その `cause` が `{ code: "ENOTFOUND", hostname: "laws.e-gov.go.jp" }` のとき、`search_law` に `{ keyword: "消費税" }` を渡すと `code: "SOURCE_UNAVAILABLE"`、`retryable: true`、`detail.cause: "ENOTFOUND"`（v0.15.4 では `message` に `ENOTFOUND` が無いので `SOURCE_API_ERROR`・`detail.cause: "fetch failed"` だった）。`cause` が `{ code: "ECONNREFUSED" }` でも同じ。
+
+### SPEC-EGOV-COMMON-ERRORS-029 法令名から law_id を決める e-Gov の検索が通信の失敗で終わったときは、`LAW_NOT_FOUND` ではなく `SOURCE_*` を返す
+
+`law_name` を受け取り、略称辞書に law_id が無いときに e-Gov の法令名検索で law_id を決めるツールは、その検索が SPEC-EGOV-COMMON-ERRORS-027 の表のどれかで終わったとき、表の code を返す。`LAW_NOT_FOUND` は、検索が成功して 0 件だったときだけ返す。`retryable` と `detail` は 027 の表のとおりで、`next_actions` には `LAW_NOT_FOUND` のときの `resolve_abbreviation` / `search_law` を入れない（法令名を変えても通らないため）。
+
+| ツール                   | 仕様 ID                              |
+| ------------------------ | ------------------------------------ |
+| `get_law`                | SPEC-EGOV-GET-LAW-038                |
+| `get_toc`                | SPEC-EGOV-GET-TOC-026                |
+| `get_law_range`          | SPEC-EGOV-GET-LAW-RANGE-032          |
+| `get_law_revisions`      | SPEC-EGOV-GET-LAW-REVISIONS-014      |
+| `get_related_laws`       | SPEC-EGOV-GET-RELATED-LAWS-017       |
+| `get_article_references` | SPEC-EGOV-GET-ARTICLE-REFERENCES-042 |
+| `list_attachments`       | SPEC-EGOV-LIST-ATTACHMENTS-022       |
+| `get_attachment`         | SPEC-EGOV-GET-ATTACHMENT-026         |
+| `get_law_file`           | SPEC-EGOV-GET-LAW-FILE-020           |
+| `verify_citations`       | SPEC-EGOV-VERIFY-CITATIONS-034〜036（v0.15.4 の時点で既にこの規則） |
+
+略称辞書に law_id がある名前（`消費税法` など）では法令名検索を引かないので（SPEC-EGOV-GET-LAW-REVISIONS-011 など）、このエラーは起きない。
+
+例: 法令名の検索が 503 を返す状態で `get_toc` に `{ law_name: "架空の法律" }` を渡すと、`code: "SOURCE_API_ERROR"`、`retryable: true`、`detail.status: 503` で、`LAW_NOT_FOUND` ではない（v0.15.4 では `LAW_NOT_FOUND` だった）。検索が時間切れなら `SOURCE_TIMEOUT`、429 なら `SOURCE_RATE_LIMITED`、接続できなければ `SOURCE_UNAVAILABLE`、400 なら `SOURCE_API_ERROR`・`retryable: false`。検索が 0 件で成功したときは今までどおり `LAW_NOT_FOUND`。
+
+### SPEC-EGOV-COMMON-ERRORS-030 上限を超える大きさのファイルは `FILE_TOO_LARGE` で断る
+
+`get_attachment` / `get_law_file` の `save: true` で取るファイルが上限（50 MB）を超えているときは、エラー `FILE_TOO_LARGE`（`retryable: false`）を返す。`INVALID_ARGUMENT` にはしない（引数の誤りではないため）。`error` にファイルの大きさと上限、`hint` に「保存せず url をそのまま使ってください」、`detail.url` に取得した URL、`detail.bytes` にファイルの大きさ（Content-Length の値、または読み終えた大きさ）を入れる。code の名前は pdf-reader-mcp の `FILE_TOO_LARGE` と同じにし、houki-research-skill の `docs/ERROR-CODES.md` では houki-egov-mcp の列にも付ける。大きさの確かめ方は SPEC-EGOV-GET-ATTACHMENT-027、SPEC-EGOV-GET-LAW-FILE-021。
+
+例: e-Gov の応答の Content-Length が `52428801`（50 MB + 1 バイト）のとき、`get_attachment` に `{ law_name: "民法", src: "./pict/big.pdf", save: true }` を渡すと `code: "FILE_TOO_LARGE"`、`retryable: false`、`detail.bytes: 52428801` で、ファイルは保存しない（v0.15.4 では `INVALID_ARGUMENT` だった）。
+
+### SPEC-EGOV-COMMON-ERRORS-031 同期の記録の日付を解釈できないときは `INTERNAL_ERROR`（`retryable: false`）にし、全件の取り込みを案内する
+
+ローカル DB の `sync_state.last_sync_date` が、日付（`YYYY-MM-DD`）または時差付きの時刻（`YYYY-MM-DDTHH:MM:SSZ` / `+09:00`）として解釈できないとき（空文字、`2026/05/08` のような別の書き方、`2026-02-30` のような暦に無い日付）、鮮度（`freshness`）を計算するツールは、想定外の例外として止まらず、エラー `INTERNAL_ERROR` を返す。
+
+- `retryable`: `false`（時間をおいても DB の値は変わらない）
+- `error`: `同期の記録の日付を読めません: <last_sync_date の値>`
+- `hint`: `houki-egov-mcp --bulk-download-everything` で同期の記録を作り直す案内（`next_actions` は付けない。CLI を案内する `action` の名前が houki-egov-mcp には無いため）
+- `detail.cause`: 元の例外の文（houki-abbreviations の `computeDaysSince` が投げる `RangeError` の文）
+
+当てはまるのは `search_fulltext`（SPEC-EGOV-SEARCH-FULLTEXT-035）と CLI の `--status`（SPEC-EGOV-CLI-STATUS-009。CLI なので JSON ではなく標準エラー出力）である。取り込みが書く `last_sync_date` は `YYYY-MM-DD` なので、取り込みを通した DB ではこのエラーは起きない。
+
+例: `sync_state.last_sync_date` を `2026/05/08` に書き換えた DB で `search_fulltext` に `{ keyword: "軽減税率" }` を渡すと、`code: "INTERNAL_ERROR"`、`retryable: false`、`error` に `2026/05/08` を含み、`hits` は返さない。
+
 ## できないこと
 
 - ツール固有のエラー（`LAW_NOT_FOUND`・`ARTICLE_NOT_FOUND` など）をどの場面で返すかを決めること（各ツールの spec.md に書く）
@@ -229,12 +394,8 @@ SPEC-EGOV-COMMON-ERRORS-007 のエラーの `next_actions` は、`{ action: "ret
 
 1. **`arguments` を省いた呼び出し。** → SPEC-EGOV-COMMON-ERRORS-012
 2. **inputSchema の検査で返す `INVALID_ARGUMENT` の `error`・`hint`・`next_actions`。** → SPEC-EGOV-COMMON-ERRORS-013・SPEC-EGOV-COMMON-ERRORS-014・SPEC-EGOV-COMMON-ERRORS-015
-3. **inputSchema の検査で返す `INVALID_ARGUMENT` に `tool` が付かない。** → houki-egov-mcp #57
-4. **必須の引数が無いときの `path` と、検査の `message` の言語。** → houki-egov-mcp #57
-5. **inputSchema に無い引数が 2 つ以上あるときの `path`。** → houki-egov-mcp #57
 6. **`UNKNOWN_TOOL` の `error` の文面と `retryable`。** → houki-egov-mcp #56
 7. **処理中の想定外の例外で返す `INTERNAL_ERROR` の `retryable` が README と違う。** → houki-egov-mcp #56
 8. **処理中の想定外の例外で返す `INTERNAL_ERROR` の `error`・`hint`・`next_actions`。** → SPEC-EGOV-COMMON-ERRORS-016・SPEC-EGOV-COMMON-ERRORS-017・SPEC-EGOV-COMMON-ERRORS-018
 9. **`hint` が空文字のときは付けない。** → SPEC-EGOV-COMMON-ERRORS-019
-10. **どのツールも返さない code。** → houki-egov-mcp #57
 11. **README の「まず試す」のツール数が実際と違う。** → houki-egov-mcp #56
