@@ -31,6 +31,18 @@ export interface Harness {
   close(): Promise<void>;
 }
 
+/** fetch が接続の段階で失敗したときの例外（Node の fetch と同じく cause に code を持つ） */
+export function connectError(code: string): TypeError {
+  return new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
+}
+
+/** 要求の時間切れ（AbortController.abort() で fetch が投げる例外） */
+export function abortError(): Error {
+  const e = new Error('This operation was aborted');
+  e.name = 'AbortError';
+  return e;
+}
+
 export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -38,8 +50,24 @@ export function json(body: unknown, status = 200, headers: Record<string, string
   });
 }
 
-export async function startHarness(initial?: Route): Promise<Harness> {
+/**
+ * 起動する。`fastRetry` を true にすると、egov-client の取り直しの待ち（500・1000・2000 ms）を 0 にする
+ * （429・5xx・接続の失敗のテストを速くするため。要求の時間切れの待ちは変えない）。
+ */
+export async function startHarness(
+  initial?: Route,
+  options: { fastRetry?: boolean } = {}
+): Promise<Harness> {
   let route = initial;
+  if (options.fastRetry) {
+    const realSetTimeout = globalThis.setTimeout;
+    vi.stubGlobal('setTimeout', ((fn: () => void, ms?: number, ...rest: unknown[]) =>
+      realSetTimeout(
+        fn,
+        ms === 500 || ms === 1000 || ms === 2000 ? 0 : ms,
+        ...rest
+      )) as typeof setTimeout);
+  }
   const calls: URL[] = [];
   const fetchMock = vi.fn(async (input: string | URL | Request): Promise<Response> => {
     const url = new URL(
