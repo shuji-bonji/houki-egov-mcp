@@ -15,6 +15,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.17.0] - 2026-10-03
+
+✨ **minor リリース** — 段階 4 の後半（houki-hub `docs/notes/2026-09-29-plan-spec-issues.md`）。仕様 PR [#91](https://github.com/shuji-bonji/houki-egov-mcp/pull/91)（T4 応答の形）/ [#92](https://github.com/shuji-bonji/houki-egov-mcp/pull/92)（T5 文書と実装の食い違い）で承認した差分を実装し、`specs/current/` に取り込んだ。対象 Issue: #56 #64 #65 #66。
+
+### 互換性
+
+0.x の minor で、応答の JSON の形が変わる場面がある。`code` は変えていない。消したフィールド・名前を付け替えたフィールドは無い（例外は T5 の `INTERNAL_ERROR` の `next_actions`）。
+
+- **T4: 今まで「キーが無い」だった場面で `null` になるフィールド**
+  - `meta.at`: `meta` を持つ 10 ツール（`get_law` / `get_toc` / `get_law_range` / `get_law_revisions` / `get_related_laws` / `get_article_references` / `list_attachments` / `get_attachment` / `get_law_file` / `verify_citations`）で、`at` を省いたときは `null`。`get_law` の目次の `meta` にも `at` を置く。`at` を受け取らない `get_law_revisions` / `get_related_laws` は常に `null`（#64。SPEC-EGOV-GET-LAW-020、SPEC-EGOV-GET-TOC-015、SPEC-EGOV-GET-LAW-RANGE-025、SPEC-EGOV-GET-LAW-REVISIONS-002、SPEC-EGOV-GET-RELATED-LAWS-010、SPEC-EGOV-GET-ARTICLE-REFERENCES-034、SPEC-EGOV-LIST-ATTACHMENTS-015、SPEC-EGOV-GET-ATTACHMENT-014、SPEC-EGOV-GET-LAW-FILE-001、SPEC-EGOV-VERIFY-CITATIONS-021）
+  - `get_law` の json の `data.paragraph_num` / `data.item_num`: 渡さないときは `null`。`item` だけを渡して項を補ったときは `data.paragraph_num: 1`（#64。SPEC-EGOV-GET-LAW-024・040）
+  - `get_article_references` の `meta.paragraph`: `paragraph` を指定しないときは `null`（#64。SPEC-EGOV-GET-ARTICLE-REFERENCES-022）
+  - `get_law_revisions` の `revisions[]`: 8 つのキー（`law_revision_id`・`amendment_promulgate_date`・`amendment_enforcement_date`・`amendment_enforcement_comment`・`amendment_law_num`・`amendment_law_title`・`amendment_law_id`・`current_revision_status`）を常に持ち、e-Gov の要素に値が無いキーは `null`（#65。SPEC-EGOV-GET-LAW-REVISIONS-002）
+  - `get_law_file` の `saved.law_revision_id`: 下の項目のとおり
+  - JSON を `"at" in meta` のようにキーの有無で読んでいる側は、値（`null` かどうか）で読むように直す必要がある
+- **T4: `get_law_revisions` の並び** — ツールが施行日の新しい順に並べる（まだ施行されていない改正を含む。施行日が同じ改正は e-Gov の順のまま、施行日が `null` の改正は先頭）。`latest` はこの順の先頭から数える。2026-10-03 の e-Gov の順と同じなので、見た目は変わらない。`current_revision_status` は e-Gov の値（`CurrentEnforced` / `PreviousEnforced` / `UnEnforced`）のまま（#65。SPEC-EGOV-GET-LAW-REVISIONS-009・016・017）
+- **T4: `get_law_range` の続きの呼び出し例** — `range.next_actions[0].example` に、呼び出し側が渡した `max_chars` と `at` を入れる（省いた引数は入れない）。例のとおりに呼び直すと、最初の呼び出しと同じ上限と時点で続きを返す（#64。SPEC-EGOV-GET-LAW-RANGE-008）
+- **T4: `get_attachment` のファイル名だけの `src`** — 一覧の 2 件以上の `file_name` に当たると、成功（一覧で先の添付）から `INVALID_ARGUMENT`（`tool: "get_attachment"`、`retryable: false`、`detail.issues`、候補の `src` ごとの `next_actions`）に変わる。ファイルは取らない。`src` を一覧の形で渡せば今までどおり（#66。SPEC-EGOV-GET-ATTACHMENT-002・029）
+- **T4: `get_law_file` の `save: true`** — Content-Disposition が無いとき（または `filename` を含まないとき）の `saved.law_revision_id` が、法令 ID から `null` に変わる。保存先は `<law_id>/<law_id>.<file_type>` のまま。Content-Disposition に `filename` と `filename*` の両方があるときは、ヘッダーの中の順によらず `filename*` を使う（#66。SPEC-EGOV-GET-LAW-FILE-003・004）
+- **T5: `INTERNAL_ERROR`** — 処理中の想定外の例外で返す `INTERNAL_ERROR` が `retryable: false` になり、`next_actions`（`retry_later`）が無くなる（キーごと付かない）。`hint` の「GitHub issue でご報告ください」と合わせるため。同期の記録の日付を読めないときの `INTERNAL_ERROR` は今までどおり（#56。SPEC-EGOV-COMMON-ERRORS-007・018）
+- **T5: `UNKNOWN_TOOL`** — `error` が英語の `Unknown tool: <name>` から `存在しないツールです: <name>` になり、`retryable: false` が付く（#56。SPEC-EGOV-COMMON-ERRORS-002）
+- **T5: `explain_law_type` の `see_also`** — `docs/LAW-HIERARCHY.md` から `https://github.com/shuji-bonji/houki-egov-mcp/blob/main/docs/LAW-HIERARCHY.md` になる。キーは変わらない（#56。SPEC-EGOV-EXPLAIN-LAW-TYPE-020）
+
+### Added
+
+- **受入テスト**: `src/spec-tests/20261003-t4-response-shape/`・`20261003-t5-docs-mismatch/`
+
+### Changed
+
+- 「互換性」の節のとおり。仕様 ID では ADDED 5 件（T4 4、T5 1）、MODIFIED 20 件（T4 17、T5 3）
+- CLI の使い方（`--help`）: DOCS: 欄を GitHub の URL に、USAGE: 欄に `--bulk-download-incremental` と `-v`、ENVIRONMENT: 欄に `HOUKI_EGOV_FILES_DIR` を足した（#56）
+- tools/list の description: `get_toc` の `depth` を「上から何階層まで返すか」の説明に、`get_law_revisions` に `current_revision_status` の 3 つの値と並びを書いた（#56 #65）
+- README: ローカル DB が要らないツールの数を 13 に直した（#56）
+
 ## [0.16.0] - 2026-10-01
 
 ✨ **minor リリース** — 段階 4（houki-hub `docs/notes/2026-09-29-plan-spec-issues.md`）。仕様 PR [#84](https://github.com/shuji-bonji/houki-egov-mcp/pull/84)（T1 引数の検査）/ [#85](https://github.com/shuji-bonji/houki-egov-mcp/pull/85)（T2 code）/ [#86](https://github.com/shuji-bonji/houki-egov-mcp/pull/86)（T3 正規化）で承認した差分と、その書き残しを直した仕様 PR [#89](https://github.com/shuji-bonji/houki-egov-mcp/pull/89)（`20261002-t1-followups`）を実装し、`specs/current/` に取り込んだ。対象 Issue: #46 #47 #48 #49 #52 #53 #54 #57 #69。
