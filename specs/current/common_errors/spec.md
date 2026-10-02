@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: 共通
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）。差分 `20261003-t5-docs-mismatch` は 2026-10-01（PR #92）
 - 起こした元: v0.15.1 の `src/server.ts`、`src/errors.ts`、`src/tools/tool-args.ts`、`src/tools/handlers.ts`（ツールの登録の表）、`src/tools/definitions.ts`（tools/list の一覧）、`src/server.test.ts`、`src/errors.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: なし
 
@@ -72,7 +72,7 @@
 | `ATTACHMENT_NOT_FOUND`                                                               | 求めた添付ファイルが無い                                                                    |
 | `SOURCE_API_ERROR` / `SOURCE_TIMEOUT` / `SOURCE_RATE_LIMITED` / `SOURCE_UNAVAILABLE` | e-Gov との通信が失敗した: HTTP エラー（5xx は再試行できる、429 以外の 4xx は再試行できない）/ 応答の時間切れ / 429 / 接続できない（DNS の失敗・接続拒否・接続の切断） |
 | `FILE_TOO_LARGE`                                                                     | `save: true` で取るファイルが上限（50 MB）を超えている（`get_attachment` / `get_law_file`）。pdf-reader-mcp と同じ code |
-| `INTERNAL_ERROR`                                                                     | サーバー内部の失敗（処理中の想定外の例外）                                                  |
+| `INTERNAL_ERROR`                                                                     | サーバー内部の失敗（処理中の想定外の例外）。再試行しても結果は変わらない（`retryable: false`） |
 
 ## 処理の流れ
 
@@ -90,7 +90,7 @@ flowchart TD
   C -- 合う --> D["ツールの処理"]
   D -- "エラーを返した" --> F["isError: true と JSON の本文（001・008）"]
   D -- "成功を返した" --> G["isError を付けない（001）"]
-  D -- "想定外の例外" --> E4["INTERNAL_ERROR を返す。retryable: true（007）"]
+  D -- "想定外の例外" --> E4["INTERNAL_ERROR を返す。retryable: false（007）"]
 ```
 
 ## できること
@@ -103,14 +103,16 @@ flowchart TD
 
 ツールの処理が成功を返したときは、`isError` を付けない（例: `explain_law_type` に `name: "政令"` を渡すと、`isError` の無い結果で、本文は `name: "政令"` を持つ JSON の応答）。
 
-### SPEC-EGOV-COMMON-ERRORS-002 存在しないツール名はエラー `UNKNOWN_TOOL`
+### SPEC-EGOV-COMMON-ERRORS-002 存在しないツール名はエラー `UNKNOWN_TOOL`（`retryable: false`）で、`error` は日本語
 
 tools/call の `name` が 14 ツールのどれでもないときは、エラー `UNKNOWN_TOOL` を返す（`isError: true`）。
 
+- `error` は `存在しないツールです: <name>`（ほかのエラーと同じく日本語の 1 文）
+- `retryable` は `false`（同じ名前で呼び直しても結果は変わらない）
 - `hint` に、呼べるツール名の一覧（`search_law` など）を書く
 - `next_actions` の先頭は `action: "list_tools"`（MCP の tools/list で呼べるツールを確かめる案内）
 
-例: `name: "no_such_tool"` を呼ぶと、`code: "UNKNOWN_TOOL"` で、`hint` に `search_law` が含まれる。
+例: `name: "no_such_tool"` を呼ぶと、`code: "UNKNOWN_TOOL"`、`error: "存在しないツールです: no_such_tool"`、`retryable: false` で、`hint` に `search_law` が含まれる（v0.16.0 では `error` が英語の `Unknown tool: no_such_tool` で、`retryable` が無かった。README のエラー code の表は `false` と書いていた）。
 
 ### SPEC-EGOV-COMMON-ERRORS-003 inputSchema に合わない引数はエラー `INVALID_ARGUMENT`
 
@@ -135,12 +137,14 @@ tools/list が返す 14 ツールの inputSchema には、どれも `additionalP
 
 SPEC-EGOV-COMMON-ERRORS-003・004 のエラーを返すときは、ツールの処理に進まない。ツールの処理が返す応答の代わりに `INVALID_ARGUMENT` だけを返す。例: `explain_law_type` に `name: 123` を渡すと、知らない法令種別のときの応答（`found: false`）ではなく、`INVALID_ARGUMENT` のエラーを返す。
 
-### SPEC-EGOV-COMMON-ERRORS-007 処理中の想定外の例外はエラー `INTERNAL_ERROR` で返す
+### SPEC-EGOV-COMMON-ERRORS-007 処理中の想定外の例外はエラー `INTERNAL_ERROR`（`retryable: false`）で返す
 
 ツールの処理の途中で想定外の例外が起きたときは、プロトコルのエラーにせず、tools/call の結果としてエラー `INTERNAL_ERROR` を返す（`isError: true`）。
 
-- `retryable` は `true`
+- `retryable` は `false`（不具合の可能性が高く、同じ呼び出しをやり直しても結果は変わらない。`hint` は不具合の報告を求める。SPEC-EGOV-COMMON-ERRORS-017）
 - `detail.cause` に、元の例外の文を入れる（例: 例外の文が `boom` なら `detail.cause` は `boom`）
+
+例: ツールの処理が `new Error("boom")` を投げると、`code: "INTERNAL_ERROR"`、`retryable: false`、`detail.cause: "boom"`（v0.16.0 では `retryable: true` で、README のエラー code の表の `false` と食い違っていた）。
 
 ### SPEC-EGOV-COMMON-ERRORS-008 エラーの本文には `error` と `code` が必ず付き、ほかのフィールドは値があるときだけ付く
 
@@ -203,11 +207,11 @@ SPEC-EGOV-COMMON-ERRORS-007 のエラーの `hint` は `バグの可能性があ
 
 例: ツールの処理が `new Error("boom")` を投げたときも、文字列 `"strboom"` を投げたときも、`hint` は `バグの可能性があります。再現手順を添えて GitHub issue でご報告ください`。
 
-### SPEC-EGOV-COMMON-ERRORS-018 処理中の想定外の例外で返す `INTERNAL_ERROR` の `next_actions` は `retry_later` の 1 件
+### SPEC-EGOV-COMMON-ERRORS-018 処理中の想定外の例外で返す `INTERNAL_ERROR` には `next_actions` を付けない
 
-SPEC-EGOV-COMMON-ERRORS-007 のエラーの `next_actions` は、`{ action: "retry_later", reason: "一時的な API エラーの可能性があります。30秒〜数分後に再試行してください" }` の 1 件だけである。`example` は付かない。
+SPEC-EGOV-COMMON-ERRORS-007 のエラーには `next_actions` を付けない。再試行を案内する `retry_later` は、`retryable: false` と `hint` の「再現手順を添えて GitHub issue でご報告ください」に合わないので入れない。次の 1 件が無くなると `next_actions` が空になるので、SPEC-EGOV-COMMON-ERRORS-008 のとおりキーごと付けない。
 
-例: ツールの処理が `new Error("boom")` を投げると、`next_actions` は `[{ action: "retry_later", reason: "一時的な API エラーの可能性があります。30秒〜数分後に再試行してください" }]`。
+例: ツールの処理が `new Error("boom")` を投げると、エラーの本文に `next_actions` は無い（v0.16.0 では `[{ action: "retry_later", reason: "一時的な API エラーの可能性があります。30秒〜数分後に再試行してください" }]` だった）。
 
 ### SPEC-EGOV-COMMON-ERRORS-019 `hint` が空文字のエラーには `hint` を付けない
 
@@ -394,8 +398,7 @@ e-Gov への要求で、HTTP の応答を受け取る前に接続の失敗で例
 
 1. **`arguments` を省いた呼び出し。** → SPEC-EGOV-COMMON-ERRORS-012
 2. **inputSchema の検査で返す `INVALID_ARGUMENT` の `error`・`hint`・`next_actions`。** → SPEC-EGOV-COMMON-ERRORS-013・SPEC-EGOV-COMMON-ERRORS-014・SPEC-EGOV-COMMON-ERRORS-015
-6. **`UNKNOWN_TOOL` の `error` の文面と `retryable`。** → houki-egov-mcp #56
-7. **処理中の想定外の例外で返す `INTERNAL_ERROR` の `retryable` が README と違う。** → houki-egov-mcp #56
+6. **`UNKNOWN_TOOL` の `error` の文面と `retryable`。** → SPEC-EGOV-COMMON-ERRORS-002
+7. **処理中の想定外の例外で返す `INTERNAL_ERROR` の `retryable` が README と違う。** → SPEC-EGOV-COMMON-ERRORS-007・SPEC-EGOV-COMMON-ERRORS-018
 8. **処理中の想定外の例外で返す `INTERNAL_ERROR` の `error`・`hint`・`next_actions`。** → SPEC-EGOV-COMMON-ERRORS-016・SPEC-EGOV-COMMON-ERRORS-017・SPEC-EGOV-COMMON-ERRORS-018
 9. **`hint` が空文字のときは付けない。** → SPEC-EGOV-COMMON-ERRORS-019
-11. **README の「まず試す」のツール数が実際と違う。** → houki-egov-mcp #56

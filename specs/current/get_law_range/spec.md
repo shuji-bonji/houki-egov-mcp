@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）。差分 `20261003-t4-response-shape` は 2026-10-01（PR #91）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`（`get_law_range`）、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-tree.ts`、`src/formatters/markdown.ts`、`src/utils/article-num.ts`、`src/constants.ts`、`src/services/law-service.range.test.ts`、`src/services/law-tree.test.ts`、`src/utils/article-num.test.ts`
 - 関連する Issue: houki-egov-mcp #22（章・節単位の分割取得）
 
@@ -117,22 +117,22 @@ flowchart TD
 
 例: `path: "第一編/第一章"`、`"Book3"`、`"Part"` はどれも `INVALID_ARGUMENT`。
 
-### SPEC-EGOV-GET-LAW-RANGE-008 文字数の上限を超える範囲は条の単位で打ち切り、続きの条番号を返す
+### SPEC-EGOV-GET-LAW-RANGE-008 文字数の上限を超える範囲は条の単位で打ち切り、続きの条番号と、同じ条件で呼び直す例を返す
 
 返す条本文の文字数（条ごとの見出しを含む）が `max_chars` を超える手前で、条の単位で打ち切る。条の途中では切らない。打ち切ったときは次を返す。
 
-| フィールド                                   | 内容                                                                                                                                                         |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `range.truncated`                            | `true`                                                                                                                                                       |
-| `range.next_from_article`                    | 続きの最初の条番号。`from_article` にそのまま渡せる                                                                                                          |
-| `range.first_article` / `range.last_article` | 返した最初と最後の条（例: `第5条` / `第6条`）                                                                                                                |
-| `range.body_chars`                           | 返した条本文の文字数（`max_chars` 以下）                                                                                                                     |
-| `range.note`                                 | 何件のうち何件を返したかと、`from_article: "<続きの条番号>"` を付けて呼び直す案内                                                                            |
-| `range.next_actions`                         | `get_law_range` の呼び出し例。`reason` は `同じ範囲の続きの条から取れます`、`example` は `law_name`・範囲の `path`（附則なら `suppl_index`）・`from_article` |
+| フィールド                                   | 内容                                                                                                                                                                                                                                       |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `range.truncated`                            | `true`                                                                                                                                                                                                                                     |
+| `range.next_from_article`                    | 続きの最初の条番号。`from_article` にそのまま渡せる                                                                                                                                                                                        |
+| `range.first_article` / `range.last_article` | 返した最初と最後の条（例: `第5条` / `第6条`）                                                                                                                                                                                              |
+| `range.body_chars`                           | 返した条本文の文字数（`max_chars` 以下）                                                                                                                                                                                                   |
+| `range.note`                                 | 何件のうち何件を返したかと、`from_article: "<続きの条番号>"` を付けて呼び直す案内                                                                                                                                                          |
+| `range.next_actions`                         | `get_law_range` の呼び出し例。`reason` は `同じ範囲の続きの条から取れます`、`example` は `law_name`・範囲の `path`（附則なら `suppl_index`）・`from_article` に、呼び出し側が渡した `max_chars` と `at` を加えたもの（渡さなかった引数は入れない） |
 
-`markdown` の末尾にも同じ `note`（`上限で打ち切りました` を含む）を書く。
+`example` のとおりに呼び直したときに、文字数の上限と時点が最初の呼び出しと変わらないようにするため、渡された `max_chars` と `at` は値を変えずにそのまま写す。`markdown` の末尾にも同じ `note`（`上限で打ち切りました` を含む）を書く。
 
-例: 本文 900・900・2,500 文字の 3 条を持つ節を `max_chars: 2000` で取ると、2 条を返して `truncated: true`、`next_from_article: "7"`、`next_actions[0].example` は `{ law_name, path: "Part2/Chapter2/Section1", from_article: "7" }`。
+例: 本文 900・900・2,500 文字の 3 条を持つ節を `max_chars: 2000` で取ると、2 条を返して `truncated: true`、`next_from_article: "7"`、`next_actions[0].example` は `{ law_name, path: "Part2/Chapter2/Section1", from_article: "7", max_chars: 2000 }`（v0.16.0 では `max_chars` が入らず、例のとおりに呼び直すと既定の 30,000 文字で返っていた）。同じ節を `max_chars: 2000, at: "2020-04-01"` で取ると `example` は `{ law_name, path: "Part2/Chapter2/Section1", from_article: "7", max_chars: 2000, at: "2020-04-01" }`。`max_chars` を省いて既定の 30,000 文字で打ち切ったときは、`example` に `max_chars` を入れない。
 
 ### SPEC-EGOV-GET-LAW-RANGE-009 `from_article` から続きを返す
 
@@ -246,7 +246,7 @@ tools/call（`get_law_range`）で、`max_chars` に 2,000 未満または 120,0
 
 ### SPEC-EGOV-GET-LAW-RANGE-025 応答の `meta`
 
-応答の `meta` は次のフィールドを持つ。
+応答の `meta` は次のフィールドを持つ。`at` を省いたときもキーは無くならない。
 
 | フィールド     | 内容                                                                   |
 | -------------- | ---------------------------------------------------------------------- |
@@ -255,9 +255,9 @@ tools/call（`get_law_range`）で、`max_chars` に 2,000 未満または 120,0
 | `law_num`      | 法令番号                                                               |
 | `retrieved_at` | 取得日時（ISO 8601 の UTC）                                            |
 | `url`          | e-Gov 法令検索の法令のページ。`https://laws.e-gov.go.jp/law/<law_id>` |
-| `at`           | 渡した `at`。`at` を省いたときは付かない                               |
+| `at`           | 渡した `at`。`at` を省いたときは `null`                                |
 
-例: 法令 ID `999AC0000000001`・法令名 `テスト法`・法令番号 `令和七年法律第一号` の法令で `chapter: 1` を取ると、`meta` は `{ law_id: "999AC0000000001", title: "テスト法", law_num: "令和七年法律第一号", retrieved_at: <ISO 8601>, url: "https://laws.e-gov.go.jp/law/999AC0000000001" }` で、`at` を持たない。
+例: 法令 ID `999AC0000000001`・法令名 `テスト法`・法令番号 `令和七年法律第一号` の法令で `chapter: 1` を取ると、`meta` は `{ law_id: "999AC0000000001", title: "テスト法", law_num: "令和七年法律第一号", retrieved_at: <ISO 8601>, url: "https://laws.e-gov.go.jp/law/999AC0000000001", at: null }`（v0.16.0 では `at` のキーが無かった）。
 
 ### SPEC-EGOV-GET-LAW-RANGE-026 markdown の末尾に `range.note` と出典を書く
 
@@ -328,5 +328,4 @@ tools/list の inputSchema の `suppl_index` は `type: "integer"`、`minimum: 1
 5. **款・目（`subsection` / `division`）での指定。** → SPEC-EGOV-GET-LAW-RANGE-024
 6. **`meta` と markdown の末尾。** → SPEC-EGOV-GET-LAW-RANGE-025・SPEC-EGOV-GET-LAW-RANGE-026・SPEC-EGOV-GET-LAW-RANGE-027
 7. **候補が 6 か所以上に当たるとき。** → SPEC-EGOV-GET-LAW-RANGE-028
-8. **打ち切ったときの呼び出し例に `max_chars` が入らない。** → houki-egov-mcp #64
 9. **法令名が完全一致しないとき、検索結果の先頭の法令を返す。** → houki-egov-mcp #45

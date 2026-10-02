@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: CLI
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261003-t5-docs-mismatch` は 2026-10-01（PR #92）
 - 起こした元: v0.15.1 の `src/index.ts`、`src/cli/index.ts`、`src/config.ts`、`src/cli/index.test.ts`
 - 関連する Issue: なし
 
@@ -95,5 +95,3 @@ MCP サーバーとして起動する途中で想定外の例外が起きたと�
 1. **`-v` も `--version` と同じ。** → SPEC-EGOV-CLI-ENTRY-005
 2. **`-` で始まらない引数や、2 番目以降の引数を黙って無視する。** → houki-egov-mcp #61
 3. **MCP サーバーの終わり方。** → SPEC-EGOV-CLI-ENTRY-006・SPEC-EGOV-CLI-ENTRY-007
-4. **使い方の `DOCS:` 欄が、npm のパッケージに入っていないファイルを案内している。** → houki-egov-mcp #56
-5. **使い方に `--bulk-download-incremental` と `-v` が載っていない。** → houki-egov-mcp #56

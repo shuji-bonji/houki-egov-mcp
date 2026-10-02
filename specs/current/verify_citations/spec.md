@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-01（PR #91）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`（`verify_citations` の定義）、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/utils/article-num.ts`、`src/services/law-tree.ts`、`src/errors.ts`、`src/constants.ts`、`src/services/law-service.verify.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: houki-egov-mcp #18（引用の実在確認。出典は houki-hub #20 の機能 3 / houki-hub #21）
 
@@ -200,9 +200,9 @@ e-Gov に問い合わせられなかったとき（例: 名前解決に失敗し
 
 ### SPEC-EGOV-VERIFY-CITATIONS-021 応答の meta に取得日時と時点を付ける
 
-応答は `meta` を持つ。`meta.retrieved_at` は応答を組み立てた日時で、ISO 8601 の UTC 表記（例: `"2026-09-27T20:31:49.938Z"`）である。`at` を渡したときは `meta.at` に渡した値をそのまま入れ、`at` を渡さなかったときは `meta` に `at` のキーを置かない。
+応答は `meta` を持つ。`meta.retrieved_at` は応答を組み立てた日時で、ISO 8601 の UTC 表記（例: `"2026-09-27T20:31:49.938Z"`）である。`meta.at` は、`at` を渡したときは渡した値をそのまま入れ、`at` を渡さなかったときは `null` にする。`meta` のキーは `at` の有無で変わらない。
 
-例: `{ citations: [{ law_name: "所得税法", article: "9" }], at: "2024-04-01" }` の `meta` は `{ retrieved_at: "<ISO 8601>", at: "2024-04-01" }`。`at` を省くと `meta` は `{ retrieved_at: "<ISO 8601>" }` だけになる。
+例: `{ citations: [{ law_name: "所得税法", article: "9" }], at: "2024-04-01" }` の `meta` は `{ retrieved_at: "<ISO 8601>", at: "2024-04-01" }`。`at` を省くと `meta` は `{ retrieved_at: "<ISO 8601>", at: null }`（v0.16.0 では `{ retrieved_at }` だけだった）。
 
 ### SPEC-EGOV-VERIFY-CITATIONS-022 at を渡すと、その時点の本文で条・項・号を確かめる
 

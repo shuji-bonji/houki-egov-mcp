@@ -3,7 +3,7 @@
 - 対象: `get_law` / `get_toc` / `get_law_range` / `get_law_revisions` / `get_related_laws` / `get_article_references` / `list_attachments` / `get_attachment` / `get_law_file` / `verify_citations` の `specs/current/<tool>/spec.md`
 - 実装の変更: 要（`get_law_revisions` の 017 は今の振る舞いを書くだけで、受入テストを足すだけ。下の「実装の変更」）
 - 承認日: 2026-10-01（PR #91）
-- 状態: 提案中
+- 状態: 取り込み済み（v0.17.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #64（目次の meta の at、補った項番号、続きの呼び出し例の max_chars）、#65（get_law_revisions の状態の値と latest の順）、#66（同じファイル名の添付、Content-Disposition が無いときの法令履歴 ID、`filename*`）

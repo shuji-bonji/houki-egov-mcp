@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-01（PR #91）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-files.ts`、`src/services/law-tree.ts`（図の置き場所）、`src/services/law-service.ts`（法令名の解決・管轄の確認）、`src/services/egov-client.ts`、`src/config.ts`、`src/services/law-files.test.ts`
 - 関連する Issue: houki-egov-mcp #19（添付ファイルと法令本文ファイル）
 
@@ -140,7 +140,7 @@ SPEC-EGOV-LIST-ATTACHMENTS-002 の「別記・様式などの中の図」は、�
 
 例: `AmendLawNum` が `令和二年法律第一号` の附則の第二条（見出し無し）にある図 → `{ tag: "Article", article: "2", title: "第二条", amend_law_num: "令和二年法律第一号" }`。本則の条にある図には `amend_law_num` は付かない。
 
-### SPEC-EGOV-LIST-ATTACHMENTS-015 meta の法令 ID・題名・法令番号・取得日時・URL
+### SPEC-EGOV-LIST-ATTACHMENTS-015 meta の法令 ID・題名・法令番号・取得日時・URL・時点
 
 `meta` の各フィールドは次の値になる。
 
@@ -149,7 +149,7 @@ SPEC-EGOV-LIST-ATTACHMENTS-002 の「別記・様式などの中の図」は、�
 - `meta.law_num`: 同じく特定した法令の法令番号。例: `平成十一年法律第百二十七号`
 - `meta.retrieved_at`: 応答を作った日時の ISO 8601 文字列（UTC、例: `2026-09-27T20:32:08.782Z`）
 - `meta.url`: `https://laws.e-gov.go.jp/law/<law_id>`。例: `https://laws.e-gov.go.jp/law/411AC0000000127`
-- `meta.at`: `at` を渡したときだけ付き、渡した値になる。渡さないときはフィールドごと付かない
+- `meta.at`: 渡した `at`。渡さないときは `null`（v0.16.0 ではフィールドごと付かなかった）
 
 ### SPEC-EGOV-LIST-ATTACHMENTS-016 next_actions の example の中身
 

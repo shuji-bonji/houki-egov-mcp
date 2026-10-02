@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-01（PR #91）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/reference-extractor.ts`、`src/services/law-relations.ts`、`src/services/law-service.references.test.ts`、`src/services/reference-extractor.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: houki-egov-mcp #20（施行令・施行規則の関連付けと条文内の参照抽出。v0.10.1 の条の引き継ぎを含む）
 
@@ -201,11 +201,11 @@ SPEC-EGOV-GET-ARTICLE-REFERENCES-005 の internal のうち、条も項も書か
 
 例: 「この法律は、公布の日から施行する。」からは `references: []`、`delegations: []`。
 
-### SPEC-EGOV-GET-ARTICLE-REFERENCES-022 meta に対象の条を利用者向けの表記で返す
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-022 meta に対象の条を利用者向けの表記で返し、項を指定しないときは `meta.paragraph` を null にする
 
-成功の応答の `meta.article` には対象の条番号を `get_law` に渡せる表記で入れ、`paragraph` を指定したときは `meta.paragraph` にその項番号を入れる。
+成功の応答の `meta.article` には対象の条番号を `get_law` に渡せる表記で入れる。`paragraph` を指定したときは `meta.paragraph` にその項番号を入れ、指定しないときは `meta.paragraph` を `null` にする。
 
-例: `article: "57の2"` では `meta.article` は `"57の2"`。`paragraph: 1` を指定したときは `meta.paragraph` が `1`。
+例: `article: "57の2"` では `meta.article` は `"57の2"`。`paragraph: 1` を指定したときは `meta.paragraph` が `1`。`paragraph` を指定しないときは `meta.paragraph` が `null`（v0.16.0 では `paragraph` のキーが無かった）。
 
 ### SPEC-EGOV-GET-ARTICLE-REFERENCES-023 法令に解決できない law_name はエラー `LAW_NOT_FOUND` で、resolve_abbreviation・search_law を案内する
 
@@ -284,18 +284,18 @@ SPEC-EGOV-GET-ARTICLE-REFERENCES-003 で e-Gov に問い合わせる候補名は
 
 ### SPEC-EGOV-GET-ARTICLE-REFERENCES-034 meta に対象の法令の law_id・title・law_num・url・retrieved_at と、渡した at を入れる
 
-成功の応答の `meta` は、SPEC-EGOV-GET-ARTICLE-REFERENCES-022 の `article`・`paragraph` に加えて次を持つ。
+成功の応答の `meta` は、SPEC-EGOV-GET-ARTICLE-REFERENCES-022 の `article`・`paragraph` に加えて次を持つ。`at` を省いたときもキーは無くならない。
 
-| フィールド     | 内容                                                                |
-| -------------- | ------------------------------------------------------------------- |
-| `law_id`       | 解決した法令の法令 ID                                               |
-| `title`        | 解決した法令の正式名称                                              |
-| `law_num`      | 解決した法令の法令番号                                              |
+| フィールド     | 内容                                                                    |
+| -------------- | ----------------------------------------------------------------------- |
+| `law_id`       | 解決した法令の法令 ID                                                   |
+| `title`        | 解決した法令の正式名称                                                  |
+| `law_num`      | 解決した法令の法令番号                                                  |
 | `url`          | e-Gov 法令の公開ページの URL（`https://laws.e-gov.go.jp/law/<law_id>`） |
-| `retrieved_at` | 応答を作った日時の ISO 8601 形式の文字列（UTC）                     |
-| `at`           | 渡した `at`。`at` を省いたときはキーを持たない                      |
+| `retrieved_at` | 応答を作った日時の ISO 8601 形式の文字列（UTC）                         |
+| `at`           | 渡した `at`。`at` を省いたときは `null`                                 |
 
-例: `law_name: "所得税法"`、`article: "57の2"`、`at: "2024-04-01"` の `meta` は `{ law_id: "340AC0000000033", title: "所得税法", law_num: "昭和四十年法律第三十三号", url: "https://laws.e-gov.go.jp/law/340AC0000000033", retrieved_at: "<ISO 8601>", at: "2024-04-01", article: "57の2" }`。`law_name: "所法"`、`article: "57の2"`、`paragraph: 1`（`at` なし）では `at` のキーが無く、`title` は `所得税法`、`paragraph` は `1`。
+例: `law_name: "所得税法"`、`article: "57の2"`、`at: "2024-04-01"` の `meta` は `{ law_id: "340AC0000000033", title: "所得税法", law_num: "昭和四十年法律第三十三号", url: "https://laws.e-gov.go.jp/law/340AC0000000033", retrieved_at: "<ISO 8601>", at: "2024-04-01", article: "57の2", paragraph: null }`。`law_name: "所法"`、`article: "57の2"`、`paragraph: 1`（`at` なし）では `at: null`、`title` は `所得税法`、`paragraph` は `1`（v0.16.0 では `at` のキーが無かった）。
 
 ### SPEC-EGOV-GET-ARTICLE-REFERENCES-035 target_law に委任先の法令の公開ページの URL を入れる
 

@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-01（PR #91）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-relations.ts`、`src/services/law-service.references.test.ts`、`src/services/law-relations.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: houki-egov-mcp #20（施行令・施行規則の関連付けと条文内の参照抽出）
 
@@ -100,11 +100,11 @@ flowchart TD
 
 例: `law_name: "所得税法"` の `related[0]` は `{ relation: "enforcement_order", law_id: "340CO0000000096", title: "所得税法施行令", law_num: "昭和四十年政令第九十六号", law_type: "CabinetOrder", abbr: "所令", url: "https://laws.e-gov.go.jp/law/340CO0000000096" }`。`related[1]` は `law_type: "MinisterialOrdinance"`、`url: "https://laws.e-gov.go.jp/law/340M50000040011"`。
 
-### SPEC-EGOV-GET-RELATED-LAWS-010 成功の応答の meta.retrieved_at に応答を作った日時を入れる
+### SPEC-EGOV-GET-RELATED-LAWS-010 成功の応答の meta に、応答を作った日時と `at: null` を入れる
 
-成功の応答には `meta: { retrieved_at }` を付ける。`retrieved_at` は応答を作った日時の ISO 8601 形式の文字列（UTC、例: `2026-09-27T20:31:35.697Z`）。
+成功の応答には `meta: { retrieved_at, at }` を付ける。`retrieved_at` は応答を作った日時の ISO 8601 形式の文字列（UTC、例: `2026-09-27T20:31:35.697Z`）。このツールは `at` を受け取らないので、`at` は常に `null` である（`meta` を持つツールで `meta` のキーを揃えるため）。
 
-例: `law_name: "所得税法"` の応答の `meta` は `retrieved_at` だけを持ち、その値は `new Date(retrieved_at).toISOString()` と同じ文字列になる。`related` が空の応答（`law_name: "民法"`）にも付く。
+例: `law_name: "所得税法"` の応答の `meta` は `{ retrieved_at: <ISO 8601>, at: null }` で、`retrieved_at` の値は `new Date(retrieved_at).toISOString()` と同じ文字列になる。`related` が空の応答（`law_name: "民法"`）にも同じ形で付く（v0.16.0 の `meta` は `retrieved_at` だけだった）。
 
 ### SPEC-EGOV-GET-RELATED-LAWS-011 法令番号が分からないときは law.law_num を付けない
 

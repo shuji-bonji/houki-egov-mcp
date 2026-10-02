@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-01（PR #91）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-tree.ts`、`src/formatters/markdown.ts`、`src/utils/article-num.ts`、`src/server.test.ts`、`src/tools/handlers.test.ts`、`src/services/law-tree.test.ts`、`src/formatters/markdown.test.ts`、`src/utils/article-num.test.ts`、`CHANGELOG.md`
 - 関連する Issue: houki-egov-mcp #16（Markdown の条・号の表示）、#17（漢数字の条番号・号番号）、#24（本則と附則を分ける）
 
@@ -193,19 +193,20 @@ markdown の応答では、項の直下の表（所得税法 第89条第1項の�
 
 例: `{ law_name: "消費税法", article: "30" }` は `format: "markdown"` と文字列の `markdown` と `meta` を返す。`{ law_name: "消費税法" }` は `format: "toc"` を返す。`{ law_name: "消費税法", article: "2", format: "json" }` は `format: "json"` と `data` と `meta` を返す。
 
-### SPEC-EGOV-GET-LAW-020 meta には法令の識別情報と取得日時が入り、条文を返すときは at も入る
+### SPEC-EGOV-GET-LAW-020 meta には法令の識別情報と取得日時と時点が常に入る
 
-`meta` は次のフィールドを持つ。
+`meta` は、条文を返すとき（`format` が `markdown` か `json`）も目次を返すとき（SPEC-EGOV-GET-LAW-017）も、次のフィールドを持つ。
 
 - `law_id`: e-Gov の法令 ID（例: `"363AC0000000108"`）
 - `title`: 法令名（例: `"消費税法"`）
 - `law_num`: 法令番号（例: `"昭和六十三年法律第百八号"`）
 - `retrieved_at`: 応答を組み立てた日時（ISO 8601 の UTC。例: `"2026-09-27T20:31:34.158Z"`）
 - `url`: e-Gov 法令検索の URL。`https://laws.e-gov.go.jp/law/<law_id>`（例: `"https://laws.e-gov.go.jp/law/363AC0000000108"`）
+- `at`: 渡した `at`。`at` を渡さないときは `null`
 
-条文を返すとき（`format` が `markdown` か `json`）に `at` を渡すと、`meta.at` に渡した値が入る。`at` を渡さないときは `meta` に `at` のキーが無い。
+`meta` にどのキーがあるかは、`format` と `at` の有無で変わらない。markdown の末尾の `時点:` の行（SPEC-EGOV-GET-LAW-021・022）は、今までどおり `at` を渡したときだけ置く。
 
-例: `{ law_name: "消費税法", article: "30", at: "2020-04-01" }` の `meta.at` は `"2020-04-01"`。`{ law_name: "消費税法", article: "30" }` の `meta` には `at` が無い。
+例: `{ law_name: "消費税法", article: "30", at: "2020-04-01" }` の `meta.at` は `"2020-04-01"`。`{ law_name: "消費税法", article: "30" }` の `meta.at` は `null`。`{ law_name: "消費税法", format: "toc", at: "2020-04-01" }` の `meta.at` は `"2020-04-01"`、`{ law_name: "消費税法" }`（目次）の `meta.at` は `null`（v0.16.0 では、条文で `at` を省いたときと目次のときは `meta` に `at` のキーが無かった）。
 
 ### SPEC-EGOV-GET-LAW-021 markdown の条文の末尾に出典・URL・時点・取得日時の行を置く
 
@@ -244,11 +245,11 @@ URL: https://laws.e-gov.go.jp/law/363AC0000000108
 
 例: `{ law_name: "消費税法", article: "第三十条の二", format: "json" }` は `data.article_num: "30_2"`、`data.node.tag: "Article"`、`data.node.attr.Num: "30_2"` を返す。`{ law_name: "消費税法", article: "30", paragraph: 2, format: "json" }` は `data.node.tag: "Paragraph"`、`data.node.attr.Num: "2"` を返す。`{ law_name: "消費税法", article: "2", paragraph: 1, item: 8, format: "json" }` は `data.node.tag: "Item"`、`data.node.attr.Num: "8"` を返す。
 
-### SPEC-EGOV-GET-LAW-024 json の paragraph_num と item_num は、渡した値をそのまま返す
+### SPEC-EGOV-GET-LAW-024 json の paragraph_num と item_num は、渡した値をそのまま返し、渡さないときは null
 
-`format` が `json` のとき、`paragraph` を渡すと `data.paragraph_num` にその値（数値）が入る。`item` を渡すと `data.item_num` に渡した値がそのまま入り、号番号として読み取った後の形（`"8_2"` など）にはしない。`paragraph` を渡さないときは `data` に `paragraph_num` のキーが無く、`item` を渡さないときは `item_num` のキーが無い。
+`format` が `json` のとき、`paragraph` を渡すと `data.paragraph_num` にその値（数値）が入る。`item` を渡すと `data.item_num` に渡した値がそのまま入り、号番号として読み取った後の形（`"8_2"` など）にはしない。`paragraph` を渡さないときの `data.paragraph_num` は `null`（項を補ったときは SPEC-EGOV-GET-LAW-040 の `1`）、`item` を渡さないときの `data.item_num` は `null`。`data` にどのキーがあるかは、渡した引数で変わらない。
 
-例: `{ law_name: "消費税法", article: "2", paragraph: 1, item: "八", format: "json" }` は `data.paragraph_num: 1`、`data.item_num: "八"` を返す（`8` にしない）。`{ law_name: "消費税法", article: "2", format: "json" }` の `data` には `paragraph_num` も `item_num` も無い。
+例: `{ law_name: "消費税法", article: "2", paragraph: 1, item: "八", format: "json" }` は `data.paragraph_num: 1`、`data.item_num: "八"` を返す（`8` にしない）。`{ law_name: "消費税法", article: "2", format: "json" }` の `data` は `paragraph_num: null`、`item_num: null` を持つ（v0.16.0 ではどちらのキーも無かった）。
 
 ### SPEC-EGOV-GET-LAW-025 format が json で article を省くと INVALID_ARGUMENT を返し、目次の取り方を案内する
 
@@ -343,6 +344,12 @@ tools/list の inputSchema の `paragraph` は `type: "integer"`、`minimum: 1` 
 
 例: `{ law_name: "ＰＬ法", article: "3" }` は `製造物責任法第 3 条を返す（`law_name: "PL法"` と同じ応答）`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
 
+### SPEC-EGOV-GET-LAW-040 `item` だけを指定して項を補ったときは、json の `data.paragraph_num` に補った項番号 `1` を入れる
+
+`format` が `json` で、`paragraph` を省いて `item` を指定し、SPEC-EGOV-GET-LAW-011 のとおり項が 1 つの条のその項の号を返すときは、`data.paragraph_num` に補った項番号 `1`（数値）を入れる。`data.node` は号（`tag: "Item"`）のまま、`data.item_num` は渡した `item` のまま（SPEC-EGOV-GET-LAW-024）。
+
+例: 項が 1 つの条（消費税法施行令第14条の3）に `{ law_name: "消費税法施行令", article: "14の3", item: 1, format: "json" }` を渡すと、`data.paragraph_num: 1`、`data.item_num: 1`、`data.node.tag: "Item"` を返す（v0.16.0 では `data` に `paragraph_num` が無かった）。
+
 ## できないこと
 
 - 編・章・節や附則 1 本をまとめて取ること（`get_law_range`）
@@ -373,5 +380,3 @@ tools/list の inputSchema の `paragraph` は `type: "integer"`、`minimum: 1` 
 11. **`at` による時点指定。** → SPEC-EGOV-GET-LAW-034・SPEC-EGOV-GET-LAW-035
 12. **法令名が完全一致しないとき、e-Gov の検索の先頭の法令を使う。** → houki-egov-mcp #45
 15. **条の探し方が本則に限られていない。** → houki-egov-mcp #51
-17. **目次の `meta` に `at` が付かない。** → houki-egov-mcp #64
-18. **`item` だけを指定して項を補ったとき、json の `paragraph_num` が付かない。** → houki-egov-mcp #64

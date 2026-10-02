@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20260930-bugfix-batch` は 2026-09-30（PR #81）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20260930-bugfix-batch` は 2026-09-30（PR #81）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261003-t5-docs-mismatch` は 2026-10-01（PR #92）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/knowledge/law-hierarchy.ts`、`src/tools/handlers.test.ts`、`src/knowledge/law-hierarchy.test.ts`、`src/server.test.ts`
 - 関連する Issue: なし
 
@@ -105,8 +105,6 @@ SPEC-EGOV-EXPLAIN-LAW-TYPE-001・002・003 の応答（`found: true`）は、`re
 
 例: `name: "政令"` も `name: "通達"` も `related_tools` は `["search_law", "get_law", "get_toc"]`。
 
-（同じ応答の `see_also` は houki-egov-mcp #56 で扱うので、この ID では約束にしない。）
-
 ### SPEC-EGOV-EXPLAIN-LAW-TYPE-012 `info` の任意のフィールド `aliases`・`law_type_code`・`notes`
 
 `info` は、SPEC-EGOV-EXPLAIN-LAW-TYPE-006 のフィールドのほかに、種別によって次のフィールドを持つ。
@@ -132,8 +130,6 @@ SPEC-EGOV-EXPLAIN-LAW-TYPE-001・002・003 の応答（`found: true`）は、`re
 SPEC-EGOV-EXPLAIN-LAW-TYPE-005 の応答（`found: false`）は `next_actions` を持つ。`next_actions` は 1 件で、`action: "list_known_law_types"`・`reason: "知られている法令種別は次のとおり"`・`example.names`（収録している種別の名前の配列）を持つ。`example.names` の名前と順は、`hint` の `試せる名前: ` の後に並べた名前と同じ。
 
 例: `name: "架空法令"` の `next_actions[0].action` は `list_known_law_types` で、`example.names` は `憲法`・`法律`・`政令`・`省令`・`規則`・`条例`・`告示`・`訓令`・`通達` を含み、`example.names.join(", ")` は `hint` の `試せる名前: ` より後ろの文字列と同じ。
-
-（同じ応答の `see_also` は houki-egov-mcp #56 で扱うので、この ID では約束にしない。）
 
 ### SPEC-EGOV-EXPLAIN-LAW-TYPE-015 応答の `name` は渡した値のまま返す
 
@@ -178,6 +174,12 @@ SPEC-EGOV-EXPLAIN-LAW-TYPE-002 の別名には、次のものも含む。
 
 空白だけの `name` は、SPEC-EGOV-EXPLAIN-LAW-TYPE-004 の「前後の空白を除いてから照合する」の対象ではなく、照合の前に止まる。`found: false` の応答（SPEC-EGOV-EXPLAIN-LAW-TYPE-005）ではない。
 
+### SPEC-EGOV-EXPLAIN-LAW-TYPE-020 `see_also` は MCP クライアントから開ける GitHub の URL
+
+`found: true` の応答（SPEC-EGOV-EXPLAIN-LAW-TYPE-001〜003）と `found: false` の応答（SPEC-EGOV-EXPLAIN-LAW-TYPE-005）は、どちらも `see_also` に `https://github.com/shuji-bonji/houki-egov-mcp/blob/main/docs/LAW-HIERARCHY.md` を入れる。リポジトリの中の相対パス（`docs/LAW-HIERARCHY.md`）は、npm のパッケージに入らず MCP クライアントからは開けないので使わない。キーは消さない。
+
+例: `name: "政令"` の `see_also` も `name: "架空法令"` の `see_also` も `https://github.com/shuji-bonji/houki-egov-mcp/blob/main/docs/LAW-HIERARCHY.md`（v0.16.0 では `docs/LAW-HIERARCHY.md`）。
+
 ## できないこと
 
 - 個々の法令（例: `消費税法施行令`）がどの種別かを判定すること（法令の種別は `search_law` や `get_law` の応答の `law_type`）
@@ -193,9 +195,9 @@ SPEC-EGOV-EXPLAIN-LAW-TYPE-002 の別名には、次のものも含む。
 
 1. **`通知` は `通達` の別名に入っているが、`通知` という別の種別の解説を返す。** → houki-egov-mcp #62
 2. **`Rule`・`ImperialOrdinance` などの法令種別コードを解決しない。** → houki-egov-mcp #62
-3. **`found: true` の応答の `related_tools` と `see_also`、`info` の任意のフィールド。** → SPEC-EGOV-EXPLAIN-LAW-TYPE-011・SPEC-EGOV-EXPLAIN-LAW-TYPE-012・SPEC-EGOV-EXPLAIN-LAW-TYPE-013
-4. **`found: false` の応答の `next_actions` と `see_also`。** → SPEC-EGOV-EXPLAIN-LAW-TYPE-014
+3. **`found: true` の応答の `related_tools` と `see_also`、`info` の任意のフィールド。** → SPEC-EGOV-EXPLAIN-LAW-TYPE-011・SPEC-EGOV-EXPLAIN-LAW-TYPE-012・SPEC-EGOV-EXPLAIN-LAW-TYPE-013・SPEC-EGOV-EXPLAIN-LAW-TYPE-020
+4. **`found: false` の応答の `next_actions` と `see_also`。** → SPEC-EGOV-EXPLAIN-LAW-TYPE-014・SPEC-EGOV-EXPLAIN-LAW-TYPE-020
 5. **応答の `name` は渡した値のまま返す。** → SPEC-EGOV-EXPLAIN-LAW-TYPE-015
 6. **大文字と小文字、全角と半角を区別する。** → SPEC-EGOV-EXPLAIN-LAW-TYPE-016
-7. **`see_also` がリポジトリの中の相対パスで、MCP クライアントからは開けない。** → houki-egov-mcp #56
+7. **`see_also` がリポジトリの中の相対パスで、MCP クライアントからは開けない。** → SPEC-EGOV-EXPLAIN-LAW-TYPE-020
 8. **別名の一覧。** → SPEC-EGOV-EXPLAIN-LAW-TYPE-017

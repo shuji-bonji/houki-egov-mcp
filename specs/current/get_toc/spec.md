@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）。差分 `20261003-t4-response-shape` は 2026-10-01（PR #91）。差分 `20261003-t5-docs-mismatch` は 2026-10-01（PR #92）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`（`get_toc`）、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-tree.ts`、`src/formatters/markdown.ts`、`src/services/law-service.suppl-toc.test.ts`、`src/services/law-service.range.test.ts`、`src/services/law-tree.test.ts`、`src/formatters/markdown.test.ts`
 - 関連する Issue: houki-egov-mcp #24（本則と附則を分ける）、#22（`toc[].path`）
 
@@ -181,7 +181,7 @@ flowchart TD
 
 ### SPEC-EGOV-GET-TOC-015 応答の `meta`
 
-応答の `meta` は次のフィールドを持つ。
+応答の `meta` は次のフィールドを持つ。`at` を省いたときもキーは無くならない。
 
 | フィールド     | 内容                                                                   |
 | -------------- | ---------------------------------------------------------------------- |
@@ -190,9 +190,9 @@ flowchart TD
 | `law_num`      | 法令番号                                                               |
 | `retrieved_at` | 取得日時（ISO 8601 の UTC。例: `2026-09-27T20:31:59.713Z`）            |
 | `url`          | e-Gov 法令検索の法令のページ。`https://laws.e-gov.go.jp/law/<law_id>` |
-| `at`           | 渡した `at`。`at` を省いたときは付かない                               |
+| `at`           | 渡した `at`。`at` を省いたときは `null`                                |
 
-例: 法令 ID `999AC0000000001`・法令名 `テスト法`・法令番号 `令和七年法律第一号` の法令では、`meta` は `{ law_id: "999AC0000000001", title: "テスト法", law_num: "令和七年法律第一号", retrieved_at: <ISO 8601>, url: "https://laws.e-gov.go.jp/law/999AC0000000001" }` で、`at` を持たない。
+例: 法令 ID `999AC0000000001`・法令名 `テスト法`・法令番号 `令和七年法律第一号` の法令を `at` なしで取ると、`meta` は `{ law_id: "999AC0000000001", title: "テスト法", law_num: "令和七年法律第一号", retrieved_at: <ISO 8601>, url: "https://laws.e-gov.go.jp/law/999AC0000000001", at: null }`（v0.16.0 では `at` のキーが無かった）。`at: "2020-04-01"` を渡したときは `at: "2020-04-01"`（SPEC-EGOV-GET-TOC-018）。
 
 ### SPEC-EGOV-GET-TOC-016 `node_count` は返した本則の目次のノード数
 
@@ -279,5 +279,4 @@ tools/list の inputSchema の `depth` は `type: "integer"`、`minimum: 1` を�
 4. **`suppl: "full"` と `depth` を一緒に渡したとき。** → SPEC-EGOV-GET-TOC-019
 5. **改正履歴の取得に失敗したとき。** → SPEC-EGOV-GET-TOC-020・SPEC-EGOV-GET-TOC-021
 6. **`depth` に 0 以下を渡したとき。** → SPEC-EGOV-GET-TOC-023
-7. **`depth` の説明と、編を持たない法令での動き。** → houki-egov-mcp #56
 9. **法令名が完全一致しないとき、検索結果の先頭の法令を返す。** → houki-egov-mcp #45
