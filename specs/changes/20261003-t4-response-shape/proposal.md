@@ -24,28 +24,28 @@ LLM は「フィールドが無い」と「値が無い」を区別しにくい�
 
 ## T4 の規則をどこまで当てたか
 
-| 規則 | この差分で当てた範囲 | 当てなかった範囲（理由） |
-| --- | --- | --- |
-| `meta` に `at` と `retrieved_at` を常に付ける | `meta` を持つ 10 ツールすべて。`at` を受け取る 8 ツールは渡さないとき `null`、受け取らない `get_law_revisions` / `get_related_laws` は常に `null` | `meta` を持たない 4 ツール（`search_law` / `search_fulltext` / `resolve_abbreviation` / `explain_law_type`）。`meta` を新しく足すのは「応答の形を揃える」を超えるため。下の「人が判断すること」1 |
-| 値が無いフィールドは `null` | Issue が名指しした `meta.at`・`data.paragraph_num`・`data.item_num`・`meta.paragraph`（`get_article_references`）・`revisions[]` の 8 つのキー・`saved.law_revision_id` | エラーの本文（SPEC-EGOV-COMMON-ERRORS-008 の「値を決めたときだけ付く」）、`saved`（`save` なし）、`next_actions` / `range.next_from_article`（続きが無いとき）など、Issue の外の「付かない」フィールド。下の「人が判断すること」2 |
-| markdown | 変えない。末尾の `時点:` の行は今までどおり `at` を渡したときだけ置く | 文字列の行は「フィールドの有無」の問題に当たらないため |
+| 規則                                          | この差分で当てた範囲                                                                                                                                                    | 当てなかった範囲（理由）                                                                                                                                                                                                          |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `meta` に `at` と `retrieved_at` を常に付ける | `meta` を持つ 10 ツールすべて。`at` を受け取る 8 ツールは渡さないとき `null`、受け取らない `get_law_revisions` / `get_related_laws` は常に `null`                       | `meta` を持たない 4 ツール（`search_law` / `search_fulltext` / `resolve_abbreviation` / `explain_law_type`）。`meta` を新しく足すのは「応答の形を揃える」を超えるため。下の「人が判断すること」1                                  |
+| 値が無いフィールドは `null`                   | Issue が名指しした `meta.at`・`data.paragraph_num`・`data.item_num`・`meta.paragraph`（`get_article_references`）・`revisions[]` の 8 つのキー・`saved.law_revision_id` | エラーの本文（SPEC-EGOV-COMMON-ERRORS-008 の「値を決めたときだけ付く」）、`saved`（`save` なし）、`next_actions` / `range.next_from_article`（続きが無いとき）など、Issue の外の「付かない」フィールド。下の「人が判断すること」2 |
+| markdown                                      | 変えない。末尾の `時点:` の行は今までどおり `at` を渡したときだけ置く                                                                                                   | 文字列の行は「フィールドの有無」の問題に当たらないため                                                                                                                                                                            |
 
 ## 変わる振る舞い
 
-| 場面 | v0.16.0 | この差分 |
-| --- | --- | --- |
-| 8 ツールで `at` を省いた（`get_law` / `get_toc` / `get_law_range` / `get_article_references` / `list_attachments` / `get_attachment` / `get_law_file` / `verify_citations`） | `meta` に `at` のキーが無い | `meta.at: null` |
-| `get_law` の目次（`format: "toc"`、または `article` 省略） | `at` を渡しても `meta` に `at` が無い | `meta.at` に渡した値、渡さないときは `null`（GET-LAW-020） |
-| `get_law_revisions` / `get_related_laws` | `meta` に `at` が無い | `meta.at: null`（`at` を受け取らないツール） |
-| `get_law` の json で `paragraph` / `item` を省いた | `data` に `paragraph_num` / `item_num` のキーが無い | `null`（GET-LAW-024） |
-| `get_law` の json で `item` だけを渡し、項が 1 つの条の号を返した | `data.paragraph_num` が無い | `data.paragraph_num: 1`（GET-LAW-040） |
-| `get_article_references` で `paragraph` を省いた | `meta.paragraph` が無い | `meta.paragraph: null`（GET-ARTICLE-REFERENCES-022） |
-| `get_law_range` を打ち切った | 続きの例は `law_name`・`path`（`suppl_index`）・`from_article` だけ | 渡した `max_chars` と `at` も入れる（GET-LAW-RANGE-008） |
-| `get_law_revisions` の並び | e-Gov が返した順 | ツールが施行日の新しい順に並べる（未施行を含む。同じ日は e-Gov の順）。2026-10-03 の e-Gov の順と同じなので、見た目は変わらない（GET-LAW-REVISIONS-016） |
-| `get_law_revisions` で e-Gov の要素にキーが無い | キーが無い | 8 つのキーをすべて持ち、値が無ければ `null`（GET-LAW-REVISIONS-002） |
-| `get_attachment` のファイル名だけの `src` が 2 件以上に当たる | 一覧で先の添付を黙って返す | `INVALID_ARGUMENT`。候補の `src` を `hint` と `next_actions` で示す（GET-ATTACHMENT-029） |
-| `get_law_file` の `save: true` で Content-Disposition が無い | `saved.law_revision_id` に法令 ID | `null`（GET-LAW-FILE-003） |
-| `get_law_file` の Content-Disposition に `filename` と `filename*` の両方がある | ヘッダーの先に書かれたほう | `filename*`（GET-LAW-FILE-004） |
+| 場面                                                                                                                                                                         | v0.16.0                                                             | この差分                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8 ツールで `at` を省いた（`get_law` / `get_toc` / `get_law_range` / `get_article_references` / `list_attachments` / `get_attachment` / `get_law_file` / `verify_citations`） | `meta` に `at` のキーが無い                                         | `meta.at: null`                                                                                                                                          |
+| `get_law` の目次（`format: "toc"`、または `article` 省略）                                                                                                                   | `at` を渡しても `meta` に `at` が無い                               | `meta.at` に渡した値、渡さないときは `null`（GET-LAW-020）                                                                                               |
+| `get_law_revisions` / `get_related_laws`                                                                                                                                     | `meta` に `at` が無い                                               | `meta.at: null`（`at` を受け取らないツール）                                                                                                             |
+| `get_law` の json で `paragraph` / `item` を省いた                                                                                                                           | `data` に `paragraph_num` / `item_num` のキーが無い                 | `null`（GET-LAW-024）                                                                                                                                    |
+| `get_law` の json で `item` だけを渡し、項が 1 つの条の号を返した                                                                                                            | `data.paragraph_num` が無い                                         | `data.paragraph_num: 1`（GET-LAW-040）                                                                                                                   |
+| `get_article_references` で `paragraph` を省いた                                                                                                                             | `meta.paragraph` が無い                                             | `meta.paragraph: null`（GET-ARTICLE-REFERENCES-022）                                                                                                     |
+| `get_law_range` を打ち切った                                                                                                                                                 | 続きの例は `law_name`・`path`（`suppl_index`）・`from_article` だけ | 渡した `max_chars` と `at` も入れる（GET-LAW-RANGE-008）                                                                                                 |
+| `get_law_revisions` の並び                                                                                                                                                   | e-Gov が返した順                                                    | ツールが施行日の新しい順に並べる（未施行を含む。同じ日は e-Gov の順）。2026-10-03 の e-Gov の順と同じなので、見た目は変わらない（GET-LAW-REVISIONS-016） |
+| `get_law_revisions` で e-Gov の要素にキーが無い                                                                                                                              | キーが無い                                                          | 8 つのキーをすべて持ち、値が無ければ `null`（GET-LAW-REVISIONS-002）                                                                                     |
+| `get_attachment` のファイル名だけの `src` が 2 件以上に当たる                                                                                                                | 一覧で先の添付を黙って返す                                          | `INVALID_ARGUMENT`。候補の `src` を `hint` と `next_actions` で示す（GET-ATTACHMENT-029）                                                                |
+| `get_law_file` の `save: true` で Content-Disposition が無い                                                                                                                 | `saved.law_revision_id` に法令 ID                                   | `null`（GET-LAW-FILE-003）                                                                                                                               |
+| `get_law_file` の Content-Disposition に `filename` と `filename*` の両方がある                                                                                              | ヘッダーの先に書かれたほう                                          | `filename*`（GET-LAW-FILE-004）                                                                                                                          |
 
 ## 変わらない振る舞い
 
@@ -61,27 +61,27 @@ LLM は「フィールドが無い」と「値が無い」を区別しにくい�
 
 ### #64
 
-| 決めること | 答え |
-| --- | --- |
-| 目次の `meta` にも `at` を付けるか | 付ける。渡さないときは `null`（SPEC-EGOV-GET-LAW-020） |
-| 項を補ったときに `data.paragraph_num` を返すか | 返す。値は補った項番号 `1`（SPEC-EGOV-GET-LAW-040） |
+| 決めること                                          | 答え                                                            |
+| --------------------------------------------------- | --------------------------------------------------------------- |
+| 目次の `meta` にも `at` を付けるか                  | 付ける。渡さないときは `null`（SPEC-EGOV-GET-LAW-020）          |
+| 項を補ったときに `data.paragraph_num` を返すか      | 返す。値は補った項番号 `1`（SPEC-EGOV-GET-LAW-040）             |
 | 続きの呼び出し例に、渡された `max_chars` を入れるか | 入れる。同じ理由で `at` も入れる（SPEC-EGOV-GET-LAW-RANGE-008） |
 
 ### #65
 
-| 決めること | 答え |
-| --- | --- |
+| 決めること                                                                    | 答え                                                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | description を e-Gov の値に合わせるか、日本語の説明を別のフィールドで付けるか | description を e-Gov の値（`CurrentEnforced` / `PreviousEnforced` / `UnEnforced`）に合わせる（T5 の文書の行。差分 `20261003-t5-docs-mismatch` の「実装 PR で直す文書」）。日本語のフィールドは足さない（SPEC-EGOV-GET-LAW-REVISIONS-017。下の「人が判断すること」3） |
-| 「最新」の順と、ツールで並べ替えるか | 施行日の新しい順（未施行を含む）。ツールで並べ替える（SPEC-EGOV-GET-LAW-REVISIONS-016・009） |
-| 値の無いフィールドを `null` に揃えるか | `null` に揃える（SPEC-EGOV-GET-LAW-REVISIONS-002） |
+| 「最新」の順と、ツールで並べ替えるか                                          | 施行日の新しい順（未施行を含む）。ツールで並べ替える（SPEC-EGOV-GET-LAW-REVISIONS-016・009）                                                                                                                                                                         |
+| 値の無いフィールドを `null` に揃えるか                                        | `null` に揃える（SPEC-EGOV-GET-LAW-REVISIONS-002）                                                                                                                                                                                                                   |
 
 ### #66
 
-| 決めること | 答え |
-| --- | --- |
+| 決めること                                                                    | 答え                                                                                                |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | ファイル名だけで複数の添付に当たるときに、エラー（候補の `src` 付き）にするか | エラーにする。code は `INVALID_ARGUMENT`（SPEC-EGOV-GET-ATTACHMENT-029。下の「人が判断すること」4） |
-| Content-Disposition が無いときに `saved.law_revision_id` を `null` にするか | `null` にする（SPEC-EGOV-GET-LAW-FILE-003）。保存先のディレクトリは法令 ID のまま |
-| `filename*` を優先するか | 優先する（SPEC-EGOV-GET-LAW-FILE-004） |
+| Content-Disposition が無いときに `saved.law_revision_id` を `null` にするか   | `null` にする（SPEC-EGOV-GET-LAW-FILE-003）。保存先のディレクトリは法令 ID のまま                   |
+| `filename*` を優先するか                                                      | 優先する（SPEC-EGOV-GET-LAW-FILE-004）                                                              |
 
 ## 確かめた値
 
@@ -94,34 +94,34 @@ LLM は「フィールドが無い」と「値が無い」を区別しにくい�
 
 ## 足す仕様 ID（ADDED、4 件）
 
-| 単位 | 仕様 ID | 内容 |
-| --- | --- | --- |
-| get_law | SPEC-EGOV-GET-LAW-040 | `item` だけで項を補ったときは `data.paragraph_num: 1` |
-| get_law_revisions | SPEC-EGOV-GET-LAW-REVISIONS-016 | 施行日の新しい順に並べ、未施行を含める。ツールで並べ替える |
-| get_law_revisions | SPEC-EGOV-GET-LAW-REVISIONS-017 | `current_revision_status` は e-Gov の値のまま |
-| get_attachment | SPEC-EGOV-GET-ATTACHMENT-029 | ファイル名だけの `src` が 2 件以上に当たるときは `INVALID_ARGUMENT` と候補 |
+| 単位              | 仕様 ID                         | 内容                                                                       |
+| ----------------- | ------------------------------- | -------------------------------------------------------------------------- |
+| get_law           | SPEC-EGOV-GET-LAW-040           | `item` だけで項を補ったときは `data.paragraph_num: 1`                      |
+| get_law_revisions | SPEC-EGOV-GET-LAW-REVISIONS-016 | 施行日の新しい順に並べ、未施行を含める。ツールで並べ替える                 |
+| get_law_revisions | SPEC-EGOV-GET-LAW-REVISIONS-017 | `current_revision_status` は e-Gov の値のまま                              |
+| get_attachment    | SPEC-EGOV-GET-ATTACHMENT-029    | ファイル名だけの `src` が 2 件以上に当たるときは `INVALID_ARGUMENT` と候補 |
 
 ## 変える仕様 ID（MODIFIED、17 件）
 
-| 単位 | 仕様 ID | 変わる点 |
-| --- | --- | --- |
-| get_law | SPEC-EGOV-GET-LAW-020 | `meta.at` を常に置く（目次を含む）。渡さないときは `null` |
-| get_law | SPEC-EGOV-GET-LAW-024 | `data.paragraph_num` / `data.item_num` を渡さないときは `null` |
-| get_toc | SPEC-EGOV-GET-TOC-015 | `meta.at` を省いたときは `null`（「付かない」から） |
-| get_law_range | SPEC-EGOV-GET-LAW-RANGE-008 | 続きの例に渡した `max_chars` と `at` を入れる |
-| get_law_range | SPEC-EGOV-GET-LAW-RANGE-025 | `meta.at` を省いたときは `null` |
-| get_law_revisions | SPEC-EGOV-GET-LAW-REVISIONS-002 | `meta.at: null`、`revisions[]` の 8 つのキーを常に置き、値が無ければ `null`、並びは 016 |
-| get_law_revisions | SPEC-EGOV-GET-LAW-REVISIONS-009 | 「先頭」を 016 の順の先頭にする |
-| get_related_laws | SPEC-EGOV-GET-RELATED-LAWS-010 | `meta` に `at: null` を足す |
-| get_article_references | SPEC-EGOV-GET-ARTICLE-REFERENCES-022 | `meta.paragraph` を省いたときは `null` |
-| get_article_references | SPEC-EGOV-GET-ARTICLE-REFERENCES-034 | `meta.at` を省いたときは `null`（「キーを持たない」から） |
-| list_attachments | SPEC-EGOV-LIST-ATTACHMENTS-015 | `meta.at` を渡さないときは `null` |
-| get_attachment | SPEC-EGOV-GET-ATTACHMENT-002 | ファイル名で 1 件に決まるときだけ引く |
-| get_attachment | SPEC-EGOV-GET-ATTACHMENT-014 | `meta.at` を渡さないときは `null` |
-| get_law_file | SPEC-EGOV-GET-LAW-FILE-001 | `meta.at` を渡さないときは `null` |
-| get_law_file | SPEC-EGOV-GET-LAW-FILE-003 | 法令履歴 ID が分からないときは `saved.law_revision_id: null` |
-| get_law_file | SPEC-EGOV-GET-LAW-FILE-004 | `filename*` を優先する |
-| verify_citations | SPEC-EGOV-VERIFY-CITATIONS-021 | `meta.at` を渡さないときは `null`（「キーを置かない」から） |
+| 単位                   | 仕様 ID                              | 変わる点                                                                                |
+| ---------------------- | ------------------------------------ | --------------------------------------------------------------------------------------- |
+| get_law                | SPEC-EGOV-GET-LAW-020                | `meta.at` を常に置く（目次を含む）。渡さないときは `null`                               |
+| get_law                | SPEC-EGOV-GET-LAW-024                | `data.paragraph_num` / `data.item_num` を渡さないときは `null`                          |
+| get_toc                | SPEC-EGOV-GET-TOC-015                | `meta.at` を省いたときは `null`（「付かない」から）                                     |
+| get_law_range          | SPEC-EGOV-GET-LAW-RANGE-008          | 続きの例に渡した `max_chars` と `at` を入れる                                           |
+| get_law_range          | SPEC-EGOV-GET-LAW-RANGE-025          | `meta.at` を省いたときは `null`                                                         |
+| get_law_revisions      | SPEC-EGOV-GET-LAW-REVISIONS-002      | `meta.at: null`、`revisions[]` の 8 つのキーを常に置き、値が無ければ `null`、並びは 016 |
+| get_law_revisions      | SPEC-EGOV-GET-LAW-REVISIONS-009      | 「先頭」を 016 の順の先頭にする                                                         |
+| get_related_laws       | SPEC-EGOV-GET-RELATED-LAWS-010       | `meta` に `at: null` を足す                                                             |
+| get_article_references | SPEC-EGOV-GET-ARTICLE-REFERENCES-022 | `meta.paragraph` を省いたときは `null`                                                  |
+| get_article_references | SPEC-EGOV-GET-ARTICLE-REFERENCES-034 | `meta.at` を省いたときは `null`（「キーを持たない」から）                               |
+| list_attachments       | SPEC-EGOV-LIST-ATTACHMENTS-015       | `meta.at` を渡さないときは `null`                                                       |
+| get_attachment         | SPEC-EGOV-GET-ATTACHMENT-002         | ファイル名で 1 件に決まるときだけ引く                                                   |
+| get_attachment         | SPEC-EGOV-GET-ATTACHMENT-014         | `meta.at` を渡さないときは `null`                                                       |
+| get_law_file           | SPEC-EGOV-GET-LAW-FILE-001           | `meta.at` を渡さないときは `null`                                                       |
+| get_law_file           | SPEC-EGOV-GET-LAW-FILE-003           | 法令履歴 ID が分からないときは `saved.law_revision_id: null`                            |
+| get_law_file           | SPEC-EGOV-GET-LAW-FILE-004           | `filename*` を優先する                                                                  |
+| verify_citations       | SPEC-EGOV-VERIFY-CITATIONS-021       | `meta.at` を渡さないときは `null`（「キーを置かない」から）                             |
 
 ## 消す仕様 ID（REMOVED）
 
