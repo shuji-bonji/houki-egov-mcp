@@ -286,11 +286,14 @@ export async function handleGetLawRevisions(args: GetLawRevisionsArgs) {
 
 /**
  * resolve_abbreviation — 略称解決（@shuji-bonji/houki-abbreviations 経由）
+ *
+ * 全角英数字・ダッシュ類・全角空白は揃えてから辞書と照合する（SPEC-EGOV-RESOLVE-ABBREVIATION-011）。
+ * 辞書のエントリはどの管轄でも返し、`in_scope` と `hint` で管轄を示す（012・013。houki-nta-mcp と同じ形）。
  */
 export async function handleResolveAbbreviation(args: ResolveAbbreviationArgs) {
-  const result = resolveAbbreviation(args.abbr);
+  const result = resolveAbbreviation(args.abbr, { normalize: true });
   if (!result) {
-    // ABBREVIATION_NOT_FOUND は致命的ではないため、エラー応答ではなく
+    // 辞書に無い略称は致命的ではないため、エラー応答ではなく
     // 既存の {abbr, resolved: null, note} 形を維持して後方互換を保つ。
     // ただし next_actions を付け、LLM が次に search_law を試せるようにする。
     return {
@@ -300,9 +303,14 @@ export async function handleResolveAbbreviation(args: ResolveAbbreviationArgs) {
       next_actions: [NEXT_ACTIONS.searchLaw(args.abbr)],
     };
   }
+  if (result.source_mcp_hint === 'houki-egov') {
+    return { abbr: args.abbr, resolved: result, in_scope: true };
+  }
   return {
     abbr: args.abbr,
     resolved: result,
+    in_scope: false,
+    hint: `このエントリは ${result.source_mcp_hint} の管轄です。${result.source_mcp_hint}-mcp で取得してください。`,
   };
 }
 

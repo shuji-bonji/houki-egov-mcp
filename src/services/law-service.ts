@@ -182,11 +182,12 @@ function unavailableCodeOf(err: unknown): string | null {
  * 適切な MCP に透過的にルーティングする。
  *
  * `houki-egov` 管轄、または辞書に未登録の場合は `null` を返し、通常フローに進める。
+ * 辞書は全角英数字・ダッシュ類・全角空白を揃えてから引く（v0.16.0、SPEC-EGOV-GET-LAW-039 など）。
  */
 export function checkAbbreviationScope(name: string): LawServiceError | null {
   const trimmed = name.trim();
   if (!trimmed) return null;
-  const abbr = resolveAbbreviation(trimmed);
+  const abbr = resolveAbbreviation(trimmed, { normalize: true });
   if (!abbr) return null;
   if (abbr.source_mcp_hint === 'houki-egov') return null;
   return makeError(
@@ -237,7 +238,7 @@ export async function resolveLawId(
   const trimmed = lawName.trim();
   if (!trimmed) return null;
 
-  const abbr = resolveAbbreviation(trimmed);
+  const abbr = resolveAbbreviation(trimmed, { normalize: true });
   if (abbr?.law_id) {
     return { law_id: abbr.law_id, title: abbr.formal, law_num: abbr.law_num };
   }
@@ -301,8 +302,13 @@ export async function searchLawByKeyword(opts: {
     });
   }
 
-  // 略称が当たれば formal を使って検索
-  const abbr = resolveAbbreviation(trimmed);
+  // houki-egov の管轄でない略称（通達など）は e-Gov を引かずに OUT_OF_SCOPE（SPEC-EGOV-SEARCH-LAW-015）
+  const scopeError = checkAbbreviationScope(trimmed);
+  if (scopeError) return scopeError;
+
+  // 略称が当たれば formal を使って検索。全角英数字・ダッシュ類・全角空白は揃えてから照合する
+  // （SPEC-EGOV-SEARCH-LAW-014）。当たらなければ渡した値のまま e-Gov に渡す
+  const abbr = resolveAbbreviation(trimmed, { normalize: true });
   const searchTitle = abbr?.formal ?? trimmed;
 
   const cacheKey = `${searchTitle}|${opts.law_type ?? ''}|${opts.limit ?? 10}`;
@@ -1745,7 +1751,7 @@ async function resolveLawForVerify(
     };
   }
 
-  const abbr = resolveAbbreviation(name);
+  const abbr = resolveAbbreviation(name, { normalize: true });
   if (abbr?.law_id) {
     return {
       kind: 'ok',
