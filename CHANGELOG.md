@@ -15,6 +15,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.16.0] - 2026-10-01
+
+✨ **minor リリース** — 段階 4（houki-hub `docs/notes/2026-09-29-plan-spec-issues.md`）。仕様 PR [#84](https://github.com/shuji-bonji/houki-egov-mcp/pull/84)（T1 引数の検査）/ [#85](https://github.com/shuji-bonji/houki-egov-mcp/pull/85)（T2 code）/ [#86](https://github.com/shuji-bonji/houki-egov-mcp/pull/86)（T3 正規化）で承認した差分と、その書き残しを直した仕様 PR [#89](https://github.com/shuji-bonji/houki-egov-mcp/pull/89)（`20261002-t1-followups`）を実装し、`specs/current/` に取り込んだ。対象 Issue: #46 #47 #48 #49 #52 #53 #54 #57 #69。
+
+### 互換性
+
+0.x の minor だが、応答の `code` と、受け付ける引数の範囲が変わる。呼び出し側で `code` を見て分岐している場合は次を確かめること。旧 code を並行して返す期間は設けない。
+
+- **T2: code が変わる 3 つの場面**
+  - 法令名から law_id を決める e-Gov の検索が通信の失敗で終わったとき、`LAW_NOT_FOUND` ではなく `SOURCE_UNAVAILABLE` / `SOURCE_TIMEOUT` / `SOURCE_API_ERROR` / `SOURCE_RATE_LIMITED` を返す（`retryable` 付き）。`LAW_NOT_FOUND` は検索が成功して 0 件のときだけ。対象は `get_law` など 10 ツール（#46。SPEC-EGOV-COMMON-ERRORS-027・029、SPEC-EGOV-GET-LAW-038 ほか）
+  - e-Gov に接続できないとき（`fetch failed` の `cause.code` が `ENOTFOUND` / `EAI_AGAIN` / `ECONNREFUSED` / `ECONNRESET` / `ETIMEDOUT`）、`SOURCE_API_ERROR` ではなく `SOURCE_UNAVAILABLE` を返し、`detail.cause` にその code を入れる（#69。SPEC-EGOV-COMMON-ERRORS-028）
+  - `get_attachment` / `get_law_file` の `save: true` で 50 MB を超えるファイルは、`INVALID_ARGUMENT` ではなく `FILE_TOO_LARGE`（`retryable: false`、`detail.bytes`）。応答の Content-Length で分かるときは本文を読まない（#49。SPEC-EGOV-COMMON-ERRORS-030、SPEC-EGOV-GET-ATTACHMENT-027、SPEC-EGOV-GET-LAW-FILE-021）
+  - あわせて、`verify_citations` で e-Gov との通信と関係の無い例外は `SOURCE_API_ERROR` ではなく `INTERNAL_ERROR`（SPEC-EGOV-VERIFY-CITATIONS-043）。ローカル DB の `sync_state.last_sync_date` を解釈できないときは、`search_fulltext` が `INTERNAL_ERROR`（`retryable: false`）、`--status` が `[ERROR] 同期の記録を読めません: …` を出して exit 1（SPEC-EGOV-COMMON-ERRORS-031、SPEC-EGOV-SEARCH-FULLTEXT-035、SPEC-EGOV-CLI-STATUS-009）
+- **T1: 丸めずに `INVALID_ARGUMENT` にする引数**
+  - `search_law` の `limit`（1〜50）、`search_fulltext` の `limit`（1〜30。今までは 1〜30 に丸めていた）、`get_law_revisions` の `latest`、`get_toc` の `depth`、`get_law` / `get_article_references` / `verify_citations` の `paragraph`、`get_law_range` の `suppl_index` は 1 以上の整数。0・負の数・小数・上限を超える値は丸めずに `INVALID_ARGUMENT` で、e-Gov に問い合わせない（#54 #48。SPEC-EGOV-COMMON-ERRORS-023、SPEC-EGOV-SEARCH-LAW-013、SPEC-EGOV-SEARCH-FULLTEXT-033 ほか）。`get_law_range` の `max_chars` も整数にした（2,000〜120,000 は変わらない）
+  - 必須の文字列（`keyword` / `law_name` / `abbr` / `name` / `article` / `citations[].article`）の空文字と空白だけは、どのツールでも `INVALID_ARGUMENT`（#53。SPEC-EGOV-COMMON-ERRORS-025・026）。今まではツールによって `LAW_NOT_FOUND`・`resolved: null`・`hits: []` を返していた。`get_attachment` の空白だけの `src` は省いたときと同じ zip（SPEC-EGOV-GET-ATTACHMENT-025）
+  - `at` は `YYYY-MM-DD` の形だけを受け付け、`2024/04/01` などの形と暦に無い日付（`2026-02-30`）は `INVALID_ARGUMENT`（#47。SPEC-EGOV-COMMON-ERRORS-024）
+  - inputSchema の検査の `INVALID_ARGUMENT` は、`code` と並ぶ位置に `tool`（呼んだツール名）を持つ。`detail.issues` は違反 1 件ごとに分け、`path` に引数名（入れ子は `citations.0.paragraph`）、`message` に日本語の決まった文（`50 以下で指定してください` など。型が number と string の和の `item` / `part` などは `数値か文字列で指定してください`）を入れる。今までの `message` は英文（`must be <= 50`）で、inputSchema に無い引数が 2 つあると `path` が `typo, foo` の 1 要素だった。`hint` の括弧に「範囲・形式」を足した（#57。SPEC-EGOV-COMMON-ERRORS-013・014・020〜022、和の型の文と SPEC-EGOV-GET-LAW-RANGE-023 の例は #89）
+- **T3: 管轄と全角・半角**
+  - `search_law` に houki-egov の管轄でない略称（`消基通` など）を渡すと、0 件の成功ではなく `OUT_OF_SCOPE`（`get_law` と同じ本文）を返し、e-Gov に問い合わせない（#52。SPEC-EGOV-SEARCH-LAW-015）
+  - `resolve_abbreviation` の応答に `in_scope`（管轄なら `true`）と、管轄外のときの `hint` を足した（フィールドを足しただけ。SPEC-EGOV-RESOLVE-ABBREVIATION-012・013）
+  - 略称辞書の照合で全角英数字・ダッシュ類・全角空白を揃えるので、`ＰＬ法` が `PL法` と同じエントリに当たる（今までは辞書に無い扱いで `LAW_NOT_FOUND` などになっていた）
+- **依存**: `@shuji-bonji/houki-abbreviations` を `^0.6.1` から `^0.7.0` に上げた。0.7.0 の `normalizeJpText` はダッシュ類（`‐` `‑` `–` `—` `―` `−`）も `-` にする。ローカル DB の検索用列（`articles.body` と `laws_fts`）のダッシュ類は 0.19.0 の取り込みまで入れ直さないので、0.15.4 以前に取り込んだ本文はダッシュ類を含む検索語では当たらない（SPEC-EGOV-DB-SCHEMA-024、SPEC-EGOV-SEARCH-FULLTEXT-036）。取り込み済みの DB でダッシュ類を含む条は 3,910 / 1,434,710 件（約 0.27%、2026-10-01 確認）
+
+### Added
+
+- **`FILE_TOO_LARGE`** の code（#49）
+- **`resolve_abbreviation` の `in_scope` と `hint`**（#52）
+- **inputSchema の範囲と形**: 数値の引数に `type: "integer"` と `minimum`（`limit` は `maximum` も）、`at` に `pattern`、必須の文字列に `minLength: 1`。tools/list を読む LLM にも上限と形が伝わる（#47 #48 #53 #54）
+- **受入テスト**: `src/spec-tests/20261001-t1-argument-guards/`・`20261001-t2-error-codes/`・`20261001-t3-normalize/`・`20261002-t1-followups/` と、受入テスト用の `src/test-helpers/mcp-harness.ts`
+
+### Changed
+
+- 「互換性」の節のとおり。仕様 ID では ADDED 72 件（T1 36、T2 19、T3 17）、MODIFIED 10 件（T1 の 9 件と、#89 の SPEC-EGOV-GET-LAW-RANGE-023。#89 の SPEC-EGOV-COMMON-ERRORS-022 は T1 で足した本文の置き換え）、REMOVED 3 件（SPEC-EGOV-GET-TOC-022、SPEC-EGOV-SEARCH-FULLTEXT-025・026）
+- 引数の検査を SDK の `fromJsonSchema`（ajv）から `src/tools/input-validator.ts` に置き換えた。ajv の結果は違反を 1 つの英文につないで返し、どの引数の違反かを持たないため。inputSchema に検査が対応していないキーワードがあればサーバーの起動時に止まる
+- `get_toc` の `truncated` は、枝を刈ったときだけ `true`。`depth` が構造階層の深さ以上のときも `true` になっていた（SPEC-EGOV-GET-TOC-010 の本文と 023 の例に合わせた）
+
+### Removed
+
+- 返さない code（`ABBREVIATION_NOT_FOUND`・`EGOV_API_ERROR`・`EGOV_TIMEOUT`・`EGOV_RATE_LIMITED`）を `src/errors.ts` の型と README から外した（#57）
+
 ## [0.15.4] - 2026-09-30
 
 **patch リリース** — 差分 `20260928-untested-behaviors`（PR #76）で見つかった、判断の要らない不具合 4 件を直した。仕様の差分は `20260930-bugfix-batch`（#73・#74 の 2 件に仕様 ID を足す。#70・#75 は既存の仕様 ID に合わせて実装を直す）。
