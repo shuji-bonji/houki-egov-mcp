@@ -236,7 +236,7 @@ describe('get_law_range の範囲の指定（#22）', () => {
 });
 
 describe('get_law_range の文字数の上限（#22）', () => {
-  it('SPEC-EGOV-GET-LAW-RANGE-008 上限を超える範囲は条の単位で打ち切り、続きの条番号を返す', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-008 上限を超える範囲は条の単位で打ち切り、続きの条番号と、渡した max_chars を入れた呼び直しの例を返す', async () => {
     const r = await ok(
       getLawRange({ law_name: TITLE, part: 2, chapter: 2, section: 1, max_chars: 2000 })
     );
@@ -252,7 +252,13 @@ describe('get_law_range の文字数の上限（#22）', () => {
     expect(r.range.next_actions?.[0]).toEqual({
       action: 'get_law_range',
       reason: '同じ範囲の続きの条から取れます',
-      example: { law_name: TITLE, path: 'Part2/Chapter2/Section1', from_article: '7' },
+      // 渡した max_chars を入れる（20261003-t4-response-shape）
+      example: {
+        law_name: TITLE,
+        path: 'Part2/Chapter2/Section1',
+        from_article: '7',
+        max_chars: 2000,
+      },
     });
     expect(r.markdown).toContain('上限で打ち切りました');
   });

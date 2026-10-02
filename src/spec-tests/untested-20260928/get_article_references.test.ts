@@ -407,7 +407,7 @@ describe('get_article_references（差分 20260928-untested-behaviors）', () =>
     expect(r.next_actions.filter((a) => a.action === 'search_fulltext')).toHaveLength(1);
   });
 
-  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-034 meta に law_id・title・law_num・url・retrieved_at と渡した at を入れる', async () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-034 SPEC-EGOV-GET-ARTICLE-REFERENCES-022 meta に law_id・title・law_num・url・retrieved_at と渡した at を入れ、paragraph を指定しないと paragraph: null', async () => {
     const before = Date.now();
     const r = await ok({ law_name: '所得税法', article: '57の2', at: '2024-04-01' });
     const after = Date.now();
@@ -419,6 +419,7 @@ describe('get_article_references（差分 20260928-untested-behaviors）', () =>
       retrieved_at: expect.any(String),
       at: '2024-04-01',
       article: '57の2',
+      paragraph: null,
     });
     const at = r.meta.retrieved_at as string;
     expect(new Date(at).toISOString()).toBe(at);
@@ -426,9 +427,10 @@ describe('get_article_references（差分 20260928-untested-behaviors）', () =>
     expect(new Date(at).getTime()).toBeLessThanOrEqual(after + 1000);
   });
 
-  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-034 at を省くと meta に at のキーが無い（略称・paragraph 指定）', async () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-034 at を省くと meta.at は null（略称・paragraph 指定）', async () => {
     const r = await ok({ law_name: '所法', article: '57の2', paragraph: 1 });
-    expect(r.meta).not.toHaveProperty('at');
+    expect(Object.hasOwn(r.meta, 'at')).toBe(true);
+    expect(r.meta.at).toBeNull();
     expect(r.meta.title).toBe('所得税法');
     expect(r.meta.paragraph).toBe(1);
     expect(r.meta.law_id).toBe('340AC0000000033');

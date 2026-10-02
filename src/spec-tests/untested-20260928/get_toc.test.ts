@@ -231,7 +231,7 @@ describe('get_toc のエラー', () => {
 });
 
 describe('get_toc の応答', () => {
-  it('SPEC-EGOV-GET-TOC-015 meta は law_id・title・law_num・retrieved_at・url を持ち、at を省くと at を持たない', async () => {
+  it('SPEC-EGOV-GET-TOC-015 meta は law_id・title・law_num・retrieved_at・url を持ち、at を省くと at: null', async () => {
     const r = await okToc({ law_name: TITLE });
     expect(r.meta).toEqual({
       law_id: LAW_ID,
@@ -239,8 +239,8 @@ describe('get_toc の応答', () => {
       law_num: LAW_NUM,
       retrieved_at: expect.any(String),
       url: LAW_URL,
+      at: null,
     });
-    expect(r.meta).not.toHaveProperty('at');
     expect(r.meta.retrieved_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     expect(new Date(r.meta.retrieved_at).toISOString()).toBe(r.meta.retrieved_at);
   });

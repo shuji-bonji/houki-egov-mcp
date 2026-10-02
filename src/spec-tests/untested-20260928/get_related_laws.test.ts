@@ -110,11 +110,12 @@ describe('get_related_laws（差分 20260928-untested-behaviors）', () => {
     expect(r.related[1].url).toBe('https://laws.e-gov.go.jp/law/340M50000040011');
   });
 
-  it('SPEC-EGOV-GET-RELATED-LAWS-010 成功の応答の meta は retrieved_at だけを持ち、ISO 8601（UTC）の文字列', async () => {
+  it('SPEC-EGOV-GET-RELATED-LAWS-010 成功の応答の meta は retrieved_at（ISO 8601（UTC）の文字列）と at: null', async () => {
     const before = Date.now();
     const r = await ok({ law_name: '所得税法' });
     const after = Date.now();
-    expect(Object.keys(r.meta)).toEqual(['retrieved_at']);
+    expect(Object.keys(r.meta)).toEqual(['retrieved_at', 'at']);
+    expect(r.meta.at).toBeNull();
     const at = r.meta.retrieved_at as string;
     expect(typeof at).toBe('string');
     expect(new Date(at).toISOString()).toBe(at);
@@ -122,10 +123,11 @@ describe('get_related_laws（差分 20260928-untested-behaviors）', () => {
     expect(new Date(at).getTime()).toBeLessThanOrEqual(after + 1000);
   });
 
-  it('SPEC-EGOV-GET-RELATED-LAWS-010 related が空の応答（民法）にも meta.retrieved_at が付く', async () => {
+  it('SPEC-EGOV-GET-RELATED-LAWS-010 related が空の応答（民法）にも同じ形の meta（retrieved_at と at: null）が付く', async () => {
     const r = await ok({ law_name: '民法' });
     expect(r.related).toEqual([]);
-    expect(Object.keys(r.meta)).toEqual(['retrieved_at']);
+    expect(Object.keys(r.meta)).toEqual(['retrieved_at', 'at']);
+    expect(r.meta.at).toBeNull();
     const at = r.meta.retrieved_at as string;
     expect(new Date(at).toISOString()).toBe(at);
   });

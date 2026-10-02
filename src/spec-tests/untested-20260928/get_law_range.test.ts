@@ -359,7 +359,7 @@ describe('get_law_range の款・目', () => {
 });
 
 describe('get_law_range の meta と markdown の末尾', () => {
-  it('SPEC-EGOV-GET-LAW-RANGE-025 meta は law_id・title・law_num・retrieved_at・url を持ち、at を省くと at を持たない', async () => {
+  it('SPEC-EGOV-GET-LAW-RANGE-025 meta は law_id・title・law_num・retrieved_at・url を持ち、at を省くと at: null', async () => {
     const r = await okRange({ law_name: TITLE, chapter: 1 });
     expect(r.meta).toEqual({
       law_id: LAW_ID,
@@ -367,8 +367,8 @@ describe('get_law_range の meta と markdown の末尾', () => {
       law_num: LAW_NUM,
       retrieved_at: expect.any(String),
       url: LAW_URL,
+      at: null,
     });
-    expect(r.meta).not.toHaveProperty('at');
     expect(new Date(r.meta.retrieved_at).toISOString()).toBe(r.meta.retrieved_at);
   });
 

@@ -337,7 +337,7 @@ describe('list_attachments（差分 20260928-untested-behaviors）', () => {
     expect(b?.location && 'amend_law_num' in b.location).toBe(false);
   });
 
-  it('SPEC-EGOV-LIST-ATTACHMENTS-015 meta の法令 ID・題名・法令番号・取得日時・URL（at なしでは meta.at が付かない）', async () => {
+  it('SPEC-EGOV-LIST-ATTACHMENTS-015 meta の法令 ID・題名・法令番号・取得日時・URL（at なしでは meta.at は null）', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-09-27T20:32:08.782Z'));
     const res = await listAttachments({ law_name: '国旗及び国歌に関する法律' });
@@ -347,7 +347,8 @@ describe('list_attachments（差分 20260928-untested-behaviors）', () => {
     expect(res.meta.law_num).toBe('平成十一年法律第百二十七号');
     expect(res.meta.retrieved_at).toBe('2026-09-27T20:32:08.782Z');
     expect(res.meta.url).toBe('https://laws.e-gov.go.jp/law/411AC0000000127');
-    expect('at' in res.meta).toBe(false);
+    expect('at' in res.meta).toBe(true);
+    expect(res.meta.at).toBeNull();
   });
 
   it('SPEC-EGOV-LIST-ATTACHMENTS-015 at を渡すと meta.at は渡した値', async () => {

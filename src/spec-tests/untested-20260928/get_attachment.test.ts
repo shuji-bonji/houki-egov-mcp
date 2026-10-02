@@ -260,11 +260,12 @@ describe('get_attachment（差分 20260928-untested-behaviors）', () => {
     ]);
   });
 
-  it('SPEC-EGOV-GET-ATTACHMENT-014 at を渡さないと meta.at は付かない', async () => {
+  it('SPEC-EGOV-GET-ATTACHMENT-014 at を渡さないと meta.at は null（キーは無くならない）', async () => {
     const res = await getAttachment({ law_name: 'テスト法', src: './pict/a.jpg' });
     if ('error' in res) throw new Error(res.error);
     expect(res.meta.law_revision_id).toBe(REV1);
-    expect('at' in res.meta).toBe(false);
+    expect('at' in res.meta).toBe(true);
+    expect(res.meta.at).toBeNull();
   });
 
   it('SPEC-EGOV-GET-ATTACHMENT-015 一覧に無い src のエラーで案内する list_attachments の example に at も入れる', async () => {

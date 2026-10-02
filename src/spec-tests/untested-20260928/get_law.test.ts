@@ -347,15 +347,15 @@ interface Meta {
   law_num: string;
   retrieved_at: string;
   url: string;
-  at?: string;
+  at: string | null;
 }
 interface Ok {
   format: string;
   markdown: string;
   data: {
     article_num: string;
-    paragraph_num?: number;
-    item_num?: number | string;
+    paragraph_num: number | null;
+    item_num: number | string | null;
     node: { tag: string; attr: Record<string, string>; children: unknown[] };
   };
   meta: Meta;
@@ -701,14 +701,15 @@ describe('get_law — 応答の外形と meta', () => {
     expect(js).not.toHaveProperty('markdown');
   });
 
-  it('SPEC-EGOV-GET-LAW-020 meta に法令の識別情報・取得日時・URL が入り、at を渡さなければ at は無い', async () => {
+  it('SPEC-EGOV-GET-LAW-020 meta に法令の識別情報・取得日時・URL が入り、at を渡さなければ at: null（目次も）', async () => {
     const r = await ok({ law_name: '消費税法', article: '30' });
     expect(r.meta.law_id).toBe(SHOHI_ID);
     expect(r.meta.title).toBe('消費税法');
     expect(r.meta.law_num).toBe(SHOHI_NUM);
     expect(r.meta.retrieved_at).toMatch(ISO_UTC);
     expect(r.meta.url).toBe('https://laws.e-gov.go.jp/law/363AC0000000108');
-    expect(r.meta).not.toHaveProperty('at');
+    expect(Object.hasOwn(r.meta, 'at')).toBe(true);
+    expect(r.meta.at).toBeNull();
 
     const toc = await ok({ law_name: '消費税法' });
     expect(toc.meta.law_id).toBe(SHOHI_ID);
@@ -716,6 +717,7 @@ describe('get_law — 応答の外形と meta', () => {
     expect(toc.meta.law_num).toBe(SHOHI_NUM);
     expect(toc.meta.retrieved_at).toMatch(ISO_UTC);
     expect(toc.meta.url).toBe('https://laws.e-gov.go.jp/law/363AC0000000108');
+    expect(toc.meta.at).toBeNull();
   });
 
   it('SPEC-EGOV-GET-LAW-020 条文を返すとき at を渡すと meta.at に入る（markdown・json）', async () => {
@@ -845,13 +847,13 @@ describe('get_law — json の応答', () => {
     expect(n.data.item_num).toBe(8);
   });
 
-  it('SPEC-EGOV-GET-LAW-024 paragraph・item を渡さないときはキーが無い', async () => {
+  it('SPEC-EGOV-GET-LAW-024 paragraph・item を渡さないときは null（キーは無くならない）', async () => {
     const r = await ok({ law_name: '消費税法', article: '2', format: 'json' });
-    expect(r.data).not.toHaveProperty('paragraph_num');
-    expect(r.data).not.toHaveProperty('item_num');
+    expect(r.data.paragraph_num).toBeNull();
+    expect(r.data.item_num).toBeNull();
     const p = await ok({ law_name: '消費税法', article: '2', paragraph: 1, format: 'json' });
     expect(p.data.paragraph_num).toBe(1);
-    expect(p.data).not.toHaveProperty('item_num');
+    expect(p.data.item_num).toBeNull();
   });
 
   it('SPEC-EGOV-GET-LAW-025 format: json で article を省くと INVALID_ARGUMENT と目次の案内', async () => {

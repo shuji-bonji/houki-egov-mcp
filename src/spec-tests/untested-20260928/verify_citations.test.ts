@@ -237,7 +237,7 @@ describe('応答の note と meta', () => {
     expect(mixed.note).toBe(allFound.note);
   });
 
-  it('SPEC-EGOV-VERIFY-CITATIONS-021 meta に retrieved_at（ISO 8601 UTC）と、at を渡したときだけ at を付ける', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-021 meta に retrieved_at（ISO 8601 UTC）と at を付け、at を渡さないときは at: null', async () => {
     const withAt = await ok({
       citations: [{ law_name: '所得税法', article: '9' }],
       at: '2024-04-01',
@@ -247,7 +247,8 @@ describe('応答の note と meta', () => {
     expect(new Date(withAt.meta.retrieved_at).toISOString()).toBe(withAt.meta.retrieved_at);
 
     const withoutAt = await ok({ citations: [{ law_name: '所得税法', article: '9' }] });
-    expect(Object.keys(withoutAt.meta)).toEqual(['retrieved_at']);
+    expect(Object.keys(withoutAt.meta)).toEqual(['retrieved_at', 'at']);
+    expect(withoutAt.meta.at).toBeNull();
     expect(withoutAt.meta.retrieved_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/);
   });
 });
