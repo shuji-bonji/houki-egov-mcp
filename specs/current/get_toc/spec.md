@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`（`get_toc`）、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-tree.ts`、`src/formatters/markdown.ts`、`src/services/law-service.suppl-toc.test.ts`、`src/services/law-service.range.test.ts`、`src/services/law-tree.test.ts`、`src/formatters/markdown.test.ts`
 - 関連する Issue: houki-egov-mcp #24（本則と附則を分ける）、#22（`toc[].path`）
 
@@ -18,8 +18,8 @@
 | 引数                | 必須 | 内容                                                                       |
 | ------------------- | ---- | -------------------------------------------------------------------------- |
 | `law_name`          | 必須 | 法令名または略称。例: `民法`、`消法`                                       |
-| `at`                | 任意 | 時点指定（`YYYY-MM-DD`）                                                   |
-| `depth`             | 任意 | 本則の構造階層（編・章・節・款・目）を上から何階層まで返すか。省くと全階層 |
+| `at`                | 任意 | 時点指定（`YYYY-MM-DD`。SPEC-EGOV-GET-TOC-024） |
+| `depth`             | 任意 | 本則の構造階層（編・章・節・款・目）を上から何階層まで返すか。1 以上の整数（SPEC-EGOV-GET-TOC-023）。省くと全階層 |
 | `suppl`             | 任意 | 附則をどこまで返すか。`list`（既定）/ `full` / `none`                      |
 | `with_amend_titles` | 任意 | `true` のとき附則に改正法の題名を付ける。既定は `false`                    |
 
@@ -230,11 +230,35 @@ flowchart TD
 
 例: 附則 2 本・条 3 件の法令に `suppl: "none", with_amend_titles: true` を渡すと、改正履歴の問い合わせは 0 回で、`suppl` は `{ mode: "none", count: 2, article_count: 3, note: "附則 2 本（条 3 件）は返していません（suppl: \"none\"）" }`。
 
-### SPEC-EGOV-GET-TOC-022 `depth` に 0 以下を渡すと全階層を返す
+### SPEC-EGOV-GET-TOC-023 `depth` は 1 以上の整数で、0・負の数・小数は `INVALID_ARGUMENT` にして法令を取らない
 
-`depth` に 0 または負の数を渡したときは、`depth` を省いたときと同じく本則の全階層を返し、`truncated` は `false`。
+tools/list の inputSchema の `depth` は `type: "integer"`、`minimum: 1` を持ち、`maximum` を持たない（SPEC-EGOV-COMMON-ERRORS-023）。0・負の数・小数・数値でない値を渡すと、inputSchema の検査で `INVALID_ARGUMENT`（`tool: "get_toc"`、`detail.issues[0].path: "depth"`）を返し、e-Gov に問い合わせない。全階層に読み替えたり切り捨てたりしない。構造階層の深さより大きい値は今までどおり条まで返す（SPEC-EGOV-GET-TOC-010）。
 
-例: `node_count` が 7 の法令に `depth: 0` または `depth: -1` を渡すと、`toc` は `depth` を省いたときと同じで、`node_count: 7`、`truncated: false`。tools/call（`get_toc`）を通しても同じで、エラーにならない。
+例: `law_name: "民法", depth: 0` は `code: "INVALID_ARGUMENT"`、`detail.issues` は `[{ path: "depth", message: "1 以上で指定してください" }]` で、e-Gov への問い合わせは 0 回（v0.15.4 では全階層を返していた）。`depth: -1` も同じ。`depth: 1.5` は `[{ path: "depth", message: "整数で指定してください" }]`。`depth: 99` は検査を通り、条まで返して `truncated: false`。
+
+### SPEC-EGOV-GET-TOC-024 `at` は `YYYY-MM-DD` の形だけを受け付け、形に合わない値と暦に無い日付は `INVALID_ARGUMENT`
+
+`at` は SPEC-EGOV-COMMON-ERRORS-024 に従う。形に合わない値は inputSchema の検査で `INVALID_ARGUMENT`（`tool: "get_toc"`、`detail.issues: [{ path: "at", message: "YYYY-MM-DD の形で指定してください" }]`）、暦に無い日付はツールの処理で `INVALID_ARGUMENT`（`detail.issues: [{ path: "at", message: "暦に無い日付です" }]`）になり、どちらも e-Gov に問い合わせない。
+
+例: `law_name: "民法", at: "2024/04/01"` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].path: "at"`。`at: "2026-02-30"` は `detail.issues[0].message: "暦に無い日付です"`。どちらも e-Gov への問い合わせは 0 回。`at: "2024-04-01"` は SPEC-EGOV-GET-TOC-018 のとおり。
+
+### SPEC-EGOV-GET-TOC-025 law_name が空文字・空白だけのときは e-Gov に問い合わせずに `INVALID_ARGUMENT` を返す
+
+空文字は inputSchema の検査（SPEC-EGOV-COMMON-ERRORS-025）、空白だけはツールの処理（SPEC-EGOV-COMMON-ERRORS-026。`error: "law_name が空です"`）で、どちらも `INVALID_ARGUMENT`（`tool: "get_toc"`、`detail.issues[0].path: "law_name"`）を返し、略称辞書と e-Gov に問い合わせない。
+
+例: `law_name: ""` は `detail.issues[0].message: "空文字は指定できません"`、`law_name: "  "` は `error: "law_name が空です"`。どちらも `code: "INVALID_ARGUMENT"` で e-Gov への問い合わせは 0 回。
+
+### SPEC-EGOV-GET-TOC-026 法令名の検索が通信の失敗で終わったときは `LAW_NOT_FOUND` ではなく `SOURCE_*` を返す
+
+`law_name` が略称辞書に law_id 付きで無く、e-Gov の法令名検索で law_id を決めるとき、その検索が通信の失敗（接続できない・時間切れ・5xx・429・429 以外の 4xx）で終わったときは、SPEC-EGOV-COMMON-ERRORS-027 の表の code（`SOURCE_UNAVAILABLE` / `SOURCE_TIMEOUT` / `SOURCE_API_ERROR` / `SOURCE_RATE_LIMITED`）を、表の `retryable` と `detail` 付きで返す（SPEC-EGOV-COMMON-ERRORS-029）。`LAW_NOT_FOUND`（SPEC-EGOV-GET-TOC-012）は、検索が成功して 0 件だったときだけ返す。`SOURCE_*` のときの `next_actions` に `resolve_abbreviation` / `search_law` は入れない。
+
+例: 法令名の検索が 503 を返す状態で `{ law_name: "架空の法律" }` を渡すと、`code: "SOURCE_API_ERROR"`、`retryable: true`、`detail.status: 503`（v0.15.4 では `LAW_NOT_FOUND` だった）。検索が時間切れなら `SOURCE_TIMEOUT`、接続できなければ `SOURCE_UNAVAILABLE`（`detail.cause: "ENOTFOUND"` など）、400 なら `SOURCE_API_ERROR`・`retryable: false`。検索が 0 件で成功したときは `LAW_NOT_FOUND` のまま。
+
+### SPEC-EGOV-GET-TOC-027 `law_name` の全角英数字・ダッシュ類・全角空白は半角に揃えてから略称辞書と照合する
+
+`law_name` を略称辞書で引くときは、houki-abbreviations の `resolveAbbreviation(name, { normalize: true })` の規則（全角英数字を半角に、ダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` を `-` に、全角チルダを `~` に、全角空白を半角空白にし、前後の空白を除く。大文字と小文字は区別する）で揃えてから照合する。管轄の判定（`OUT_OF_SCOPE`）も同じ規則で引く。辞書に無いときに e-Gov の法令名検索へ渡す値は、前後の空白を除いた渡した値のままで、揃えない。
+
+例: `{ law_name: "ＰＬ法" }` は `製造物責任法の目次を返す`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
 
 ## できないこと
 
@@ -254,7 +278,6 @@ flowchart TD
 3. **`at` で時点を指定したときの目次。** → SPEC-EGOV-GET-TOC-018
 4. **`suppl: "full"` と `depth` を一緒に渡したとき。** → SPEC-EGOV-GET-TOC-019
 5. **改正履歴の取得に失敗したとき。** → SPEC-EGOV-GET-TOC-020・SPEC-EGOV-GET-TOC-021
-6. **`depth` に 0 以下を渡したとき。** → SPEC-EGOV-GET-TOC-022
+6. **`depth` に 0 以下を渡したとき。** → SPEC-EGOV-GET-TOC-023
 7. **`depth` の説明と、編を持たない法令での動き。** → houki-egov-mcp #56
-8. **`depth` に整数でない数を渡したとき。** → houki-egov-mcp #54
 9. **法令名が完全一致しないとき、検索結果の先頭の法令を返す。** → houki-egov-mcp #45

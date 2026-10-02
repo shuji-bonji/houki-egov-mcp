@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-files.ts`、`src/services/file-store.ts`、`src/services/egov-client.ts`、`src/services/law-service.ts`（法令名の解決・管轄の確認）、`src/config.ts`、`src/services/law-files.test.ts`、`src/services/file-store.test.ts`
 - 関連する Issue: houki-egov-mcp #19（添付ファイルと法令本文ファイル）
 
@@ -19,8 +19,8 @@
 | 引数       | 必須 | 内容                                                                                                                                                                           |
 | ---------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `law_name` | 必須 | 法令名または略称                                                                                                                                                               |
-| `src`      | 任意 | `list_attachments` が返す `attachments[].src`（例: `"./pict/H11HO127-001.jpg"`）。ファイル名だけ（`"H11HO127-001.jpg"`）でもよい。省くと、その法令履歴の添付ファイル全部の zip |
-| `at`       | 任意 | 時点。`YYYY-MM-DD` 形式。`list_attachments` と同じ時点を渡す                                                                                                                   |
+| `src`      | 任意 | `list_attachments` が返す `attachments[].src`（例: `"./pict/H11HO127-001.jpg"`）。ファイル名だけ（`"H11HO127-001.jpg"`）でもよい。省くと、その法令履歴の添付ファイル全部の zip。空文字・空白だけは省いたときと同じ（SPEC-EGOV-GET-ATTACHMENT-025） |
+| `at`       | 任意 | 時点。`YYYY-MM-DD` 形式（SPEC-EGOV-GET-ATTACHMENT-024）。`list_attachments` と同じ時点を渡す |
 | `save`     | 任意 | `true` でファイルを取得して保存する。既定は `false`（URL とメタ情報だけを返し、ファイルは取らない）                                                                            |
 
 保存先のパスは引数では指定できない。inputSchema に無い引数を渡したときの扱いは common_errors に書く。
@@ -194,6 +194,47 @@ SPEC-EGOV-GET-ATTACHMENT-009 のエラーは、`hint` に別の時点（`at`）�
 
 例: `attached_files_info` の `./pict/a.jpg` の `updated` が `2024-07-25T00:20:13+09:00` → 応答の `updated: "2024-07-25T00:20:13+09:00"`。本文にだけある `./pict/body-only.pdf` → `updated` は付かない。
 
+### SPEC-EGOV-GET-ATTACHMENT-023 law_name が空文字・空白だけのときは略称辞書と e-Gov に問い合わせずに `INVALID_ARGUMENT` を返す
+
+空文字は inputSchema の `minLength: 1` の検査（SPEC-EGOV-COMMON-ERRORS-025）で止まり、`INVALID_ARGUMENT`（`tool: "get_attachment"`、`detail.issues: [{ path: "law_name", message: "空文字は指定できません" }]`）を返す。空白（半角スペース・全角スペース・タブ・改行）だけのときは、ツールの処理が略称辞書と e-Gov に問い合わせる前に、SPEC-EGOV-COMMON-ERRORS-026 の形の `INVALID_ARGUMENT`（`tool: "get_attachment"`、`error: "law_name が空です"`、`detail.issues: [{ path: "law_name", message: "空白だけは指定できません" }]`、`hint` に法令名か略称を渡すよう書く）を返す。
+
+例: `law_name: ""` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].message: "空文字は指定できません"`。`law_name: "　"`（全角スペース）と `law_name: " \n"` は `code: "INVALID_ARGUMENT"`・`error: "law_name が空です"`。どれも略称辞書と e-Gov への問い合わせは 0 回。
+
+### SPEC-EGOV-GET-ATTACHMENT-024 `at` は `YYYY-MM-DD` の形だけを受け付け、形に合わない値と暦に無い日付は `INVALID_ARGUMENT`
+
+`at` は SPEC-EGOV-COMMON-ERRORS-024 に従う。tools/list の inputSchema の `at` は `pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"` を持ち、形に合わない値は inputSchema の検査で `INVALID_ARGUMENT`（`tool: "get_attachment"`、`detail.issues: [{ path: "at", message: "YYYY-MM-DD の形で指定してください" }]`）になる。形は合うが暦に無い日付は、ツールの処理が e-Gov に問い合わせる前に `INVALID_ARGUMENT`（`detail.issues: [{ path: "at", message: "暦に無い日付です" }]`）を返す。
+
+例: `law_name: "戸籍法施行規則", src: "H11HO127-001.jpg", at: "2024/04/01"` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].path: "at"` で、e-Gov への問い合わせは 0 回。`at: "20240401"`・`at: "2024-4-1"` も同じ。`at: "2026-02-30"` は `detail.issues[0].message: "暦に無い日付です"` で、e-Gov への問い合わせは 0 回。`at: "2024-04-01"` は SPEC-EGOV-GET-ATTACHMENT-014 のとおり。
+
+### SPEC-EGOV-GET-ATTACHMENT-025 `src` が空文字・空白だけのときは `src` を省いたときと同じに扱う
+
+任意の `src` が空文字、または空白（半角スペース・全角スペース・タブ・改行）だけのときは、`src` を渡さなかったときと同じく、その法令履歴の添付ファイル全部の zip を対象にする（`save` が `false` なら zip の URL とメタ情報、`true` なら zip の保存）。`ATTACHMENT_NOT_FOUND` にはしない。前後に空白の付いた `src`（`" H11HO127-001.jpg "`）は、空白を除いた名前で一覧と突き合わせる。
+
+例: `law_name: "戸籍法施行規則", src: ""` と `src: "   "` は、どちらも `src` を省いたときと同じ zip の応答（v0.15.4 では空白だけは `ATTACHMENT_NOT_FOUND` だった）。
+
+### SPEC-EGOV-GET-ATTACHMENT-026 法令名の検索が通信の失敗で終わったときは `LAW_NOT_FOUND` ではなく `SOURCE_*` を返す
+
+`law_name` が略称辞書に law_id 付きで無く、e-Gov の法令名検索で law_id を決めるとき、その検索が通信の失敗（接続できない・時間切れ・5xx・429・429 以外の 4xx）で終わったときは、SPEC-EGOV-COMMON-ERRORS-027 の表の code（`SOURCE_UNAVAILABLE` / `SOURCE_TIMEOUT` / `SOURCE_API_ERROR` / `SOURCE_RATE_LIMITED`）を、表の `retryable` と `detail` 付きで返す（SPEC-EGOV-COMMON-ERRORS-029）。`LAW_NOT_FOUND`（SPEC-EGOV-GET-ATTACHMENT-016）は、検索が成功して 0 件だったときだけ返す。`SOURCE_*` のときの `next_actions` に `resolve_abbreviation` / `search_law` は入れない。
+
+例: 法令名の検索が 503 を返す状態で `{ law_name: "架空の法律", src: "./pict/a.jpg" }` を渡すと、`code: "SOURCE_API_ERROR"`、`retryable: true`、`detail.status: 503`（v0.15.4 では `LAW_NOT_FOUND` だった）。検索が時間切れなら `SOURCE_TIMEOUT`、接続できなければ `SOURCE_UNAVAILABLE`（`detail.cause: "ENOTFOUND"` など）、400 なら `SOURCE_API_ERROR`・`retryable: false`。検索が 0 件で成功したときは `LAW_NOT_FOUND` のまま。
+
+### SPEC-EGOV-GET-ATTACHMENT-027 上限（50 MB）を超えるファイルは `FILE_TOO_LARGE` で断り、Content-Length で分かるときは本文を読まない
+
+`save: true` の取得で、ファイルが 50 MB（52,428,800 バイト）を超えているときは、エラー `FILE_TOO_LARGE`（`retryable: false`）を返し、保存しない（SPEC-EGOV-COMMON-ERRORS-030）。`INVALID_ARGUMENT` にはしない。大きさは次の順で確かめる。
+
+1. e-Gov の応答ヘッダーに Content-Length があり、その値が上限を超えていれば、本文を読まずにエラーにする（`detail.bytes` は Content-Length の値）
+2. Content-Length が無いか上限以下のときは本文を読み、読み終えた大きさが上限を超えていればエラーにする（`detail.bytes` は読み終えた大きさ）。途中で打ち切らない
+
+`error` は `ファイルが大きすぎます: <大きさ>（上限 50.0 MB）`、`hint` は `保存せず url をそのまま使ってください`、`detail.url` は取得した URL。
+
+例: Content-Length が `52428801` のとき、`{ law_name: "民法", src: "./pict/big.pdf", save: true }` は `code: "FILE_TOO_LARGE"`、`retryable: false`、`detail.bytes: 52428801` で、本文は読まず、ファイルは書かない（v0.15.4 では全部読んでから `INVALID_ARGUMENT` だった）。Content-Length が無く本文が 52,428,801 バイトのときも `FILE_TOO_LARGE`。Content-Length が `52428800`（ちょうど 50 MB）は保存する。
+
+### SPEC-EGOV-GET-ATTACHMENT-028 `law_name` の全角英数字・ダッシュ類・全角空白は半角に揃えてから略称辞書と照合する
+
+`law_name` を略称辞書で引くときは、houki-abbreviations の `resolveAbbreviation(name, { normalize: true })` の規則（全角英数字を半角に、ダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` を `-` に、全角チルダを `~` に、全角空白を半角空白にし、前後の空白を除く。大文字と小文字は区別する）で揃えてから照合する。管轄の判定（`OUT_OF_SCOPE`）も同じ規則で引く。辞書に無いときに e-Gov の法令名検索へ渡す値は、前後の空白を除いた渡した値のままで、揃えない。
+
+例: `{ law_name: "ＰＬ法", src: "./pict/a.jpg" }` は `製造物責任法の添付を引き、一覧に無ければ `ATTACHMENT_NOT_FOUND`（`LAW_NOT_FOUND` ではない）`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
+
 ## できないこと
 
 - ファイルの中身（バイト列や base64）を応答に入れること
@@ -208,11 +249,7 @@ SPEC-EGOV-GET-ATTACHMENT-009 のエラーは、`hint` に別の時点（`at`）�
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-1. **50 MB を超えるファイルを `INVALID_ARGUMENT` で返す。** → houki-egov-mcp #49
-2. **`src` が空文字のときは zip、空白だけのときは `ATTACHMENT_NOT_FOUND`。** → houki-egov-mcp #53
 3. **ファイル名だけで引いたとき、同じファイル名が複数あると先のものを返す。** → houki-egov-mcp #66
-4. **e-Gov の法令検索が失敗したときも `LAW_NOT_FOUND` を返す。** → houki-egov-mcp #46
-5. **`at` の形を確かめない。** → houki-egov-mcp #47
 6. **save なしで pdf を指したときの案内と、zip の note。** → SPEC-EGOV-GET-ATTACHMENT-011・SPEC-EGOV-GET-ATTACHMENT-012・SPEC-EGOV-GET-ATTACHMENT-013
 7. **時点（at）を渡したとき。** → SPEC-EGOV-GET-ATTACHMENT-014・SPEC-EGOV-GET-ATTACHMENT-015
 8. **特定できない法令と管轄外の資料。** → SPEC-EGOV-GET-ATTACHMENT-016

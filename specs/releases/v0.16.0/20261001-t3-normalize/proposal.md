@@ -3,7 +3,7 @@
 - 対象: `resolve_abbreviation` / `search_law` / `search_fulltext` / `db_schema` と、`law_name` を略称辞書で引く 10 ツール（`get_law` / `get_toc` / `get_law_range` / `get_law_revisions` / `get_related_laws` / `get_article_references` / `list_attachments` / `get_attachment` / `get_law_file` / `verify_citations`）の `specs/current/<dir>/spec.md`
 - 実装の変更: 要（`package.json` の `@shuji-bonji/houki-abbreviations` を `^0.7.0` に上げる変更を含む）
 - 承認日: 2026-10-01（PR #86）
-- 状態: 提案中
+- 状態: 取り込み済み（v0.16.0）
 - 起こした日: 2026-10-01（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #52（略称の全角・半角を吸収せず、通達の略称への応答が違う）、houki-abbreviations 0.7.0 からの申し送り（`normalizeJpText` がダッシュ類を `-` に揃えるので、DB の検索用列と食い違う）

@@ -3,7 +3,7 @@
 - 対象: `specs/current/common_errors/spec.md` と、`get_law` / `get_toc` / `get_law_range` / `get_law_revisions` / `get_related_laws` / `get_article_references` / `list_attachments` / `get_attachment` / `get_law_file` / `verify_citations` / `search_fulltext` / `cli_status` の `specs/current/<dir>/spec.md`
 - 実装の変更: 要
 - 承認日: 2026-10-01（PR #85）
-- 状態: 提案中
+- 状態: 取り込み済み（v0.16.0）
 - 起こした日: 2026-10-01（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #46（法令名検索の失敗が `LAW_NOT_FOUND` になる）、#49（50 MB 超を `INVALID_ARGUMENT` で断る）、#69（接続できないとき `SOURCE_UNAVAILABLE` にならない）、houki-abbreviations 0.7.0 からの申し送り（`computeDaysSince` / `judgeStaleness` の例外）

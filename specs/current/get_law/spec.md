@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-tree.ts`、`src/formatters/markdown.ts`、`src/utils/article-num.ts`、`src/server.test.ts`、`src/tools/handlers.test.ts`、`src/services/law-tree.test.ts`、`src/formatters/markdown.test.ts`、`src/utils/article-num.test.ts`、`CHANGELOG.md`
 - 関連する Issue: houki-egov-mcp #16（Markdown の条・号の表示）、#17（漢数字の条番号・号番号）、#24（本則と附則を分ける）
 
@@ -19,10 +19,10 @@
 | ----------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `law_name`  | 必須 | 法令名または略称。例: `"消費税法"`、`"消法"`、`"労基法"`、`"民法"`                                                                                |
 | `article`   | 任意 | 条番号。例: `"30"`、`"30の2"`、`"第30条の2"`、`"第三十条"`、`"三十の二"`、`"３０"`。省くと目次を返す（`format` が `json` のときを除く）           |
-| `paragraph` | 任意 | 項番号（数値）。省くと条全体                                                                                                                      |
+| `paragraph` | 任意 | 項番号。1 以上の整数（SPEC-EGOV-GET-LAW-036）。省くと条全体 |
 | `item`      | 任意 | 号番号。数値（`8`）か文字列（`"8"`・`"8の2"`・`"第8号の2"`・`"八の二"`）。枝番号の号は文字列で指定する。項が複数ある条では `paragraph` も指定する |
 | `format`    | 任意 | `markdown`（既定。条文）、`toc`（目次だけ）、`json`（構造化）                                                                                     |
-| `at`        | 任意 | 時点。`YYYY-MM-DD`。その時点の条文を取る                                                                                                          |
+| `at`        | 任意 | 時点。`YYYY-MM-DD`（SPEC-EGOV-GET-LAW-037）。その時点の条文を取る |
 
 ## 処理の流れ
 
@@ -33,7 +33,7 @@ flowchart TD
   A["呼び出し（law_name・article・paragraph・item・format・at）<br/>item は数値でも文字列でも受け付ける（002）"] --> B{"law_name が略称辞書で houki-egov 以外の管轄の資料か"}
   B -- はい --> E1["OUT_OF_SCOPE を返す。e-Gov を引かない（001）"]
   B -- いいえ --> C{"法令が特定できるか"}
-  C -- "できない（law_name が空のときを含む）" --> E2["エラーを返す（003）"]
+  C -- "できない" --> E2["エラーを返す（003）"]
   C -- できる --> D["e-Gov から法令本文を取る"]
   D --> F{"format が toc か、または article が無く format が json でないか"}
   F -- はい --> T["目次を返す。本則の階層（017）と附則の見出し（018）"]
@@ -68,9 +68,11 @@ flowchart TD
 
 `item` には数値も文字列も渡せる。文字列の `item`（例: `"8の2"`）を渡しても、引数の検査のエラー（`INVALID_ARGUMENT`）にはならない。
 
-### SPEC-EGOV-GET-LAW-003 law_name が空のときはエラーを返す
+### SPEC-EGOV-GET-LAW-003 law_name が空文字・空白だけのときは e-Gov に問い合わせずに `INVALID_ARGUMENT` を返す
 
-`law_name` が空文字のときは、エラーの応答（`error` を持つ）を返す。
+`law_name` が空文字のときは、inputSchema の `minLength: 1` の検査（SPEC-EGOV-COMMON-ERRORS-025）で止まり、`INVALID_ARGUMENT`（`tool: "get_law"`、`detail.issues: [{ path: "law_name", message: "空文字は指定できません" }]`）を返す。空白（半角スペース・全角スペース・タブ・改行）だけのときは、ツールの処理が略称辞書と e-Gov のどちらにも問い合わせる前に、SPEC-EGOV-COMMON-ERRORS-026 の形の `INVALID_ARGUMENT`（`tool: "get_law"`、`error: "law_name が空です"`、`detail.issues: [{ path: "law_name", message: "空白だけは指定できません" }]`、`hint` に法令名か略称を渡すよう書く）を返す。どちらも `LAW_NOT_FOUND` ではない。
+
+例: `law_name: ""` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].message: "空文字は指定できません"`。`law_name: "　"`（全角スペース）と `law_name: " \n"` は `code: "INVALID_ARGUMENT"`・`error: "law_name が空です"`。どれも e-Gov への問い合わせは 0 回（v0.15.4 では `LAW_NOT_FOUND` だった）。
 
 ### SPEC-EGOV-GET-LAW-004 条番号は算用数字・漢数字・全角数字のどれでも指定できる
 
@@ -317,6 +319,30 @@ SPEC-EGOV-GET-LAW-001 の `OUT_OF_SCOPE` の応答では、`error` に略称辞�
 
 例: e-Gov が時点ごとに違う本文を返す状態で、`{ law_name: "消費税法", article: "30", paragraph: 1, at: "2020-04-01" }`、`{ …, at: "2024-04-01" }`、`at` なしの順に呼ぶと、e-Gov への法令本文の問い合わせは 3 回（`asof=2020-04-01`、`asof=2024-04-01`、`asof` なし）で、3 つの `markdown` はそれぞれの時点の本文を持つ。
 
+### SPEC-EGOV-GET-LAW-036 `paragraph` は 1 以上の整数で、0・負の数・小数は `INVALID_ARGUMENT` にして法令を取らない
+
+tools/list の inputSchema の `paragraph` は `type: "integer"`、`minimum: 1` を持つ（SPEC-EGOV-COMMON-ERRORS-023）。0・負の数・小数・数値でない値を渡すと、inputSchema の検査で `INVALID_ARGUMENT`（`tool: "get_law"`、`detail.issues[0].path: "paragraph"`）を返し、e-Gov に問い合わせない。`ARTICLE_NOT_FOUND` は、法令を取った後で求めた項が無いときだけになる（SPEC-EGOV-GET-LAW-010 の範囲）。
+
+例: `law_name: "民法", article: "1", paragraph: 0` は `code: "INVALID_ARGUMENT"`、`detail.issues` は `[{ path: "paragraph", message: "1 以上で指定してください" }]` で、e-Gov への問い合わせは 0 回（v0.15.4 では法令を取ってから `ARTICLE_NOT_FOUND`）。`paragraph: -1` も同じ。`paragraph: 1.5` は `[{ path: "paragraph", message: "整数で指定してください" }]`。`paragraph: 2` は検査を通り、第 2 項が無い条なら `ARTICLE_NOT_FOUND`。
+
+### SPEC-EGOV-GET-LAW-037 `at` は `YYYY-MM-DD` の形だけを受け付け、形に合わない値と暦に無い日付は `INVALID_ARGUMENT`
+
+`at` は SPEC-EGOV-COMMON-ERRORS-024 に従う。tools/list の inputSchema の `at` は `pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"` を持ち、形に合わない値は inputSchema の検査で `INVALID_ARGUMENT`（`tool: "get_law"`、`detail.issues: [{ path: "at", message: "YYYY-MM-DD の形で指定してください" }]`）になる。形は合うが暦に無い日付は、ツールの処理が e-Gov に問い合わせる前に `INVALID_ARGUMENT`（`detail.issues: [{ path: "at", message: "暦に無い日付です" }]`）を返す。
+
+例: `law_name: "民法", article: "1", at: "2024/04/01"` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].path: "at"` で、e-Gov への問い合わせは 0 回。`at: "20240401"`・`at: "2024-4-1"` も同じ。`at: "2026-02-30"` は `detail.issues[0].message: "暦に無い日付です"` で、e-Gov への問い合わせは 0 回。`at: "2024-04-01"` は SPEC-EGOV-GET-LAW-034 のとおりその時点の本文を取る。
+
+### SPEC-EGOV-GET-LAW-038 法令名の検索が通信の失敗で終わったときは `LAW_NOT_FOUND` ではなく `SOURCE_*` を返す
+
+`law_name` が略称辞書に law_id 付きで無く、e-Gov の法令名検索で law_id を決めるとき、その検索が通信の失敗（接続できない・時間切れ・5xx・429・429 以外の 4xx）で終わったときは、SPEC-EGOV-COMMON-ERRORS-027 の表の code（`SOURCE_UNAVAILABLE` / `SOURCE_TIMEOUT` / `SOURCE_API_ERROR` / `SOURCE_RATE_LIMITED`）を、表の `retryable` と `detail` 付きで返す（SPEC-EGOV-COMMON-ERRORS-029）。`LAW_NOT_FOUND`（SPEC-EGOV-GET-LAW-026）は、検索が成功して 0 件だったときだけ返す。`SOURCE_*` のときの `next_actions` に `resolve_abbreviation` / `search_law` は入れない。
+
+例: 法令名の検索が 503 を返す状態で `{ law_name: "架空の法律", article: "1" }` を渡すと、`code: "SOURCE_API_ERROR"`、`retryable: true`、`detail.status: 503`（v0.15.4 では `LAW_NOT_FOUND` だった）。検索が時間切れなら `SOURCE_TIMEOUT`、接続できなければ `SOURCE_UNAVAILABLE`（`detail.cause: "ENOTFOUND"` など）、400 なら `SOURCE_API_ERROR`・`retryable: false`。検索が 0 件で成功したときは `LAW_NOT_FOUND` のまま。
+
+### SPEC-EGOV-GET-LAW-039 `law_name` の全角英数字・ダッシュ類・全角空白は半角に揃えてから略称辞書と照合する
+
+`law_name` を略称辞書で引くときは、houki-abbreviations の `resolveAbbreviation(name, { normalize: true })` の規則（全角英数字を半角に、ダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` を `-` に、全角チルダを `~` に、全角空白を半角空白にし、前後の空白を除く。大文字と小文字は区別する）で揃えてから照合する。管轄の判定（`OUT_OF_SCOPE`）も同じ規則で引く。辞書に無いときに e-Gov の法令名検索へ渡す値は、前後の空白を除いた渡した値のままで、揃えない。
+
+例: `{ law_name: "ＰＬ法", article: "3" }` は `製造物責任法第 3 条を返す（`law_name: "PL法"` と同じ応答）`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
+
 ## できないこと
 
 - 編・章・節や附則 1 本をまとめて取ること（`get_law_range`）
@@ -346,11 +372,6 @@ SPEC-EGOV-GET-LAW-001 の `OUT_OF_SCOPE` の応答では、`error` に略称辞�
 10. **`format: "toc"` で `article` を渡したとき。** → SPEC-EGOV-GET-LAW-033
 11. **`at` による時点指定。** → SPEC-EGOV-GET-LAW-034・SPEC-EGOV-GET-LAW-035
 12. **法令名が完全一致しないとき、e-Gov の検索の先頭の法令を使う。** → houki-egov-mcp #45
-13. **法令名の検索で e-Gov に問い合わせられなかったとき `LAW_NOT_FOUND` になる。** → houki-egov-mcp #46
-14. **空の `law_name` の code。** → houki-egov-mcp #53
 15. **条の探し方が本則に限られていない。** → houki-egov-mcp #51
-16. **削除された条の範囲表記を `article` に渡せる。** → houki-egov-mcp #54
 17. **目次の `meta` に `at` が付かない。** → houki-egov-mcp #64
 18. **`item` だけを指定して項を補ったとき、json の `paragraph_num` が付かない。** → houki-egov-mcp #64
-19. **`paragraph` に 0・負の数・小数を渡したとき。** → houki-egov-mcp #48
-20. **`at` の形を確かめない。** → houki-egov-mcp #47

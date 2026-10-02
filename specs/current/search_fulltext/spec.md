@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）
 - 起こした元: v0.15.1 の `src/tools/handlers.ts`（`handleSearchFulltext`）、`src/tools/definitions.ts`、`src/services/law-search.ts`、`src/services/relevance-scoring.ts`、`src/services/freshness.ts`、`src/constants.ts`、`src/tools/handlers.test.ts`、`src/services/law-search.test.ts`、`src/services/relevance-scoring.test.ts`、`src/services/freshness.test.ts`、`src/test-helpers/law-db-fixture.ts`
 - 関連する Issue: houki-egov-mcp #23（2 文字の語の扱いと `scan_body`）
 
@@ -20,7 +20,7 @@
 | `keyword`   | 必須 | 検索キーワード。空白で区切ると AND 検索。法令名・略称を含めると（例: `"民法 不法行為"`）その法令の条に絞る。「第30条」を含めると該当条を上位に寄せ、法令名 + 条番号だけ（例: `"民法 第709条"`）ならその条を直接返す |
 | `domain`    | 任意 | 分野タグ（`tax` など）。受け付けるが絞り込みはしない                                                                                                                                                                |
 | `law_type`  | 任意 | 法令種別で絞る。`Act` / `CabinetOrder` / `ImperialOrdinance` / `MinisterialOrdinance` / `Rule` のどれか                                                                                                             |
-| `limit`     | 任意 | 返す件数。既定 10、最大 30                                                                                                                                                                                          |
+| `limit`     | 任意 | 返す件数。既定 10。1 以上 30 以下の整数（SPEC-EGOV-SEARCH-FULLTEXT-033） |
 | `scan_body` | 任意 | 既定 `false`。`true` のとき、2 文字の語だけのクエリで索引を使わずに全法令の条本文を端から照合する                                                                                                                   |
 
 ## 処理の流れ
@@ -106,9 +106,9 @@ flowchart TD
 
 ### SPEC-EGOV-SEARCH-FULLTEXT-005 空白で区切った語は AND で探し、記号と 1 文字の語は捨てる
 
-`keyword` を空白で語に分け、すべての語を含む条を探す（AND）。`"` `*` `:` `(` `)` と改行・タブは空白として扱う。1 文字の語は捨てる。語が残らないとき（1 文字だけ・記号だけ・空文字）はエラーにせず、`hits` を空で返す。
+`keyword` を空白で語に分け、すべての語を含む条を探す（AND）。`"` `*` `:` `(` `)` と改行・タブは空白として扱う。1 文字の語は捨てる。語が残らないとき（1 文字だけ・記号だけ）はエラーにせず、`hits` を空で返す。空文字と空白だけの `keyword` は語を分ける前に `INVALID_ARGUMENT` になる（SPEC-EGOV-SEARCH-FULLTEXT-034）。
 
-例: `税`、`"*:()`、空文字はどれも `hits: []`。
+例: `税`、`"*:()` はどちらも `hits: []`。
 
 ### SPEC-EGOV-SEARCH-FULLTEXT-006 全角英数字・全角空白・大文字の違いを吸収して探す
 
@@ -254,18 +254,6 @@ SPEC-EGOV-SEARCH-FULLTEXT-012 で法令を絞り、残りが 2 文字の語だ�
 
 例: `試験用条文` を本文に含む条が 200 件ある DB で `{ keyword: "試験用条文" }` を渡すと `count: 10`。
 
-### SPEC-EGOV-SEARCH-FULLTEXT-025 limit が 1 未満なら 1 件にする
-
-`limit` に 1 未満の整数（`0` や負の数）を渡しても、エラーにせず `limit: 1` として扱い、1 件を返す。丸めたことは応答に出さない（`filters` にも `limit` は入らない）。
-
-例: 同じ DB で `{ keyword: "試験用条文", limit: 0 }` と `{ keyword: "試験用条文", limit: -5 }` は、どちらも `count: 1`。標準の fixture の DB で `{ keyword: "適格請求書", limit: 0 }` を `tools/call` から渡しても `source: "bulk"`、`count: 1`。
-
-### SPEC-EGOV-SEARCH-FULLTEXT-026 limit が 30 を超えると 30 件にする
-
-`limit` に 30 を超える整数を渡しても、エラーにせず `limit: 30` として扱う。丸めたことは応答に出さない。
-
-例: 同じ DB で `{ keyword: "試験用条文", limit: 31 }` と `{ keyword: "試験用条文", limit: 100 }` は、どちらも `count: 30`（`limit: 30` と同じ）。
-
 ### SPEC-EGOV-SEARCH-FULLTEXT-027 DB を開けないときも search_law に切り替える
 
 ローカル DB のファイルを開けない（パスの途中が普通のファイル、パスがディレクトリ、権限が無いなど）ときも、エラーにせず SPEC-EGOV-SEARCH-FULLTEXT-002 と同じ形で `search_law` に切り替えて返す。`note` の先頭は `bulk DB を開けなかったため` で、`bulk DL 未実行のため` ではない。`next_actions` と `fallback` は SPEC-EGOV-SEARCH-FULLTEXT-002 と同じ。
@@ -278,11 +266,11 @@ SPEC-EGOV-SEARCH-FULLTEXT-002・027 で `search_law` に切り替え、`keyword`
 
 例: 条が無い DB で、e-Gov の法令検索が消費税法（`law_id: "363AC0000000108"`、`law_type: "Act"`、`law_num: "昭和六十三年法律第百八号"`）の 1 件を返すようにして `{ keyword: " 消法 ", law_type: "Act", limit: 3 }` を渡すと、`keyword: "消法"`、`source: "api-fallback"`、`fallback.query: { keyword: "消法", law_type: "Act", resolved: "消費税法" }`、`fallback.total_count: 1`、`fallback.results[0]` は `{ law_id: "363AC0000000108", title: "消費税法", law_num: "昭和六十三年法律第百八号", law_type: "Act", url: "https://laws.e-gov.go.jp/law/363AC0000000108", … }`、`next_actions[1].example: { keyword: "消法" }`。
 
-### SPEC-EGOV-SEARCH-FULLTEXT-029 search_law に切り替えたとき、law_type と丸めた後の limit を切り替え先に渡す
+### SPEC-EGOV-SEARCH-FULLTEXT-029 search_law に切り替えたとき、law_type と limit を切り替え先に渡す
 
-SPEC-EGOV-SEARCH-FULLTEXT-028 で e-Gov の法令検索（`/laws`）を引くときは、`law_title` に検索する法令名（略称なら正式名称）、`law_type` に渡した `law_type`（渡さなければ付けない）、`limit` に SPEC-EGOV-SEARCH-FULLTEXT-024〜026 で丸めた後の件数を付ける。
+SPEC-EGOV-SEARCH-FULLTEXT-028 で e-Gov の法令検索（`/laws`）を引くときは、`law_title` に検索する法令名（略称なら正式名称）、`law_type` に渡した `law_type`（渡さなければ付けない）、`limit` に渡した `limit`（省いたときは SPEC-EGOV-SEARCH-FULLTEXT-024 の 10）を付ける。`limit` は inputSchema の検査を通った 1 以上 30 以下の整数なので、丸めは起きない（SPEC-EGOV-SEARCH-FULLTEXT-033）。
 
-例: `{ keyword: "消法", law_type: "Act", limit: 3 }` では e-Gov の `/laws` を `law_title=消費税法`・`law_type=Act`・`limit=3` で引く。`{ keyword: "所得税", limit: 99 }` では `law_title=所得税法`・`limit=30` で引き、`law_type` は付けない。`{ keyword: "所得税2" }` では `law_title=所得税2`・`limit=10`。
+例: `{ keyword: "消法", law_type: "Act", limit: 3 }` では e-Gov の `/laws` を `law_title=消費税法`・`law_type=Act`・`limit=3` で引く。`{ keyword: "所得税", limit: 30 }` では `law_title=所得税法`・`limit=30` で引き、`law_type` は付けない。`{ keyword: "所得税2" }` では `law_title=所得税2`・`limit=10`。
 
 ### SPEC-EGOV-SEARCH-FULLTEXT-030 scan_body: true の走査は 150 件で打ち切り、そのことを返す
 
@@ -304,6 +292,30 @@ SPEC-EGOV-SEARCH-FULLTEXT-020 の検索（`short_tokens.body_search: "like_in_la
 
 例: 標準の fixture の DB で `{ keyword: "  適格請求書　 " }`（末尾に全角空白を含む）と `{ keyword: "\t適格請求書\n" }` は、どちらも `keyword: "適格請求書"`、`count: 2`。条が無い DB で `{ keyword: " 消法 " }` は `keyword: "消法"`（SPEC-EGOV-SEARCH-FULLTEXT-028）。
 
+### SPEC-EGOV-SEARCH-FULLTEXT-033 `limit` は 1 以上 30 以下の整数で、範囲の外は `INVALID_ARGUMENT` にして丸めない
+
+tools/list の inputSchema の `limit` は `type: "integer"`、`minimum: 1`、`maximum: 30` を持つ（SPEC-EGOV-COMMON-ERRORS-023）。0・負の数・小数・31 以上・数値でない値を渡すと、inputSchema の検査で `INVALID_ARGUMENT`（`tool: "search_fulltext"`、`detail.issues[0].path: "limit"`）を返し、ローカル DB も e-Gov も引かない。1 件や 30 件に丸めない（v0.15.4 の SPEC-EGOV-SEARCH-FULLTEXT-025・026 をやめる）。
+
+例: `{ keyword: "適格請求書", limit: 0 }` は `code: "INVALID_ARGUMENT"`、`detail.issues` は `[{ path: "limit", message: "1 以上で指定してください" }]`（v0.15.4 では 1 件返していた）。`limit: 31` と `limit: 100` は `[{ path: "limit", message: "30 以下で指定してください" }]`（v0.15.4 では 30 件）。`limit: 2.5` は `整数で指定してください`。`limit: 30` は検査を通り、最大 30 件を返す。DB の有無によらず同じ。
+
+### SPEC-EGOV-SEARCH-FULLTEXT-034 keyword が空文字・空白だけのときは DB も e-Gov も引かずに `INVALID_ARGUMENT` を返す
+
+空文字は inputSchema の検査（SPEC-EGOV-COMMON-ERRORS-025）、空白（半角スペース・全角スペース・タブ・改行）だけはツールの処理（SPEC-EGOV-COMMON-ERRORS-026。`error: "keyword が空です"`、`hint` に探したい語や法令名を渡すよう書く）で、どちらも `INVALID_ARGUMENT`（`tool: "search_fulltext"`、`detail.issues[0].path: "keyword"`）を返す。ローカル DB の有無によらず同じで、DB が無いときの `search_law` への切り替え（SPEC-EGOV-SEARCH-FULLTEXT-028）にも進まない。
+
+例: `keyword: ""` は `detail.issues[0].message: "空文字は指定できません"`。`keyword: "　　"` と `keyword: " \t"` は `error: "keyword が空です"`。どれも `code: "INVALID_ARGUMENT"` で、DB の照会と e-Gov への問い合わせは 0 回（v0.15.4 では DB があれば `hits: []`、無ければ切り替え先の `search_law` が `INVALID_ARGUMENT` を返していた）。
+
+### SPEC-EGOV-SEARCH-FULLTEXT-035 同期の記録の日付を解釈できないときは `INTERNAL_ERROR`（`retryable: false`）を返し、全件の取り込みを案内する
+
+`source: "bulk"` の検索で、`freshness`（SPEC-EGOV-SEARCH-FULLTEXT-023）を計算するときに `sync_state.last_sync_date` が日付・時刻として解釈できない（空文字、`2026/05/08`、`2026-02-30` など）ときは、想定外の例外として止まらず、SPEC-EGOV-COMMON-ERRORS-031 の形のエラー `INTERNAL_ERROR`（`retryable: false`、`error` にその値、`hint` に `houki-egov-mcp --bulk-download-everything` で作り直す案内、`detail.cause` に例外の文）を返す。`hits` は返さない。同期の記録が無い（`sync_state` に行が無い）ときは今までどおり `freshness: null` で、エラーにしない。
+
+例: `sync_state.last_sync_date` を `2026/05/08` に書き換えた DB で `{ keyword: "軽減税率" }` を渡すと、`code: "INTERNAL_ERROR"`、`retryable: false`、`error` に `2026/05/08` を含む。`last_sync_date` が `2026-05-08` の DB では、今までどおり `hits` と `freshness` を返す。
+
+### SPEC-EGOV-SEARCH-FULLTEXT-036 検索語のダッシュ類は `-` に揃えて探し、DB の本文は取り込んだときの版の揃え方のまま
+
+`keyword` のダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` は `-` に揃えてから探す（houki-abbreviations 0.7.0 の `normalizeJpText`。SPEC-ABBR-NORMALIZE-JP-TEXT-012）。取り込み（`--bulk-download-everything` / `--sync`）が `articles.body` と `laws_fts` に入れる文字列も同じ関数で揃えるので、0.16.0 以降に取り込んだ本文はダッシュ類が `-` で入る。0.16.0 より前に取り込んだ本文は `―` などのままで、0.16.0 では入れ直さない（SPEC-EGOV-DB-SCHEMA-024）。その行は、ダッシュ類を含む検索語では当たらない（`hits: []`。誤った条が当たるのではない）。全件を揃え直すのは、スキーマの版を上げる 0.19.0 の取り込みで行う。
+
+例: 0.16.0 で取り込んだ DB で、本文に `１８３―２` とある条は、`keyword: "183-2"` でも `keyword: "１８３―２"` でも当たる。0.15.4 で取り込んだ DB では、その条の `body` は `183―2` のままなので、`keyword: "183-2"` は `183-2` を探して当たらない。
+
 ## できないこと
 
 - 条文の本文を丸ごと返すこと（`snippet` だけ。本文は `get_law` / `get_law_range`）
@@ -320,11 +332,10 @@ SPEC-EGOV-SEARCH-FULLTEXT-020 の検索（`short_tokens.body_search: "like_in_la
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-1. **空の `keyword` の扱いが DB の有無で変わる。** → houki-egov-mcp #53
 2. **tool description と引数の説明に古い版番号が残っている。** → houki-egov-mcp #55
 3. **通称の OR 展開で、正式名称を本文に書いた他の法令の条まで当たる。** → houki-egov-mcp #67
 4. **2 文字の語だけのときの `next_actions` の例は常に「民法」を添える。** → houki-egov-mcp #67
-5. **`limit` の範囲。** → SPEC-EGOV-SEARCH-FULLTEXT-024・SPEC-EGOV-SEARCH-FULLTEXT-025・SPEC-EGOV-SEARCH-FULLTEXT-026
+5. **`limit` の範囲。** → SPEC-EGOV-SEARCH-FULLTEXT-024・SPEC-EGOV-SEARCH-FULLTEXT-033
 6. **DB を開けないときの切り替え。** → SPEC-EGOV-SEARCH-FULLTEXT-027
 7. **DB が無いときに `keyword` があれば `search_law` の結果が `fallback` に入ること。** → SPEC-EGOV-SEARCH-FULLTEXT-028・SPEC-EGOV-SEARCH-FULLTEXT-029
 8. **走査の打ち切り。** → SPEC-EGOV-SEARCH-FULLTEXT-030・SPEC-EGOV-SEARCH-FULLTEXT-031

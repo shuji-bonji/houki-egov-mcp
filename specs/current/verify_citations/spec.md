@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`（`verify_citations` の定義）、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/utils/article-num.ts`、`src/services/law-tree.ts`、`src/errors.ts`、`src/constants.ts`、`src/services/law-service.verify.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: houki-egov-mcp #18（引用の実在確認。出典は houki-hub #20 の機能 3 / houki-hub #21）
 
@@ -18,7 +18,7 @@
 | 引数        | 必須 | 内容                                                   |
 | ----------- | ---- | ------------------------------------------------------ |
 | `citations` | 必須 | 確かめたい引用の配列。1 件以上 50 件まで。要素は下の表 |
-| `at`        | 任意 | 時点。`YYYY-MM-DD` の形。全件に同じ時点を使う          |
+| `at`        | 任意 | 時点。`YYYY-MM-DD` の形（SPEC-EGOV-VERIFY-CITATIONS-040）。全件に同じ時点を使う |
 
 `citations` の要素:
 
@@ -26,8 +26,8 @@
 | ----------- | ------------------------- | --------------------------------------------------------------------------------- |
 | `law_name`  | `law_id` が無ければ必須   | 法令名または略称。例: `"所得税法"`、`"所法"`                                      |
 | `law_id`    | `law_name` が無ければ必須 | e-Gov の law_id。例: `"340AC0000000033"`。`law_name` と両方あれば `law_id` を使う |
-| `article`   | 必須                      | 条番号。例: `"30"`、`"30の2"`、`"第三十条の二"`                                   |
-| `paragraph` | 任意                      | 項番号（数値）。省くと条までを確かめる                                            |
+| `article`   | 必須                      | 条番号。例: `"30"`、`"30の2"`、`"第三十条の二"`。空文字は不可（042） |
+| `paragraph` | 任意                      | 項番号。1 以上の整数（SPEC-EGOV-VERIFY-CITATIONS-041）。省くと条までを確かめる |
 | `item`      | 任意                      | 号番号。数値（`8`）または文字列（`"8"`・`"8の2"`・`"八の二"`）                    |
 | `label`     | 任意                      | 引用元の表示文字列。判定には使わず、応答の `input` にそのまま返す                 |
 
@@ -321,6 +321,38 @@ e-Gov が 429 を返したときは、件ごとの判定を返さず、ツール
 
 例: `電子帳簿保存法` は略称辞書で正式名称 `電子計算機を使用して作成する国税関係帳簿書類の保存方法等の特例に関する法律`（`law_id` 無し）に直り、その名前で e-Gov を検索して、`{ law_name: "電子帳簿保存法", article: "1" }` は `resolved_by: "exact_title"`、`law.law_id: "410AC0000000025"`、`law.law_num: "平成十年法律第二十五号"` の `found` になる。辞書の正式名称そのままの `所得税法施行令`（`law_id` 無し）も `resolved_by: "exact_title"`、`law.law_id: "340CO0000000096"` になる。
 
+### SPEC-EGOV-VERIFY-CITATIONS-040 `at` は `YYYY-MM-DD` の形だけを受け付け、形に合わない値と暦に無い日付は `INVALID_ARGUMENT`
+
+`at` は SPEC-EGOV-COMMON-ERRORS-024 に従う。tools/list の inputSchema の `at` は `pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"` を持ち、形に合わない値は inputSchema の検査で `INVALID_ARGUMENT`（`tool: "verify_citations"`、`detail.issues: [{ path: "at", message: "YYYY-MM-DD の形で指定してください" }]`）になる。形は合うが暦に無い日付は、ツールの処理が e-Gov に問い合わせる前に `INVALID_ARGUMENT`（`detail.issues: [{ path: "at", message: "暦に無い日付です" }]`）を返す。
+
+例: `citations: [{ law_name: "民法", article: "709" }], at: "2024/04/01"` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].path: "at"` で、e-Gov への問い合わせは 0 回。`at: "20240401"`・`at: "2024-4-1"` も同じ。`at: "2026-02-30"` は `detail.issues[0].message: "暦に無い日付です"` で、e-Gov への問い合わせは 0 回。`at: "2024-04-01"` は SPEC-EGOV-VERIFY-CITATIONS-022 のとおり。
+
+`at` の形の誤りはツール全体のエラーで、`results[]` は返さない。
+
+### SPEC-EGOV-VERIFY-CITATIONS-041 `citations[].paragraph` は 1 以上の整数で、0・負の数・小数はツール全体を `INVALID_ARGUMENT` にして法令を取らない
+
+tools/list の inputSchema の `citations.items.properties.paragraph` は `type: "integer"`、`minimum: 1` を持つ（SPEC-EGOV-COMMON-ERRORS-023）。どれか 1 件の `paragraph` が 0・負の数・小数・数値でない値なら、inputSchema の検査でツール全体の `INVALID_ARGUMENT`（`tool: "verify_citations"`、`detail.issues[].path` は `citations.<添字>.paragraph`）を返し、件ごとの判定はせず e-Gov に問い合わせない。件ごとの `not_found` は、法令を取った後で項が無いときだけになる。
+
+例: `citations: [{ law_name: "民法", article: "709" }, { law_name: "民法", article: "709", paragraph: 0 }]` は `code: "INVALID_ARGUMENT"`、`detail.issues` は `[{ path: "citations.1.paragraph", message: "1 以上で指定してください" }]` で、`results` は無く、e-Gov への問い合わせは 0 回（v0.15.4 では 2 件目が `not_found` になっていた）。`paragraph: 1.5` は `整数で指定してください`。
+
+### SPEC-EGOV-VERIFY-CITATIONS-042 `citations[].article` が空文字・空白だけのときはツール全体を `INVALID_ARGUMENT` にする
+
+`citations.items.properties.article` は inputSchema に `minLength: 1` を持つ（SPEC-EGOV-COMMON-ERRORS-025）。どれか 1 件の `article` が空文字なら、inputSchema の検査でツール全体の `INVALID_ARGUMENT`（`tool: "verify_citations"`、`detail.issues[].path` は `citations.<添字>.article`、`message: "空文字は指定できません"`）を返す。空白だけなら、ツールの処理が e-Gov に問い合わせる前に、SPEC-EGOV-COMMON-ERRORS-026 の形のツール全体の `INVALID_ARGUMENT`（`error: "citations[<添字>].article が空です"`、`detail.issues: [{ path: "citations.<添字>.article", message: "空白だけは指定できません" }]`）を返す。`law_name` / `law_id` の空白だけは SPEC-EGOV-VERIFY-CITATIONS-032 のままである。
+
+例: `citations: [{ law_name: "民法", article: "" }]` は `detail.issues` が `[{ path: "citations.0.article", message: "空文字は指定できません" }]`。`citations: [{ law_name: "民法", article: "709" }, { law_name: "民法", article: " " }]` は `error: "citations[1].article が空です"`、`detail.issues[0].path: "citations.1.article"`。どちらも `code: "INVALID_ARGUMENT"` で `results` は無く、e-Gov への問い合わせは 0 回。
+
+### SPEC-EGOV-VERIFY-CITATIONS-043 e-Gov との通信と関係の無い例外は `SOURCE_*` にせず `INTERNAL_ERROR` にする
+
+件ごとの判定の途中で、e-Gov への要求の失敗（SPEC-EGOV-COMMON-ERRORS-027 の表）ではない例外が起きたとき（条文の解析の失敗など）は、ツール全体のエラーを `SOURCE_API_ERROR` にせず、SPEC-EGOV-COMMON-ERRORS-007 の `INTERNAL_ERROR`（`error` は `内部エラーが発生しました: <例外の文>`、`detail.cause` に例外の文）にする。e-Gov への要求の失敗は今までどおり SPEC-EGOV-VERIFY-CITATIONS-034〜036 と SPEC-EGOV-COMMON-ERRORS-028（接続できないとき `SOURCE_UNAVAILABLE`）で、どちらの場合も件ごとの判定（`results`）は返さない。
+
+例: 法令本文の応答を読む処理が `Error("boom")` を投げる状態で `citations: [{ law_name: "所得税法", article: "9" }]` を渡すと、`code: "INTERNAL_ERROR"`、`detail.cause: "boom"` で、`SOURCE_API_ERROR` ではない（v0.15.4 では `SOURCE_API_ERROR`・`retryable: true` だった）。法令本文の取得が 503 のときは今までどおり `SOURCE_API_ERROR`。
+
+### SPEC-EGOV-VERIFY-CITATIONS-044 `law_name` の全角英数字・ダッシュ類・全角空白は半角に揃えてから略称辞書と照合する
+
+`law_name` を略称辞書で引くときは、houki-abbreviations の `resolveAbbreviation(name, { normalize: true })` の規則（全角英数字を半角に、ダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` を `-` に、全角チルダを `~` に、全角空白を半角空白にし、前後の空白を除く。大文字と小文字は区別する）で揃えてから照合する。管轄の判定（`OUT_OF_SCOPE`）も同じ規則で引く。辞書に無いときに e-Gov の法令名検索へ渡す値は、前後の空白を除いた渡した値のままで、揃えない。`law_id` を書いた件には関係しない。
+
+例: `citations: [{ law_name: "ＰＬ法", article: "3" }]` は ``law_name: "PL法"` の件と同じ判定（`status: "found"`）`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
+
 ## できないこと
 
 - 引用した条文が主張を支えるかどうかを判定すること（確かめるのは条・項・号が e-Gov の法令にあるかだけ）
@@ -338,9 +370,7 @@ e-Gov が 429 を返したときは、件ごとの判定を返さず、ツール
 ### 判断が要る項目
 
 1. **附則の条にも一致する。** → houki-egov-mcp #51
-2. **`at` の形を確かめず、e-Gov の 400 を「law_id が無い」と書くことがある。** → houki-egov-mcp #47
-3. **ツール全体をエラーにする場面が説明より広い。** → houki-egov-mcp #46
-4. **`paragraph` の値を確かめない。** → houki-egov-mcp #48
+2. **e-Gov の 400 を「law_id が無い」と書くことがある。** → houki-egov-mcp #47
 5. **法令名の完全一致を探すのは部分一致の上位 50 件の中だけ。** → houki-egov-mcp #45
 
 ### テストが無い項目

@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
 - 起こした元: v0.15.1 の `src/tools/handlers.ts`（`handleGetLawRevisions`）、`src/tools/definitions.ts`、`src/services/law-service.ts`（`getLawRevisionsByName`・`resolveLawId`・`checkAbbreviationScope`・`egovHttpErrorToLawError`）、`src/services/egov-client.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: なし
 
@@ -18,7 +18,7 @@
 | 引数       | 必須 | 内容                                                   |
 | ---------- | ---- | ------------------------------------------------------ |
 | `law_name` | 必須 | 法令名または略称。例: `"消費税法"`、`"消法"`、`"民法"` |
-| `latest`   | 任意 | 先頭から何件を返すか。省略すると全件                   |
+| `latest`   | 任意 | 先頭から何件を返すか。1 以上の整数（SPEC-EGOV-GET-LAW-REVISIONS-012）。省略すると全件 |
 
 ## 処理の流れ
 
@@ -113,6 +113,30 @@ e-Gov の改正の要素にこの 8 つ以外のフィールドがあっても�
 
 例: `{ law_name: "消法" }` では e-Gov へは `https://laws.e-gov.go.jp/api/2/law_revisions/363AC0000000108` の 1 回だけを呼び、`/laws` は呼ばない。応答の `meta.title: "消費税法"`、`meta.law_num: "昭和六十三年法律第百八号"`。
 
+### SPEC-EGOV-GET-LAW-REVISIONS-012 `latest` は 1 以上の整数で、0・負の数・小数は `INVALID_ARGUMENT` にして改正履歴を取らない
+
+tools/list の inputSchema の `latest` は `type: "integer"`、`minimum: 1` を持ち、`maximum` を持たない（SPEC-EGOV-COMMON-ERRORS-023）。0・負の数・小数・数値でない値を渡すと、inputSchema の検査で `INVALID_ARGUMENT`（`tool: "get_law_revisions"`、`detail.issues[0].path: "latest"`）を返し、e-Gov に問い合わせない。全件に読み替えたり切り捨てたりしない。件数より大きい値は今までどおり全件を返す（SPEC-EGOV-GET-LAW-REVISIONS-009）。
+
+例: `law_name: "消法", latest: 0` は `code: "INVALID_ARGUMENT"`、`detail.issues` は `[{ path: "latest", message: "1 以上で指定してください" }]` で、e-Gov への問い合わせは 0 回（v0.15.4 では全件を返していた）。`latest: -1` も同じ。`latest: 2.5` は `[{ path: "latest", message: "整数で指定してください" }]`。`latest: 10` は検査を通り、改正履歴が 3 件なら 3 件を返す。
+
+### SPEC-EGOV-GET-LAW-REVISIONS-013 law_name が空文字・空白だけのときは略称辞書と e-Gov に問い合わせずに `INVALID_ARGUMENT` を返す
+
+空文字は inputSchema の `minLength: 1` の検査（SPEC-EGOV-COMMON-ERRORS-025）で止まり、`INVALID_ARGUMENT`（`tool: "get_law_revisions"`、`detail.issues: [{ path: "law_name", message: "空文字は指定できません" }]`）を返す。空白（半角スペース・全角スペース・タブ・改行）だけのときは、ツールの処理が略称辞書と e-Gov に問い合わせる前に、SPEC-EGOV-COMMON-ERRORS-026 の形の `INVALID_ARGUMENT`（`tool: "get_law_revisions"`、`error: "law_name が空です"`、`detail.issues: [{ path: "law_name", message: "空白だけは指定できません" }]`、`hint` に法令名か略称を渡すよう書く）を返す。
+
+例: `law_name: ""` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].message: "空文字は指定できません"`。`law_name: "　"`（全角スペース）と `law_name: " \n"` は `code: "INVALID_ARGUMENT"`・`error: "law_name が空です"`。どれも略称辞書と e-Gov への問い合わせは 0 回。
+
+### SPEC-EGOV-GET-LAW-REVISIONS-014 法令名の検索が通信の失敗で終わったときは `LAW_NOT_FOUND` ではなく `SOURCE_*` を返す
+
+`law_name` が略称辞書に law_id 付きで無く、e-Gov の法令名検索で law_id を決めるとき、その検索が通信の失敗（接続できない・時間切れ・5xx・429・429 以外の 4xx）で終わったときは、SPEC-EGOV-COMMON-ERRORS-027 の表の code（`SOURCE_UNAVAILABLE` / `SOURCE_TIMEOUT` / `SOURCE_API_ERROR` / `SOURCE_RATE_LIMITED`）を、表の `retryable` と `detail` 付きで返す（SPEC-EGOV-COMMON-ERRORS-029）。`LAW_NOT_FOUND`（SPEC-EGOV-GET-LAW-REVISIONS-004）は、検索が成功して 0 件だったときだけ返す。`SOURCE_*` のときの `next_actions` に `resolve_abbreviation` / `search_law` は入れない。
+
+例: 法令名の検索が 503 を返す状態で `{ law_name: "架空の法律" }` を渡すと、`code: "SOURCE_API_ERROR"`、`retryable: true`、`detail.status: 503`（v0.15.4 では `LAW_NOT_FOUND` だった）。検索が時間切れなら `SOURCE_TIMEOUT`、接続できなければ `SOURCE_UNAVAILABLE`（`detail.cause: "ENOTFOUND"` など）、400 なら `SOURCE_API_ERROR`・`retryable: false`。検索が 0 件で成功したときは `LAW_NOT_FOUND` のまま。
+
+### SPEC-EGOV-GET-LAW-REVISIONS-015 `law_name` の全角英数字・ダッシュ類・全角空白は半角に揃えてから略称辞書と照合する
+
+`law_name` を略称辞書で引くときは、houki-abbreviations の `resolveAbbreviation(name, { normalize: true })` の規則（全角英数字を半角に、ダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` を `-` に、全角チルダを `~` に、全角空白を半角空白にし、前後の空白を除く。大文字と小文字は区別する）で揃えてから照合する。管轄の判定（`OUT_OF_SCOPE`）も同じ規則で引く。辞書に無いときに e-Gov の法令名検索へ渡す値は、前後の空白を除いた渡した値のままで、揃えない。
+
+例: `{ law_name: "ＰＬ法" }` は `製造物責任法の改正履歴を返す`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
+
 ## できないこと
 
 - 改正前・改正後の条文の本文や、条ごとの新旧の差分を返すこと（時点の本文は `get_law` の `at`）
@@ -129,9 +153,7 @@ e-Gov の改正の要素にこの 8 つ以外のフィールドがあっても�
 
 1. **状態の値が説明と違う。** → houki-egov-mcp #65
 2. **`latest` の「最新」が何の順か決まっていない。** → houki-egov-mcp #65
-3. **`latest` の値を確かめない。** → houki-egov-mcp #54
 4. **辞書に無い法令名は、e-Gov の法令検索の先頭の法令に決めてしまう。** → houki-egov-mcp #45
-5. **法令を決めるための e-Gov の検索に失敗すると `LAW_NOT_FOUND` になる。** → houki-egov-mcp #46
 6. **e-Gov が返さなかった改正のフィールド。** → houki-egov-mcp #65
 7. **応答の形。** → SPEC-EGOV-GET-LAW-REVISIONS-002
 8. **管轄外の名前は `OUT_OF_SCOPE`。** → SPEC-EGOV-GET-LAW-REVISIONS-003
