@@ -3,7 +3,7 @@
  *
  * 期待値の正本は specs/changes/20260928-untested-behaviors/specs/explain_law_type/spec.md。
  * 同梱の知識だけを引くツールなので、e-Gov への問い合わせは起きない（fetch を差し替えて 0 回を確かめる）。
- * `see_also`（#56）と `通知`（#62）は約束にしていないので確かめない。
+ * `通知`（#62）は約束にしていないので確かめない。`see_also` は 20261003-t5-docs-mismatch のテスト（SPEC-EGOV-EXPLAIN-LAW-TYPE-020）で確かめる。
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -152,12 +152,12 @@ describe('createServer (SDK v2, InMemoryTransport)', () => {
     expect(body.hint).toBe('テスト用');
   });
 
-  it('SPEC-EGOV-COMMON-ERRORS-007 handler が throw すると INTERNAL_ERROR + retryable: true (protocol error にしない)', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-007 handler が throw すると INTERNAL_ERROR + retryable: false (protocol error にしない)', async () => {
     const res = await client.callTool({ name: '__test_throw', arguments: {} });
     expect(res.isError).toBe(true);
     const body = JSON.parse(firstText(res));
     expect(body.code).toBe('INTERNAL_ERROR');
-    expect(body.retryable).toBe(true);
+    expect(body.retryable).toBe(false);
     expect(body.detail.cause).toBe('boom');
   });
 

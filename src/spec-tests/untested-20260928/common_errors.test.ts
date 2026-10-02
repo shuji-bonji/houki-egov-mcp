@@ -51,10 +51,6 @@ function firstText(result: { content?: unknown }): string {
 
 const PREFIX = '引数が tools/list の inputSchema に合いません: ';
 const INTERNAL_HINT = 'バグの可能性があります。再現手順を添えて GitHub issue でご報告ください';
-const RETRY_LATER = {
-  action: 'retry_later',
-  reason: '一時的な API エラーの可能性があります。30秒〜数分後に再試行してください',
-};
 const LIST_TOOLS = {
   action: 'list_tools',
   reason: 'inputSchema で引数の型と必須項目を確認できます',
@@ -218,12 +214,11 @@ describe('common_errors (20260928-untested-behaviors)', () => {
     expect(b.body.hint).toBe(INTERNAL_HINT);
   });
 
-  it('SPEC-EGOV-COMMON-ERRORS-018 INTERNAL_ERROR の next_actions は retry_later の 1 件で example は無い', async () => {
+  it('SPEC-EGOV-COMMON-ERRORS-018 INTERNAL_ERROR には next_actions を付けない（retry_later も無い）', async () => {
     const a = await call('__test_throw_error', {});
-    expect(a.body.next_actions).toEqual([RETRY_LATER]);
-    expect(a.body.next_actions?.[0]).not.toHaveProperty('example');
+    expect(a.body).not.toHaveProperty('next_actions');
     const b = await call('__test_throw_string', {});
-    expect(b.body.next_actions).toEqual([RETRY_LATER]);
+    expect(b.body).not.toHaveProperty('next_actions');
   });
 
   it('SPEC-EGOV-COMMON-ERRORS-019 hint が空文字のエラーには hint のキーを付けない', async () => {
