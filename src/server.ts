@@ -45,8 +45,11 @@ export function createServer(): Server {
     try {
       const handler = toolHandlers[name];
       if (!handler) {
-        const err = makeError('UNKNOWN_TOOL', `Unknown tool: ${name}`, {
+        // 同じ名前で呼び直しても結果は変わらない（SPEC-EGOV-COMMON-ERRORS-002）。
+        // 呼ばれた名前は存在しないツールなので tool は付けない
+        const err = makeError('UNKNOWN_TOOL', `存在しないツールです: ${name}`, {
           hint: `利用可能なツール: ${Object.keys(toolHandlers).join(', ')}`,
+          retryable: false,
           next_actions: [
             {
               action: 'list_tools',

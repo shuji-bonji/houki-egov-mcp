@@ -120,13 +120,15 @@ export function makeError(
 /**
  * 想定外の例外（e-Gov との通信と関係の無い処理中の例外）を INTERNAL_ERROR にする（SPEC-EGOV-COMMON-ERRORS-007）。
  * tools/call の受け口（server.ts）と、e-Gov の失敗を code にする関数（law-service.ts）が同じ形で返す。
+ *
+ * 不具合の可能性が高く、同じ呼び出しをやり直しても結果は変わらないので retryable: false にし、
+ * 再試行を案内する retry_later は入れない。next_actions は空なのでキーごと付けない（SPEC-EGOV-COMMON-ERRORS-018）
  */
 export function internalError(error: unknown): LawServiceError {
   const cause = error instanceof Error ? error.message : String(error);
   return makeError('INTERNAL_ERROR', `内部エラーが発生しました: ${cause}`, {
     hint: 'バグの可能性があります。再現手順を添えて GitHub issue でご報告ください',
-    retryable: true,
-    next_actions: [NEXT_ACTIONS.retryLater()],
+    retryable: false,
     detail: { cause },
   });
 }

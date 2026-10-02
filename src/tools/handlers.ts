@@ -320,6 +320,13 @@ export async function handleResolveAbbreviation(args: ResolveAbbreviationArgs) {
  * 法務専門家でない利用者が「政令と省令の違い」「通達は守らなくていいのか」を
  * 確認するための知識ツール。
  */
+/**
+ * explain_law_type の see_also。npm のパッケージに docs/ は入らないので、MCP クライアントから
+ * 開ける GitHub の URL にする（SPEC-EGOV-EXPLAIN-LAW-TYPE-020）
+ */
+const LAW_HIERARCHY_DOC_URL =
+  'https://github.com/shuji-bonji/houki-egov-mcp/blob/main/docs/LAW-HIERARCHY.md';
+
 export async function handleExplainLawType(args: ExplainLawTypeArgs) {
   const entry = findLawHierarchy(args.name);
   if (!entry) {
@@ -328,7 +335,7 @@ export async function handleExplainLawType(args: ExplainLawTypeArgs) {
       name: args.name,
       found: false,
       hint: `知らない法令種別です。試せる名前: ${listLawHierarchyNames().join(', ')}`,
-      see_also: 'docs/LAW-HIERARCHY.md',
+      see_also: LAW_HIERARCHY_DOC_URL,
       next_actions: [
         {
           action: 'list_known_law_types',
@@ -343,7 +350,7 @@ export async function handleExplainLawType(args: ExplainLawTypeArgs) {
     found: true,
     info: entry,
     related_tools: ['search_law', 'get_law', 'get_toc'],
-    see_also: 'docs/LAW-HIERARCHY.md',
+    see_also: LAW_HIERARCHY_DOC_URL,
   };
 }
 
