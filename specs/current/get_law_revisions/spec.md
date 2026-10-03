@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）。差分 `20261003-law-resolution` は 2026-10-03（PR #95）
 - 起こした元: v0.15.1 の `src/tools/handlers.ts`（`handleGetLawRevisions`）、`src/tools/definitions.ts`、`src/services/law-service.ts`（`getLawRevisionsByName`・`resolveLawId`・`checkAbbreviationScope`・`egovHttpErrorToLawError`）、`src/services/egov-client.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: なし
 
@@ -90,11 +90,13 @@ MCP サーバーは `get_law_revisions` という名前のツールを持ち、`
 
 例: 改正履歴が常に 503 を返すようにして `{ law_name: "消法" }` を渡すと、e-Gov を 4 回呼んだうえで `code: "SOURCE_API_ERROR"`、`retryable: true`、`detail.status: 503`、`error` に `503` を含む。
 
-### SPEC-EGOV-GET-LAW-REVISIONS-008 429 と 500 番台以外の HTTP エラーは retryable: false の SOURCE_API_ERROR を返す
+### SPEC-EGOV-GET-LAW-REVISIONS-008 改正履歴の取得で e-Gov が 404・`404001` を返したときは `LAW_NOT_FOUND`、そのほかの 429 と 500 番台以外の HTTP エラーは retryable: false の SOURCE_API_ERROR を返す
 
-改正履歴の取得で e-Gov が 429 と 500 番台以外の HTTP エラー（400・404 など）を返したときは、取り直さずにエラー `code: "SOURCE_API_ERROR"`、`retryable: false` を返す。`next_actions` は付けず、`detail` に `status` と `url` が入る。
+改正履歴の取得で e-Gov が 404 を返し、応答本文の `code` が `404001`（`取得結果が０件です。`）のときは、取り直さずにエラー `LAW_NOT_FOUND`（`retryable: false`）を返す。`error` は `e-Gov に law_id <law_id> の法令がありません`、`hint` と `next_actions` は SPEC-EGOV-COMMON-ERRORS-033 の `at` を渡さないときの文、`detail` は `status: 404`・`url`・`cause: "404001"`。
 
-例: 改正履歴が 404 を返すようにして `{ law_name: "消法" }` を渡すと、e-Gov を 1 回だけ呼んで `code: "SOURCE_API_ERROR"`、`retryable: false`、`detail.status: 404`、`next_actions` は無い。400 でも同じ（`detail.status: 400`）。
+それ以外の 429 と 500 番台以外の HTTP エラー（400、`404001` 以外の 404 など）は、今までどおり取り直さずにエラー `code: "SOURCE_API_ERROR"`、`retryable: false` を返す。`next_actions` は付けず、`detail` に `status` と `url` が入る。
+
+例: 2026-10-03 10:12 JST に e-Gov の `/law_revisions/999AC0000000999` は 404・`{"code":"404001","message":"取得結果が０件です。"}` を返した。改正履歴の取得がこの応答になる状態で `{ law_name: "消法" }` を渡すと、e-Gov を 1 回だけ呼んで `code: "LAW_NOT_FOUND"`、`retryable: false`、`detail.cause: "404001"`（v0.17.0 では `SOURCE_API_ERROR`）。400 は `SOURCE_API_ERROR`・`retryable: false`・`detail.status: 400` のまま。
 
 ### SPEC-EGOV-GET-LAW-REVISIONS-009 latest が 1 以上なら、施行日の新しい順の先頭から latest 件を返し、total は絞る前の件数のまま
 
@@ -162,6 +164,12 @@ e-Gov がこれ以外の値を返したときも、そのまま入れる。tools
 
 例: 2026-10-03 JST の `{ law_name: "消法", latest: 9 }` の `revisions[0].current_revision_status` は `"UnEnforced"`、`revisions[8].current_revision_status` は `"CurrentEnforced"`。
 
+### SPEC-EGOV-GET-LAW-REVISIONS-018 法令名が完全一致しないときは、改正履歴を返さず候補を付けた `LAW_NOT_FOUND` を返す
+
+`law_name` の法令は SPEC-EGOV-COMMON-ERRORS-032 の規則で決める（このツールは `at` を受け取らないので、法令名の検索に `asof` を付けない）。略称辞書に law_id が無く、e-Gov の法令名検索の全件の中に題名の完全一致が無いときは、検索結果の先頭の法令の改正履歴を返さず、032 の形の `LAW_NOT_FOUND`（`retryable: false`）を返す。`next_actions` の候補の要素は `action: "get_law_revisions"`、`example` は渡した引数（`latest` を渡したときはそれも）の `law_name` だけを候補の題名に替えたもの。
+
+例: `{ law_name: "所得税法施行", latest: 2 }` は `code: "LAW_NOT_FOUND"`、`next_actions` の先頭は `{ action: "get_law_revisions", example: { law_name: "所得税法施行令", latest: 2 } }`。
+
 ## できないこと
 
 - 改正前・改正後の条文の本文や、条ごとの新旧の差分を返すこと（時点の本文は `get_law` の `at`）
@@ -176,7 +184,6 @@ e-Gov がこれ以外の値を返したときも、そのまま入れる。tools
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-4. **辞書に無い法令名は、e-Gov の法令検索の先頭の法令に決めてしまう。** → houki-egov-mcp #45
 7. **応答の形。** → SPEC-EGOV-GET-LAW-REVISIONS-002
 8. **管轄外の名前は `OUT_OF_SCOPE`。** → SPEC-EGOV-GET-LAW-REVISIONS-003
 9. **法令が見つからないときは `LAW_NOT_FOUND`。** → SPEC-EGOV-GET-LAW-REVISIONS-004

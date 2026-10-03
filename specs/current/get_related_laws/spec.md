@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）。差分 `20261003-law-resolution` は 2026-10-03（PR #95）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-relations.ts`、`src/services/law-service.references.test.ts`、`src/services/law-relations.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: houki-egov-mcp #20（施行令・施行規則の関連付けと条文内の参照抽出）
 
@@ -26,9 +26,12 @@
 ```mermaid
 flowchart TD
   A["呼び出し（law_name）"] --> B{"law_name を法令に解決できるか（略称辞書、なければ e-Gov の法令名検索）（003）"}
-  B -- いいえ --> E1["LAW_NOT_FOUND を返す（006）"]
+  B -- いいえ --> E1["LAW_NOT_FOUND を返す（006・019）"]
   B -- はい --> C{"解決した法令名の末尾が「施行令」「施行規則」か（004）"}
-  C -- "いいえ（法律として扱う）" --> D1["候補: 名前＋施行令・名前＋施行規則（001）"]
+  C -- いいえ --> C2{"法令の種別（law_type）が Act か（020）"}
+  C2 -- はい --> D1["候補: 名前＋施行令・名前＋施行規則（001）"]
+  C2 -- いいえ --> N["候補を作らず related・not_found を空にして返す（020）"]
+  N --> J
   C -- はい --> D2["候補: 末尾を落とした親の法律・兄弟の施行令または施行規則（002）"]
   D1 --> F{"候補ごとに、e-Gov に法令名が完全一致する法令があるか"}
   D2 --> F
@@ -68,9 +71,9 @@ flowchart TD
 
 ### SPEC-EGOV-GET-RELATED-LAWS-004 施行令・施行規則として扱うのは、名前の末尾が「施行令」「施行規則」のものだけ
 
-解決した法令名の末尾が「施行令」または「施行規則」で、その前に名前があるときだけ、施行令・施行規則として扱い、末尾を落とした名前を親の法律とする。名前の途中に「施行令」を含んでいても末尾でなければ、法律と同じ扱い（SPEC-EGOV-GET-RELATED-LAWS-001）になる。
+解決した法令名の末尾が「施行令」または「施行規則」で、その前に名前があるときだけ、施行令・施行規則として扱い、末尾を落とした名前を親の法律とする。名前の途中に「施行令」を含んでいても末尾でなければ、施行令・施行規則としては扱わない。そのとき、法令の種別が法律（`law_type` が `Act`）なら SPEC-EGOV-GET-RELATED-LAWS-001、法律でなければ SPEC-EGOV-GET-RELATED-LAWS-020 になる。
 
-例: `租税条約等の実施に伴う所得税法、法人税法及び地方税法の特例等に関する法律施行令` の親は `租税条約等の実施に伴う所得税法、法人税法及び地方税法の特例等に関する法律`。`国税通則法施行令の一部を改正する政令` と、`施行令` だけの名前は親を持たない。
+例: `租税条約等の実施に伴う所得税法、法人税法及び地方税法の特例等に関する法律施行令` の親は `租税条約等の実施に伴う所得税法、法人税法及び地方税法の特例等に関する法律`。`施行令` だけの名前は親を持たない。`国税関係法令に係る情報通信技術を活用した行政の推進等に関する省令`（`415M60000040071`、`law_type: "MinisterialOrdinance"`）は末尾が「施行令」「施行規則」でなく、法律でもないので、SPEC-EGOV-GET-RELATED-LAWS-020 の応答になる（v0.17.0 では法律と同じ扱いで、`…省令施行令`・`…省令施行規則` を `not_found` に入れていた）。
 
 ### SPEC-EGOV-GET-RELATED-LAWS-005 e-Gov に無い候補は not_found に入れ、エラーにしない
 
@@ -170,6 +173,18 @@ SPEC-EGOV-GET-RELATED-LAWS-006 の `LAW_NOT_FOUND` は、`hint: "略称辞書 / 
 
 例: `{ law_name: "ＰＬ法" }` は `製造物責任法を起点に候補を返す`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
 
+### SPEC-EGOV-GET-RELATED-LAWS-019 法令名が完全一致しないときは、関連法令を引かず候補を付けた `LAW_NOT_FOUND` を返す
+
+`law_name` の法令は SPEC-EGOV-COMMON-ERRORS-032 の規則で決める（このツールは `at` を受け取らない）。略称辞書に law_id が無く、e-Gov の法令名検索の全件の中に題名の完全一致が無いときは、検索結果の先頭の法令を起点にせず、候補名も作らずに、032 の形の `LAW_NOT_FOUND`（`retryable: false`）を返す。`next_actions` の候補の要素は `{ action: "get_related_laws", example: { law_name: <候補の題名> } }`。
+
+例: `{ law_name: "所得税法施行" }` は `code: "LAW_NOT_FOUND"`、`next_actions` は `[{ action: "get_related_laws", example: { law_name: "所得税法施行令" } }, { action: "get_related_laws", example: { law_name: "所得税法施行規則" } }, { action: "search_law", example: { keyword: "所得税法施行" } }]`。v0.17.0 では同じ引数に、所得税法施行令を起点にした `related`（所得税法・所得税法施行規則）を返していた（2026-10-03 10:10 JST に houki-egov-dev 0.17.0 で確かめた）。
+
+### SPEC-EGOV-GET-RELATED-LAWS-020 法律でもなく、名前の末尾が「施行令」「施行規則」でもない法令からは候補を作らない
+
+解決した法令の種別（略称辞書の `law_type`、または e-Gov の検索結果の `law_info.law_type`）が `Act` でなく、名前の末尾が「施行令」「施行規則」でもないとき（例: 末尾が「省令」「政令」「規則」の法令、`Constitution`）は、名前に「施行令」「施行規則」を付けた候補を作らず、e-Gov に関連法令を問い合わせない。エラーにはせず、`related: []`、`not_found: []`、`next_actions: []` の応答を返す。`note` の末尾に `<法令名> は法律でも施行令・施行規則でもないため、名前の規則で関連法令を作っていません` を足す。`law`・`method`・`meta` は SPEC-EGOV-GET-RELATED-LAWS-001・007・010 のとおり。
+
+例: `{ law_name: "国税関係法令に係る情報通信技術を活用した行政の推進等に関する省令" }` は、`law.law_id: "415M60000040071"`、`related: []`、`not_found: []`、`note` の末尾が `国税関係法令に係る情報通信技術を活用した行政の推進等に関する省令 は法律でも施行令・施行規則でもないため、名前の規則で関連法令を作っていません`。e-Gov への関連法令の問い合わせは 0 回（v0.17.0 では `…省令施行令` と `…省令施行規則` を問い合わせ、2 件とも `not_found` に入れていた。2026-10-03 10:13 JST に houki-egov-dev 0.17.0 で確かめた）。
+
 ## できないこと
 
 - 名前の末尾に「施行令」「施行規則」を付ける・落とす以外の規則で下位法令を探すこと（「…の施行に関する省令」「…施行細則」、複数の省令、告示は返さない）
@@ -188,5 +203,3 @@ SPEC-EGOV-GET-RELATED-LAWS-006 の `LAW_NOT_FOUND` は、`hint: "略称辞書 / 
 2. **houki-egov-mcp の管轄外の略称を渡したとき。** → SPEC-EGOV-GET-RELATED-LAWS-013
 3. **候補を e-Gov に問い合わせている途中で取得に失敗したとき。** → SPEC-EGOV-GET-RELATED-LAWS-014
 4. **`LAW_NOT_FOUND` の `hint` と `next_actions`。** → SPEC-EGOV-GET-RELATED-LAWS-015
-6. **法令名が完全一致しないとき、部分一致の先頭の法令を採る。** → houki-egov-mcp #45
-7. **末尾が「施行令」「施行規則」でない政令・省令を渡したとき。** → houki-egov-mcp #63

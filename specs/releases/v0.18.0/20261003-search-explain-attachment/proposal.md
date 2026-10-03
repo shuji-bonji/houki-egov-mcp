@@ -3,7 +3,7 @@
 - 対象: `search_law` / `search_fulltext` / `explain_law_type` / `list_attachments` の `specs/current/<tool>/spec.md`
 - 実装の変更: 要（下の「実装の変更」）
 - 承認日: 2026-10-03（PR #96）
-- 状態: 草案
+- 状態: 取り込み済み（v0.18.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #55（`search_law` の `domain`・`total_count`・0 件のとき）、#67（`search_fulltext` の通称の展開と 2 文字の語の例）、#88（`search_fulltext` に管轄外の略称）、#62（`explain_law_type` の「通知」と法令種別コード）、#72（附則の別表・様式の図の `location`）

@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）。差分 `20261003-law-resolution` は 2026-10-03（PR #95）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-files.ts`、`src/services/file-store.ts`、`src/services/egov-client.ts`、`src/services/law-service.ts`（法令名の解決・管轄の確認）、`src/config.ts`、`src/services/law-files.test.ts`、`src/services/file-store.test.ts`
 - 関連する Issue: houki-egov-mcp #19（添付ファイルと法令本文ファイル）
 
@@ -252,6 +252,18 @@ SPEC-EGOV-GET-ATTACHMENT-009 のエラーは、`hint` に別の時点（`at`）�
 `src` が一覧のどれかの `src` に一致するときは、同じファイル名の添付が別にあってもその添付を返す（SPEC-EGOV-GET-ATTACHMENT-002）。
 
 例: 一覧に `./pict/a/H11HO127-001.jpg` と `./pict/b/H11HO127-001.jpg` がこの順にある法令で、`src: "H11HO127-001.jpg"` を渡すと、`code: "INVALID_ARGUMENT"`、`retryable: false`、`next_actions` は `example.src` が `./pict/a/H11HO127-001.jpg` と `./pict/b/H11HO127-001.jpg` の 2 件（v0.16.0 では `./pict/a/H11HO127-001.jpg` を黙って返していた）。`src: "./pict/b/H11HO127-001.jpg"` を渡すと、その添付を返す。
+
+### SPEC-EGOV-GET-ATTACHMENT-030 法令名が完全一致しないときは、添付を取らず候補を付けた `LAW_NOT_FOUND` を返す
+
+`law_name` の法令は SPEC-EGOV-COMMON-ERRORS-032 の規則で決める。略称辞書に law_id が無く、e-Gov の法令名検索の全件の中に題名の完全一致が無いときは、検索結果の先頭の法令の添付を選ばず、`save` の値にかかわらず e-Gov から法令本文も添付ファイルも取らずに、032 の形の `LAW_NOT_FOUND`（`retryable: false`）を返す。`next_actions` の候補の要素は `action: "get_attachment"`、`example` は渡した引数（`src`・`save`・`at` のうち渡したもの）の `law_name` だけを候補の題名に替えたもの。`at` を渡したときは、法令名の検索にも `asof=<at>` を付ける。SPEC-EGOV-GET-ATTACHMENT-016 の `next_actions`（`resolve_abbreviation`・`search_law`）は、法令名の検索が 0 件のときのもので、この場合は 032 の `next_actions` になる。
+
+例: `{ law_name: "所得税法施行", src: "./pict/a.jpg" }` は `code: "LAW_NOT_FOUND"`、`next_actions` の先頭は `{ action: "get_attachment", example: { law_name: "所得税法施行令", src: "./pict/a.jpg" } }`。
+
+### SPEC-EGOV-GET-ATTACHMENT-031 法令本文の取得で e-Gov が 404・時点の 400 を返したときは `LAW_NOT_FOUND`・`INVALID_ARGUMENT`
+
+添付の一覧を作るための法令本文の取得（`/law_data/<law_id>`）で e-Gov が 429 以外の 4xx を返したときは、SPEC-EGOV-LIST-ATTACHMENTS-018 の表と同じに返す（404・`404004` は `LAW_NOT_FOUND`、400・`400044` は `INVALID_ARGUMENT`（`tool: "get_attachment"`、`detail.issues[0].path: "at"`）、そのほかの 4xx は `SOURCE_API_ERROR`・`retryable: false`）。添付ファイルの取得（`/attachment`）の 4xx は、今までどおり SPEC-EGOV-GET-ATTACHMENT-010・018。
+
+例: `{ law_name: "民法", src: "./pict/a.jpg", at: "2000-01-01" }` は、法令本文の取得に e-Gov が 400・`400044` を返すので `code: "INVALID_ARGUMENT"`、`tool: "get_attachment"`。
 
 ## できないこと
 

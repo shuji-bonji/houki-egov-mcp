@@ -3,7 +3,7 @@
 - 対象: `search_law` / `search_fulltext` / `common_errors` / `get_article_references` の `specs/current/<dir>/spec.md`
 - 実装の変更: 要（下の「実装の変更」）
 - 承認日: 2026-10-03（PR #99）
-- 状態: 草案
+- 状態: 取り込み済み（v0.18.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #97（`law_type` の `ImperialOrdinance` を e-Gov が受け付けない）、#98（条番号の付かない他法令の参照に、呼んだ条の番号で `get_law` を案内する）

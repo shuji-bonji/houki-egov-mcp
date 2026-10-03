@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）。差分 `20261003-law-resolution` は 2026-10-03（PR #95）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`（`get_law_range`）、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-tree.ts`、`src/formatters/markdown.ts`、`src/utils/article-num.ts`、`src/constants.ts`、`src/services/law-service.range.test.ts`、`src/services/law-tree.test.ts`、`src/utils/article-num.test.ts`
 - 関連する Issue: houki-egov-mcp #22（章・節単位の分割取得）
 
@@ -196,6 +196,8 @@ flowchart TD
 
 ### SPEC-EGOV-GET-LAW-RANGE-019 法令本文の取得で e-Gov が失敗したときのエラー
 
+429 以外の 4xx は SPEC-EGOV-GET-LAW-RANGE-035。
+
 法令を引けた後、e-Gov から法令本文を取るところで失敗したときは、次のエラーを返す。
 
 | e-Gov の失敗 | `code`                | `retryable` | `next_actions` の `action`       |
@@ -307,6 +309,18 @@ tools/list の inputSchema の `suppl_index` は `type: "integer"`、`minimum: 1
 
 例: `{ law_name: "ＰＬ法", suppl_index: 1 }` は `製造物責任法の附則 1 を返す（辞書に当たって law_id が決まる。無い附則の番号なら `RANGE_NOT_FOUND` で、`LAW_NOT_FOUND` ではない）`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
 
+### SPEC-EGOV-GET-LAW-RANGE-034 法令名が完全一致しないときは、範囲の条を返さず候補を付けた `LAW_NOT_FOUND` を返す
+
+`law_name` の法令は SPEC-EGOV-COMMON-ERRORS-032 の規則で決める。略称辞書に law_id が無く、e-Gov の法令名検索の全件の中に題名の完全一致が無いときは、検索結果の先頭の法令の範囲を返さず、032 の形の `LAW_NOT_FOUND`（`retryable: false`）を返す。`next_actions` の候補の要素は `action: "get_law_range"`、`example` は渡した引数（範囲の指定・`from_article`・`max_chars`・`at` のうち渡したもの）の `law_name` だけを候補の題名に替えたもの。`at` を渡したときは、法令名の検索にも `asof=<at>` を付ける。
+
+例: `{ law_name: "所得税法施行", chapter: 1 }` は `code: "LAW_NOT_FOUND"`、`next_actions` の先頭 2 件は `{ action: "get_law_range", example: { law_name: "所得税法施行令", chapter: 1 } }` と `{ action: "get_law_range", example: { law_name: "所得税法施行規則", chapter: 1 } }`、3 件目は `search_law`。
+
+### SPEC-EGOV-GET-LAW-RANGE-035 法令本文の取得で e-Gov が 404・時点の 400 を返したときは `LAW_NOT_FOUND`・`INVALID_ARGUMENT`
+
+法令を決めた後の法令本文の取得で e-Gov が 429 以外の 4xx を返したときは、SPEC-EGOV-COMMON-ERRORS-033 の表のとおりに返す。404・`404004` は `LAW_NOT_FOUND`（`retryable: false`）、400・`400044` は `INVALID_ARGUMENT`（`tool: "get_law_range"`、`detail.issues[0].path: "at"`）、そのほかの 4xx は `SOURCE_API_ERROR`（`retryable: false`、`detail.status`）。
+
+例: `{ law_name: "消費税法", chapter: 1, at: "2000-01-01" }` は `code: "INVALID_ARGUMENT"`、`detail.issues: [{ path: "at", message: "e-Gov が受け付ける時点の範囲の外です" }]`。
+
 ## できないこと
 
 - 条より細かい単位（項・号）で範囲を指すこと（1 条の項・号は `get_law`）
@@ -328,4 +342,3 @@ tools/list の inputSchema の `suppl_index` は `type: "integer"`、`minimum: 1
 5. **款・目（`subsection` / `division`）での指定。** → SPEC-EGOV-GET-LAW-RANGE-024
 6. **`meta` と markdown の末尾。** → SPEC-EGOV-GET-LAW-RANGE-025・SPEC-EGOV-GET-LAW-RANGE-026・SPEC-EGOV-GET-LAW-RANGE-027
 7. **候補が 6 か所以上に当たるとき。** → SPEC-EGOV-GET-LAW-RANGE-028
-9. **法令名が完全一致しないとき、検索結果の先頭の法令を返す。** → houki-egov-mcp #45

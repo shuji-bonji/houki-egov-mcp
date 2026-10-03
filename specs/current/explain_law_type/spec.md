@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20260930-bugfix-batch` は 2026-09-30（PR #81）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261003-t5-docs-mismatch` は 2026-10-03（PR #92）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20260930-bugfix-batch` は 2026-09-30（PR #81）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261003-t5-docs-mismatch` は 2026-10-03（PR #92）。差分 `20261003-search-explain-attachment` は 2026-10-03（PR #96）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/knowledge/law-hierarchy.ts`、`src/tools/handlers.test.ts`、`src/knowledge/law-hierarchy.test.ts`、`src/server.test.ts`
 - 関連する Issue: なし
 
@@ -17,7 +17,7 @@
 
 | 引数   | 必須 | 内容                                                                                                                                                                                                     |
 | ------ | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name` | 必須 | 法令種別の名前。例: `"法律"`、`"政令"`、`"省令"`、`"規則"`、`"条例"`、`"告示"`、`"通達"`、`"訓令"`、`"憲法"`。別名（`"施行令"`・`"施行規則"` など）と e-Gov の法令種別コード（`"Act"` など）も受け付ける |
+| `name` | 必須 | 法令種別の名前。例: `"法律"`、`"政令"`、`"省令"`、`"規則"`、`"条例"`、`"告示"`、`"通達"`、`"訓令"`、`"憲法"`。別名（`"施行令"`・`"施行規則"` など）と e-Gov の法令種別コード（`"Act"`・`"Constitution"`・`"Rule"` など。SPEC-EGOV-EXPLAIN-LAW-TYPE-022）も受け付ける |
 
 ## 処理の流れ
 
@@ -115,9 +115,9 @@ SPEC-EGOV-EXPLAIN-LAW-TYPE-001・002・003 の応答（`found: true`）は、`re
 | `law_type_code` | e-Gov の法令種別コード（文字列）                                                 |
 | `notes`         | 補足の注意の配列（文字列）。1 件以上                                             |
 
-`法律` の `law_type_code` は `Act`、`政令` は `CabinetOrder`、`省令` は `MinisterialOrdinance`。
+`憲法` の `law_type_code` は `Constitution`、`法律` は `Act`、`政令` は `CabinetOrder`、`省令` は `MinisterialOrdinance`、`規則` は `Rule`（SPEC-EGOV-EXPLAIN-LAW-TYPE-022）。
 
-例: `name: "政令"` の `info` は `aliases: ["施行令", "CabinetOrder"]`・`law_type_code: "CabinetOrder"`・`notes`（1 件）を持つ。`name: "法律"` の `info` は `law_type_code: "Act"` を持ち、`aliases` と `notes` を持たない。`name: "憲法"` の `info` は `aliases: ["日本国憲法"]` を持ち、`law_type_code` を持たない。
+例: `name: "政令"` の `info` は `aliases: ["施行令", "CabinetOrder"]`・`law_type_code: "CabinetOrder"`・`notes`（1 件）を持つ。`name: "法律"` の `info` は `law_type_code: "Act"` を持ち、`aliases` と `notes` を持たない。`name: "憲法"` の `info` は `aliases: ["日本国憲法"]` と `law_type_code: "Constitution"` を持つ（v0.17.0 では `law_type_code` を持たなかった）。`name: "通達"` の `info.aliases` は `["基本通達", "取扱通達"]`（SPEC-EGOV-EXPLAIN-LAW-TYPE-021）。
 
 ### SPEC-EGOV-EXPLAIN-LAW-TYPE-013 `sources` の要素は `label` と `url` を持ち、`url` は空文字のことがある
 
@@ -156,8 +156,6 @@ SPEC-EGOV-EXPLAIN-LAW-TYPE-002 の別名には、次のものも含む。
 
 例: `name: "府令"` は `found: true`・`info.name: "省令"`・`info.enacting_body: "各省大臣／内閣府の主任の大臣"`。`name: "取扱通達"` は `found: true`・`info.name: "通達"`・`info.binds_citizens: false`。
 
-（`通知` を `通達` の別名として扱うかは houki-egov-mcp #62 で扱うので、この ID では約束にしない。）
-
 ### SPEC-EGOV-EXPLAIN-LAW-TYPE-018 `Object.prototype` のプロパティの名前は知らない名前として `found: false` を返す
 
 `name` が `toString`・`constructor`・`hasOwnProperty`・`valueOf`・`__proto__` など、JavaScript の `Object.prototype` のプロパティの名前であっても、収録している種別の名前・別名・法令種別コードのどれとも一致しないので、SPEC-EGOV-EXPLAIN-LAW-TYPE-005 と同じ `found: false` の応答を返す。応答は `name`（渡した値）・`found: false`・`hint`・`next_actions`（SPEC-EGOV-EXPLAIN-LAW-TYPE-014）を持ち、`info` と `related_tools` を持たない。エラーにはしない（`isError` を付けない）。
@@ -180,6 +178,22 @@ SPEC-EGOV-EXPLAIN-LAW-TYPE-002 の別名には、次のものも含む。
 
 例: `name: "政令"` の `see_also` も `name: "架空法令"` の `see_also` も `https://github.com/shuji-bonji/houki-egov-mcp/blob/main/docs/LAW-HIERARCHY.md`（v0.16.0 では `docs/LAW-HIERARCHY.md`）。
 
+### SPEC-EGOV-EXPLAIN-LAW-TYPE-021 `通知` は `通達` と別の種別として解説し、`通達` の別名に入れない
+
+`通知` は、収録している種別の 1 つ（`info.name: "通知"`）として解説する。`通達` の `info.aliases` に `通知` を入れない。`name: "通知"` は、種別の名前の一致（SPEC-EGOV-EXPLAIN-LAW-TYPE-001）で `通知` の `info` を返す。
+
+`通知` の `info` は、`enacting_body: "行政機関"`、`hierarchy_rank: 99`、`level: "agency-internal"`、`binds_citizens: false`、`can_set_penalties: false` を持つ。SPEC-EGOV-EXPLAIN-LAW-TYPE-005 の `hint` と SPEC-EGOV-EXPLAIN-LAW-TYPE-014 の `next_actions` に並べる名前に `通知` を含める（今までどおり）。
+
+例: `name: "通知"` は `found: true`・`info.name: "通知"`・`info.binds_citizens: false`（今までどおり）。`name: "通達"` の `info.aliases` は `["基本通達", "取扱通達"]`（v0.17.0 では `["通知", "基本通達", "取扱通達"]` で、`通知` で引くと `通達` ではなく `通知` の解説が返るのに、`通達` の別名に `通知` が載っていた）。
+
+### SPEC-EGOV-EXPLAIN-LAW-TYPE-022 e-Gov の法令種別コード `Constitution`・`Rule` から、憲法・規則の解説を返す
+
+`name` が `Constitution` のときは `憲法` の `info`、`Rule` のときは `規則` の `info` を返す（`found: true`。SPEC-EGOV-EXPLAIN-LAW-TYPE-003 と同じ引き方）。e-Gov 法令 API v2 の `law_type` が返す値のうち、`ImperialOrder`（勅令）と `Misc` は、収録している種別に当たらないので今までどおり `found: false`（SPEC-EGOV-EXPLAIN-LAW-TYPE-005）。`ImperialOrdinance` も `found: false`。
+
+e-Gov の `law_type` の値（2026-10-03 10:18 JST に `/laws?law_type=<値>&limit=1` で確かめた）: `Constitution`（1 件）・`Act`・`CabinetOrder`・`ImperialOrder`（74 件）・`MinisterialOrdinance`・`Rule`（453 件）は 200、`Misc` は 200 で 0 件、`ImperialOrdinance` は 400・`{"code":"400001","message":"法令種別（law_type、law_num_type）が誤っています。"}`。
+
+例: `name: "Constitution"` は `found: true`・`info.name: "憲法"`。`name: "Rule"` は `found: true`・`info.name: "規則"`。v0.17.0 ではどちらも `found: false` だった。`name: "ImperialOrder"` は `found: false`（2026-10-03 10:19 JST に houki-egov-dev 0.17.0 でも `found: false`）。
+
 ## できないこと
 
 - 個々の法令（例: `消費税法施行令`）がどの種別かを判定すること（法令の種別は `search_law` や `get_law` の応答の `law_type`）
@@ -193,8 +207,6 @@ SPEC-EGOV-EXPLAIN-LAW-TYPE-002 の別名には、次のものも含む。
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-1. **`通知` は `通達` の別名に入っているが、`通知` という別の種別の解説を返す。** → houki-egov-mcp #62
-2. **`Rule`・`ImperialOrdinance` などの法令種別コードを解決しない。** → houki-egov-mcp #62
 3. **`found: true` の応答の `related_tools` と `see_also`、`info` の任意のフィールド。** → SPEC-EGOV-EXPLAIN-LAW-TYPE-011・SPEC-EGOV-EXPLAIN-LAW-TYPE-012・SPEC-EGOV-EXPLAIN-LAW-TYPE-013・SPEC-EGOV-EXPLAIN-LAW-TYPE-020
 4. **`found: false` の応答の `next_actions` と `see_also`。** → SPEC-EGOV-EXPLAIN-LAW-TYPE-014・SPEC-EGOV-EXPLAIN-LAW-TYPE-020
 5. **応答の `name` は渡した値のまま返す。** → SPEC-EGOV-EXPLAIN-LAW-TYPE-015

@@ -3,7 +3,7 @@
 - 対象: `specs/current/common_errors/spec.md` と、`get_law` / `get_toc` / `get_law_range` / `get_law_revisions` / `get_related_laws` / `get_article_references` / `verify_citations` / `list_attachments` / `get_attachment` / `get_law_file` の `specs/current/<tool>/spec.md`
 - 実装の変更: 要（下の「実装の変更」）
 - 承認日: 2026-10-03（PR #95）
-- 状態: 草案
+- 状態: 取り込み済み（v0.18.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #45（完全一致しないとき 1 件目の法令を使う）、#51（本則と附則を区別しない）、#63（名前の形から関係法令・委任先を推定する）、#87（law_id が決まった後の e-Gov の 400・404 の code。#47 から移した 3 点を含む）

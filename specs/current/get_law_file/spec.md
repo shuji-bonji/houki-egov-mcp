@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）。差分 `20261003-law-resolution` は 2026-10-03（PR #95）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-files.ts`、`src/services/file-store.ts`、`src/services/egov-client.ts`、`src/services/law-service.ts`（法令名の解決・管轄の確認）、`src/constants.ts`、`src/config.ts`、`src/services/law-files.test.ts`、`src/services/file-store.test.ts`
 - 関連する Issue: houki-egov-mcp #19（添付ファイルと法令本文ファイル）
 
@@ -162,14 +162,16 @@ flowchart TD
 
 `save: true` の取得（`https://laws.e-gov.go.jp/api/2/law_file/<file_type>/<law_id>`）が失敗したときは、次のエラーを返す。どれも `detail.url` に取得した URL（`at` があれば `?asof=<at>` 付き）を入れる。
 
-| e-Gov の応答                        | `code`                | `retryable` | そのほか                           |
-| ----------------------------------- | --------------------- | ----------- | ---------------------------------- |
-| 429                                 | `SOURCE_RATE_LIMITED` | `true`      | `detail.status: 429`               |
-| 時間切れ                            | `SOURCE_TIMEOUT`      | `true`      | `detail.status` は付かない         |
-| 5xx（例: 502）                      | `SOURCE_API_ERROR`    | `true`      | `detail.status` に HTTP ステータス |
-| 429 以外の 4xx（例: 400・404）      | `SOURCE_API_ERROR`    | `false`     | `detail.status` に HTTP ステータス |
+| e-Gov の応答                                        | `code`                | `retryable` | そのほか                                                                                     |
+| --------------------------------------------------- | --------------------- | ----------- | -------------------------------------------------------------------------------------------- |
+| 429                                                 | `SOURCE_RATE_LIMITED` | `true`      | `detail.status: 429`                                                                         |
+| 時間切れ                                            | `SOURCE_TIMEOUT`      | `true`      | `detail.status` は付かない                                                                   |
+| 5xx（例: 502）                                      | `SOURCE_API_ERROR`    | `true`      | `detail.status` に HTTP ステータス                                                           |
+| 404・本文の `code` が `404004`                      | `LAW_NOT_FOUND`       | `false`     | SPEC-EGOV-COMMON-ERRORS-033 の `error`・`hint`・`next_actions`。`detail.status: 404`・`detail.cause: "404004"` |
+| 400・本文の `code` が `400044`（`at` を渡したとき） | `INVALID_ARGUMENT`    | `false`     | `tool: "get_law_file"`、`detail.issues: [{ path: "at", message: "e-Gov が受け付ける時点の範囲の外です" }]` |
+| そのほかの 429 以外の 4xx（例: 403、`400042`）      | `SOURCE_API_ERROR`    | `false`     | `detail.status` に HTTP ステータス                                                           |
 
-例: `{ law_name: "民法", file_type: "xml", at: "2020-04-01", save: true }` で e-Gov が 404 を返す → `{ code: "SOURCE_API_ERROR", retryable: false, detail: { status: 404, url: "https://laws.e-gov.go.jp/api/2/law_file/xml/129AC0000000089?asof=2020-04-01" } }`。
+例: `{ law_name: "民法", file_type: "xml", at: "2000-01-01", save: true }` は、2026-10-03 10:13 JST の e-Gov が `/law_file/xml/…?asof=2000-01-01` に 400・`{"code":"400044", …}` を返すので `code: "INVALID_ARGUMENT"`（v0.17.0 では `SOURCE_API_ERROR`・`detail.status: 400`）。e-Gov が 404・`{"code":"404004"}` を返す（2026-10-03 の `/law_file/xml/503AC0000000035?asof=2018-01-01` がこの応答）→ `LAW_NOT_FOUND`、`detail.url` に `?asof=` 付きの URL。
 
 ### SPEC-EGOV-GET-LAW-FILE-015 429・5xx・ネットワークの失敗は取り直してから返す
 
@@ -231,6 +233,12 @@ flowchart TD
 `law_name` を略称辞書で引くときは、houki-abbreviations の `resolveAbbreviation(name, { normalize: true })` の規則（全角英数字を半角に、ダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` を `-` に、全角チルダを `~` に、全角空白を半角空白にし、前後の空白を除く。大文字と小文字は区別する）で揃えてから照合する。管轄の判定（`OUT_OF_SCOPE`）も同じ規則で引く。辞書に無いときに e-Gov の法令名検索へ渡す値は、前後の空白を除いた渡した値のままで、揃えない。
 
 例: `{ law_name: "ＰＬ法", file_type: "xml" }` は `製造物責任法の xml の URL を返す`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
+
+### SPEC-EGOV-GET-LAW-FILE-023 法令名が完全一致しないときは、URL を返さず候補を付けた `LAW_NOT_FOUND` を返す
+
+`law_name` の法令は SPEC-EGOV-COMMON-ERRORS-032 の規則で決める。略称辞書に law_id が無く、e-Gov の法令名検索の全件の中に題名の完全一致が無いときは、`save` の値にかかわらず、検索結果の先頭の法令の URL を返さず、ファイルも取らずに、032 の形の `LAW_NOT_FOUND`（`retryable: false`）を返す。`next_actions` の候補の要素は `action: "get_law_file"`、`example` は渡した引数（`file_type`・`save`・`at` のうち渡したもの）の `law_name` だけを候補の題名に替えたもの。`at` を渡したときは、法令名の検索にも `asof=<at>` を付ける。
+
+例: `{ law_name: "所得税法施行", file_type: "xml" }` は `code: "LAW_NOT_FOUND"`、`next_actions` の先頭は `{ action: "get_law_file", example: { law_name: "所得税法施行令", file_type: "xml" } }`。
 
 ## できないこと
 

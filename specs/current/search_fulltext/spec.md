@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）。差分 `20261003-search-explain-attachment` は 2026-10-03（PR #96）。差分 `20261003-law-type-and-reference-actions` は 2026-10-03（PR #99）
 - 起こした元: v0.15.1 の `src/tools/handlers.ts`（`handleSearchFulltext`）、`src/tools/definitions.ts`、`src/services/law-search.ts`、`src/services/relevance-scoring.ts`、`src/services/freshness.ts`、`src/constants.ts`、`src/tools/handlers.test.ts`、`src/services/law-search.test.ts`、`src/services/relevance-scoring.test.ts`、`src/services/freshness.test.ts`、`src/test-helpers/law-db-fixture.ts`
 - 関連する Issue: houki-egov-mcp #23（2 文字の語の扱いと `scan_body`）
 
@@ -18,8 +18,7 @@
 | 引数        | 必須 | 内容                                                                                                                                                                                                                |
 | ----------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `keyword`   | 必須 | 検索キーワード。空白で区切ると AND 検索。法令名・略称を含めると（例: `"民法 不法行為"`）その法令の条に絞る。「第30条」を含めると該当条を上位に寄せ、法令名 + 条番号だけ（例: `"民法 第709条"`）ならその条を直接返す |
-| `domain`    | 任意 | 分野タグ（`tax` など）。受け付けるが絞り込みはしない                                                                                                                                                                |
-| `law_type`  | 任意 | 法令種別で絞る。`Act` / `CabinetOrder` / `ImperialOrdinance` / `MinisterialOrdinance` / `Rule` のどれか                                                                                                             |
+| `law_type`  | 任意 | 法令種別で絞る。`Constitution` / `Act` / `CabinetOrder` / `ImperialOrder` / `MinisterialOrdinance` / `Rule` のどれか（SPEC-EGOV-SEARCH-FULLTEXT-038。ローカル DB と e-Gov の `law_type` の値と同じ） |
 | `limit`     | 任意 | 返す件数。既定 10。1 以上 30 以下の整数（SPEC-EGOV-SEARCH-FULLTEXT-033） |
 | `scan_body` | 任意 | 既定 `false`。`true` のとき、2 文字の語だけのクエリで索引を使わずに全法令の条本文を端から照合する                                                                                                                   |
 
@@ -29,13 +28,15 @@
 
 ```mermaid
 flowchart TD
-  A["呼び出し（keyword・domain・law_type・limit・scan_body）"] --> B{"ローカル DB に条が 1 件以上あるか"}
+  A["呼び出し（keyword・law_type・limit・scan_body）"] --> O{"keyword 全体が houki-egov 以外の管轄の略称か（037）"}
+  O -- はい --> E0["OUT_OF_SCOPE を返す。DB も e-Gov も引かない（037）"]
+  O -- いいえ --> B{"ローカル DB に条が 1 件以上あるか"}
   B -- 無い --> FB["search_law に切り替え、source: api-fallback と note・next_actions を返す（002）"]
   B -- ある --> C["keyword の全角・大文字を揃え、空白で語に分ける。記号と 1 文字の語は捨てる（005・006）"]
   C --> D{"法令名・略称の語と、それ以外の語が両方あるか。または法令名 + 条番号か"}
   D -- "法令名 + 条番号だけ" --> ART["その法令のその条を直接返す（013）"]
   D -- "法令名 + 語" --> SC["law_scope を付け、その法令の条に絞る（012）"]
-  D -- いいえ --> E["keyword 全体が略称・通称なら正式名称に OR 展開し expanded_keywords を付ける（007）"]
+  D -- いいえ --> E["keyword 全体が略称なら正式名称に OR 展開する。通称は元の語の条のヒットが 0 件のときだけ正式名称で探し直す（007）"]
   SC --> F
   E --> F{"3 文字以上の語があるか"}
   F -- ある --> G["索引で条本文を引き、2 文字の語は本文に含まれるかで絞る（003・017）"]
@@ -48,7 +49,7 @@ flowchart TD
   J --> K
   K --> L["現行でない版を除き（008）、law_type で絞る（010）"]
   L --> M["score と score_reasons を付け（014・015）、score の高い順に並べ（016）、limit 件にする（011）"]
-  M --> N["2 文字の語があれば short_tokens を付ける（017〜021）。domain は絞らずに filters に記録（022）。freshness を付けて source: bulk で返す（001・023）"]
+  M --> N["2 文字の語があれば short_tokens を付ける（017〜021）。filters.domain は requested: null・applied: false（022）。freshness を付けて source: bulk で返す（001・023）"]
 ```
 
 ## できること
@@ -116,14 +117,19 @@ flowchart TD
 
 例: `４５時間` は、本文に `４５時間` とある労働基準法第36条に当たる（`article_num: "36"`）。
 
-### SPEC-EGOV-SEARCH-FULLTEXT-007 略称・通称は正式名称にも OR 展開して探す
+### SPEC-EGOV-SEARCH-FULLTEXT-007 略称は正式名称にも OR 展開して探し、通称は元の語の条のヒットが 0 件のときだけ正式名称で探し直す
 
-`keyword` 全体が略称辞書で houki-egov-mcp の管轄の法令の略称・通称に当たるときは、元の語に加えて正式名称でも探す（OR）。このとき応答に `expanded_keywords: { from: <元の語>, to: <正式名称> }` を付ける。
+`keyword` 全体が略称辞書で houki-egov-mcp の管轄の法令に当たるときは、当たり方で扱いを分ける。どちらも、展開したときだけ応答に `expanded_keywords: { from: <元の語>, to: <正式名称> }` を付ける。
 
-- 正式名称そのもの（例: `消費税法`）と辞書に無い語（例: `課税仕入れ`）は展開しない。`expanded_keywords` も付けない
-- 略称が 2 文字以下（例: `消法`）のときは正式名称だけで探す
+- 略称（辞書のエントリの略称そのもの。例: `労基法`・`消法`）: 今までどおり、元の語に加えて正式名称でも探す（OR）。略称が 2 文字以下（例: `消法`）のときは正式名称だけで探す
+- 通称（辞書のエントリの別名。例: `インボイス`・`適格請求書`）: まず元の語だけで探す。条のヒット（`match_type: "article"`）が 1 件以上あれば、正式名称では探さず、`expanded_keywords` も付けない。条のヒットが 0 件のときだけ、正式名称で探し直して、その結果を返す
+- 正式名称そのもの（例: `消費税法`）と辞書に無い語（例: `課税仕入れ`）は展開しない
 
-例: `労基法` は `労基法` または `労働基準法` で探す。`適格請求書` は `expanded_keywords: { from: "適格請求書", to: "消費税法" }`。`消法` は `expanded_keywords: { from: "消法", to: "消費税法" }` を付け、消費税法がヒットに入る。
+houki-nta-mcp の `nta_search_*`（houki-nta-mcp #21、v0.11.1）と同じ規則である。
+
+例: `労基法` は `労基法` または `労働基準法` で探し、`expanded_keywords: { from: "労基法", to: "労働基準法" }`。`消法` は `消費税法` で探し、`expanded_keywords: { from: "消法", to: "消費税法" }`。標準の fixture の DB で、本文に `適格請求書` がある消費税法第30条・第30条の2があるとき、`適格請求書` は元の語だけで 2 件当たるので `expanded_keywords` を付けない（v0.17.0 では `expanded_keywords: { from: "適格請求書", to: "消費税法" }` を付け、本文に「消費税法」とある条も当たりうる）。本文にどの通称も無い DB で `インボイス` を渡すと、条のヒットが 0 件なので `消費税法` で探し直し、`expanded_keywords: { from: "インボイス", to: "消費税法" }` を付ける。
+
+2026-10-03 10:16 JST に houki-egov-dev 0.17.0（手元の DB、`last_sync_date: "2026-09-19"`）で `{ keyword: "インボイス", limit: 5 }` を呼ぶと、1 件目は本文に「インボイス」がある `内国税の適正な課税の確保を図るための国外送金等に係る調書の提出等に関する法律施行規則` 第2条、2〜5 件目は本文に「消費税法」とある消費税法の附則の条（`附則(134) 48` など、`score_reasons` に `abbrev_match`）だった。この差分では、元の語で条のヒットがあるので 2〜5 件目は返らない（元の語だけでの件数は確かめていない）。
 
 ### SPEC-EGOV-SEARCH-FULLTEXT-008 同じ法令の現行でない版は返さない
 
@@ -204,9 +210,9 @@ DB に同じ法令の複数の版があるときは、現行の版（または�
 - `body_search`: `not_searched`
 - `hits_by_match_type`: `{ article: 0, law_meta: <法令名で当たった件数> }`
 - `note`: 語が 3 文字未満で索引に載らないことと、条の本文は引いていないこと（`trigram` の語と「条の本文は引いていません」を含む）
-- `next_actions`: 2 件。1 件目は `search_fulltext` に法令名を添える形（`example: { keyword: "民法 <語>" }`）、2 件目は `scan_body: true` で走査する形（`example: { keyword: <語を空白でつないだもの>, scan_body: true }`）
+- `next_actions`: 2 件。1 件目は法令名を添える案内で、`action: "search_fulltext"`、`reason: "法令名を添えて keyword を「<法令名> <語を空白でつないだもの>」の形にすると、その法令の条本文を索引で引けます"`、`example` は付けない（語から法令名は決まらないため）。2 件目は `scan_body: true` で走査する形（`example: { keyword: <語を空白でつないだもの>, scan_body: true }`）
 
-例: `控除` は `hits` がすべて `law_meta`、`short_tokens.next_actions` の `example` は `{ keyword: "民法 控除" }` と `{ keyword: "控除", scan_body: true }`。
+例: `控除` は `hits` がすべて `law_meta`、`short_tokens.next_actions[0]` は `{ action: "search_fulltext", reason: "法令名を添えて keyword を「<法令名> 控除」の形にすると、その法令の条本文を索引で引けます" }`（`example` のキーが無い）、`next_actions[1].example` は `{ keyword: "控除", scan_body: true }`。v0.17.0 では 1 件目の `example` が、語によらず `{ keyword: "民法 控除" }` だった（2026-10-03 10:16 JST に houki-egov-dev 0.17.0 で確かめた）。
 
 ### SPEC-EGOV-SEARCH-FULLTEXT-019 scan_body: true のときは全法令の条本文を端から照合する
 
@@ -226,11 +232,13 @@ SPEC-EGOV-SEARCH-FULLTEXT-012 で法令を絞り、残りが 2 文字の語だ�
 
 例: `適格請求書` と `税` には `short_tokens` が付かない。
 
-### SPEC-EGOV-SEARCH-FULLTEXT-022 domain は受け付けるが絞り込まない
+### SPEC-EGOV-SEARCH-FULLTEXT-022 `domain` は引数に無く、`filters.domain` は絞り込みをしていないことを返す
 
-`domain` を渡してもヒットは絞らない。応答の `filters.domain` に `requested`（渡した値か `null`）、`applied: false`、`note`（絞り込みがまだ効かないことの説明。`Phase 2-13` を含む）を入れる。`domain` を渡さないときも `applied: false` を入れる。
+tools/list の `search_fulltext` の inputSchema は `domain` を持たない（0.17.0 までは受け付けたが絞り込まなかった。`search_law` の SPEC-EGOV-SEARCH-LAW-016 と揃える）。`domain` を渡すと、inputSchema に無い引数として SPEC-EGOV-COMMON-ERRORS-004 の `INVALID_ARGUMENT`（`tool: "search_fulltext"`、`detail.issues: [{ path: "domain", message: "inputSchema に無い引数です" }]`）を返し、DB も e-Gov も引かない。
 
-例: `{ keyword: "適格請求書", domain: "tax" }` は `filters.domain.requested: "tax"`、`applied: false`。
+`source: "bulk"` の応答の `filters.domain` はキーを残し、`{ requested: null, applied: false, note: "分野での絞り込みはしていません（domain の引数は 0.18.0 で外しました）" }` を常に入れる。
+
+例: `{ keyword: "適格請求書", domain: "tax" }` は `code: "INVALID_ARGUMENT"`、`detail.issues[0].path: "domain"`（v0.17.0 では `filters.domain.requested: "tax"`・`applied: false` の成功）。`{ keyword: "適格請求書" }` の `filters.domain` は `{ requested: null, applied: false, note: "分野での絞り込みはしていません（domain の引数は 0.18.0 で外しました）" }`（v0.17.0 の `note` は `domain 絞り込みは v0.5.0 では未実効です (…Phase 2-13…)`）。
 
 ### SPEC-EGOV-SEARCH-FULLTEXT-023 DB の鮮度を freshness で返す
 
@@ -316,11 +324,25 @@ tools/list の inputSchema の `limit` は `type: "integer"`、`minimum: 1`、`m
 
 例: 0.16.0 で取り込んだ DB で、本文に `１８３―２` とある条は、`keyword: "183-2"` でも `keyword: "１８３―２"` でも当たる。0.15.4 で取り込んだ DB では、その条の `body` は `183―2` のままなので、`keyword: "183-2"` は `183-2` を探して当たらない。
 
+### SPEC-EGOV-SEARCH-FULLTEXT-037 `keyword` 全体が houki-egov 以外の管轄の略称のときは、DB も e-Gov も引かずに `OUT_OF_SCOPE` を返す
+
+`keyword` の前後の空白を除いた全体が、略称辞書（`resolveAbbreviation(name, { normalize: true })`）で houki-egov 以外の管轄（`source_mcp_hint` が `houki-egov` でない。通達は `houki-nta` など）のエントリに当たるときは、ローカル DB の有無によらず、DB も e-Gov も引かずにエラー `OUT_OF_SCOPE` を返す。本文は `search_law` の SPEC-EGOV-SEARCH-LAW-015 と同じ（`error` に正式名称と管轄、`hint` に管轄先の MCP、`next_actions` に `delegate_to_mcp`、`example.mcp` に管轄）。
+
+`keyword` が管轄外の略称と別の語の組み合わせ（例: `消基通 仕入税額控除`）のときは、今までどおり本文を探す（管轄外の略称の語は法令名として扱わず、本文の語として探す）。
+
+例: `{ keyword: "消基通" }` は、DB があってもなくても `code: "OUT_OF_SCOPE"`、`error` に `消費税法基本通達` と `houki-nta` を含み、`next_actions` は `[{ action: "delegate_to_mcp", example: { mcp: "houki-nta" } }]`（`reason` 付き）で、DB の照会と e-Gov への問い合わせは 0 回。v0.17.0 では、DB があると `source: "bulk"`・`count: 0`・`hits: []` の成功（2026-10-03 10:16 JST に houki-egov-dev 0.17.0 で確かめた）、DB が無いと `source: "api-fallback"` の成功で `fallback.code: "OUT_OF_SCOPE"`。`{ keyword: "消基通 仕入税額控除" }` は `OUT_OF_SCOPE` にしない。
+
+### SPEC-EGOV-SEARCH-FULLTEXT-038 `law_type` の選択肢は DB と e-Gov の `law_type` の値と同じで、勅令は `ImperialOrder`
+
+tools/list の `search_fulltext` の inputSchema の `law_type` は、`enum: ["Constitution", "Act", "CabinetOrder", "ImperialOrder", "MinisterialOrdinance", "Rule"]` を持つ（`search_law` の SPEC-EGOV-SEARCH-LAW-018 と同じ）。ローカル DB の `laws.law_type` は取り込みが e-Gov の値（勅令は `ImperialOrder`。SPEC-EGOV-CLI-BULK-DOWNLOAD の法令種別の表）で入れるので、選択肢の値でそのまま絞れる。`ImperialOrdinance` は選択肢に無く、渡すと inputSchema の検査で `INVALID_ARGUMENT`（`tool: "search_fulltext"`、`detail.issues[0].path: "law_type"`）を返し、DB も e-Gov も引かない。DB が無いときの `search_law` への切り替え（SPEC-EGOV-SEARCH-FULLTEXT-029）にも同じ値を渡す。
+
+例（2026-10-03 10:25 JST に houki-egov-dev 0.17.0 と手元の DB（`last_sync_date: "2026-09-19"`）で確かめた値を元にした）: `{ keyword: "健康保険法施行令", law_type: "ImperialOrder" }` は、`law_type: "ImperialOrder"` の健康保険法施行令（`215IO0000000243`）の条を返す（`law_type` を付けない同じ検索で 3 件当たり、3 件とも `law_type: "ImperialOrder"` だった）。`{ keyword: "健康保険法施行令", law_type: "ImperialOrdinance" }` は `code: "INVALID_ARGUMENT"`（v0.17.0 では `count: 0`・`hits: []` の成功で、勅令で絞れないことが分からなかった）。DB の日本国憲法の `law_type` は `Constitution`（`日本国憲法 第9条` の検索で確かめた）なので、`law_type: "Constitution"` で日本国憲法の条に絞れる。
+
 ## できないこと
 
 - 条文の本文を丸ごと返すこと（`snippet` だけ。本文は `get_law` / `get_law_range`）
 - ローカル DB を作ること・更新すること（CLI の `--bulk-download-everything` / `--sync`）
-- `domain` で分野を絞ること（SPEC-EGOV-SEARCH-FULLTEXT-022）
+- 分野で絞ること（`domain` の引数は無い。SPEC-EGOV-SEARCH-FULLTEXT-022）
 - 漢数字の「第三十条」を条番号として扱うこと（本文の語として探す）
 - 1 文字の語で探すこと
 - 前の版（施行済みで置き換わった版）や未施行の版の条を探すこと、時点を指定して探すこと
@@ -332,9 +354,6 @@ tools/list の inputSchema の `limit` は `type: "integer"`、`minimum: 1`、`m
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-2. **tool description と引数の説明に古い版番号が残っている。** → houki-egov-mcp #55
-3. **通称の OR 展開で、正式名称を本文に書いた他の法令の条まで当たる。** → houki-egov-mcp #67
-4. **2 文字の語だけのときの `next_actions` の例は常に「民法」を添える。** → houki-egov-mcp #67
 5. **`limit` の範囲。** → SPEC-EGOV-SEARCH-FULLTEXT-024・SPEC-EGOV-SEARCH-FULLTEXT-033
 6. **DB を開けないときの切り替え。** → SPEC-EGOV-SEARCH-FULLTEXT-027
 7. **DB が無いときに `keyword` があれば `search_law` の結果が `fallback` に入ること。** → SPEC-EGOV-SEARCH-FULLTEXT-028・SPEC-EGOV-SEARCH-FULLTEXT-029

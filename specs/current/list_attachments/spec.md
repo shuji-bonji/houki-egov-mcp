@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）。差分 `20261003-law-resolution` は 2026-10-03（PR #95）。差分 `20261003-search-explain-attachment` は 2026-10-03（PR #96）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-files.ts`、`src/services/law-tree.ts`（図の置き場所）、`src/services/law-service.ts`（法令名の解決・管轄の確認）、`src/services/egov-client.ts`、`src/config.ts`、`src/services/law-files.test.ts`
 - 関連する Issue: houki-egov-mcp #19（添付ファイルと法令本文ファイル）
 
@@ -68,7 +68,8 @@ e-Gov の法令本文に付く添付ファイルの一覧（`attached_files_info
 
 - 別記・様式などの中の図: `tag`（`AppdxNote`・`AppdxStyle` など）、`title`（見出し。例: `別記第一`、`附録第十一号様式`）、`related_article`（関係条文。例: `（第一条関係）`）。見出しと関係条文の前後の空白（全角空白を含む）は除き、続く空白は 1 つに詰める（例: `　出生の届書（日本産業規格Ａ列四番）（第五十九条関係）` → `出生の届書（日本産業規格Ａ列四番）（第五十九条関係）`）
 - 条の中の図: `tag: "Article"`、`article`（e-Gov 形式の条番号。例: `1`）、`title`（条見出しと見出しの括弧書きを続けたもの。例: `第一条（国旗）`）
-- 附則の中の図（別表・様式・条の中でないもの）: `tag: "SupplProvision"`、`amend_law_num`（附則の改正法番号。例: `平成一一年法律第一二七号`）
+- 附則の別表・様式・付録の中の図: SPEC-EGOV-LIST-ATTACHMENTS-025
+- 附則の中の図（附則の別表・様式・付録・条のどれの中でもないもの）: `tag: "SupplProvision"`、`amend_law_num`（附則の改正法番号。例: `平成一一年法律第一二七号`）
 
 ### SPEC-EGOV-LIST-ATTACHMENTS-003 本文に見つからないファイルは、置き場所を null にして数を知らせる
 
@@ -168,14 +169,16 @@ e-Gov の法令本文の応答の `revision_info` に `law_revision_id` が無�
 
 e-Gov の法令本文の取得（`https://laws.e-gov.go.jp/api/2/law_data/<law_id>`）が失敗したときは、次のエラーを返す。どれも `detail.url` に法令本文の API の URL を入れる（`at` があれば `?asof=<at>` 付き）。
 
-| e-Gov の応答                   | `code`                | `retryable` | そのほか                           |
-| ------------------------------ | --------------------- | ----------- | ---------------------------------- |
-| 429                            | `SOURCE_RATE_LIMITED` | `true`      | `detail.status: 429`               |
-| 時間切れ                       | `SOURCE_TIMEOUT`      | `true`      | `detail.status` は付かない         |
-| 5xx（例: 500・503）            | `SOURCE_API_ERROR`    | `true`      | `detail.status` に HTTP ステータス |
-| 429 以外の 4xx（例: 400・404・403） | `SOURCE_API_ERROR`    | `false`     | `detail.status` に HTTP ステータス |
+| e-Gov の応答                                        | `code`                | `retryable` | そのほか                                                                                     |
+| --------------------------------------------------- | --------------------- | ----------- | -------------------------------------------------------------------------------------------- |
+| 429                                                 | `SOURCE_RATE_LIMITED` | `true`      | `detail.status: 429`                                                                         |
+| 時間切れ                                            | `SOURCE_TIMEOUT`      | `true`      | `detail.status` は付かない                                                                   |
+| 5xx（例: 500・503）                                 | `SOURCE_API_ERROR`    | `true`      | `detail.status` に HTTP ステータス                                                           |
+| 404・本文の `code` が `404004`                      | `LAW_NOT_FOUND`       | `false`     | SPEC-EGOV-COMMON-ERRORS-033 の `error`・`hint`・`next_actions`。`detail.status: 404`・`detail.cause: "404004"` |
+| 400・本文の `code` が `400044`（`at` を渡したとき） | `INVALID_ARGUMENT`    | `false`     | `tool: "list_attachments"`、`detail.issues: [{ path: "at", message: "e-Gov が受け付ける時点の範囲の外です" }]` |
+| そのほかの 429 以外の 4xx（例: 403、本文の `code` が読めない 404） | `SOURCE_API_ERROR`    | `false`     | `detail.status` に HTTP ステータス                                                           |
 
-例: e-Gov が 404 を返す → `{ code: "SOURCE_API_ERROR", retryable: false, detail: { status: 404, url: "https://laws.e-gov.go.jp/api/2/law_data/LID1" } }`。
+例: e-Gov が 404・`{"code":"404004"}` を返す → `{ code: "LAW_NOT_FOUND", retryable: false, detail: { status: 404, url: "https://laws.e-gov.go.jp/api/2/law_data/LID1", cause: "404004" }, … }`（v0.17.0 では `SOURCE_API_ERROR`）。e-Gov が 404・本文 `Not Found`（JSON でない）を返す → `SOURCE_API_ERROR`・`retryable: false`・`detail.status: 404`（今までどおり）。
 
 ### SPEC-EGOV-LIST-ATTACHMENTS-019 429・5xx・ネットワークの失敗は取り直してから返す
 
@@ -211,6 +214,28 @@ e-Gov の法令本文の取得（`https://laws.e-gov.go.jp/api/2/law_data/<law_i
 `law_name` を略称辞書で引くときは、houki-abbreviations の `resolveAbbreviation(name, { normalize: true })` の規則（全角英数字を半角に、ダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` を `-` に、全角チルダを `~` に、全角空白を半角空白にし、前後の空白を除く。大文字と小文字は区別する）で揃えてから照合する。管轄の判定（`OUT_OF_SCOPE`）も同じ規則で引く。辞書に無いときに e-Gov の法令名検索へ渡す値は、前後の空白を除いた渡した値のままで、揃えない。
 
 例: `{ law_name: "ＰＬ法" }` は `製造物責任法の添付の一覧（無ければ 0 件）を返す`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
+
+### SPEC-EGOV-LIST-ATTACHMENTS-024 法令名が完全一致しないときは、一覧を返さず候補を付けた `LAW_NOT_FOUND` を返す
+
+`law_name` の法令は SPEC-EGOV-COMMON-ERRORS-032 の規則で決める。略称辞書に law_id が無く、e-Gov の法令名検索の全件の中に題名の完全一致が無いときは、検索結果の先頭の法令の添付の一覧を返さず、032 の形の `LAW_NOT_FOUND`（`retryable: false`）を返す。`next_actions` の候補の要素は `action: "list_attachments"`、`example` は渡した引数（`at` を渡したときはそれも）の `law_name` だけを候補の題名に替えたもの。`at` を渡したときは、法令名の検索にも `asof=<at>` を付ける。SPEC-EGOV-LIST-ATTACHMENTS-009 の「法令名から法令を特定できないとき」には、この場合も入る。
+
+例: `{ law_name: "所得税法施行" }` は `code: "LAW_NOT_FOUND"`、`next_actions` の先頭 2 件は `{ action: "list_attachments", example: { law_name: "所得税法施行令" } }` と `{ action: "list_attachments", example: { law_name: "所得税法施行規則" } }`。
+
+### SPEC-EGOV-LIST-ATTACHMENTS-025 附則の別表・様式・付録の中の図には、その見出しと附則の改正法番号を付ける
+
+附則（`SupplProvision`）の中の別表・様式・付録にある図は、附則全体（`{ tag: "SupplProvision", … }`）ではなく、その要素を置き場所にする。`location.tag` は e-Gov の要素名、`location.title` は見出し（前後の空白を除き、続く空白は 1 つに詰める。SPEC-EGOV-LIST-ATTACHMENTS-012 と同じ）、`location.related_article` は関係条文（`RelatedArticleNum` があるときだけ）、`location.amend_law_num` はその附則の改正法番号（制定時の附則で `AmendLawNum` が無いときは付けない。SPEC-EGOV-LIST-ATTACHMENTS-014 と同じ）。
+
+| 図を含む要素       | `location.tag`                | `location.title` にする見出し      |
+| ------------------ | ----------------------------- | ---------------------------------- |
+| 附則の別表         | `SupplProvisionAppdxTable`    | `SupplProvisionAppdxTableTitle`    |
+| 附則の様式         | `SupplProvisionAppdxStyle`    | `SupplProvisionAppdxStyleTitle`    |
+| 附則の付録         | `SupplProvisionAppdx`         | `ArithFormulaNum`                  |
+
+`get_attachment` の `location`（ファイル名で照合した一覧の要素の値。SPEC-EGOV-GET-ATTACHMENT-001）も同じ値になる。
+
+例: `AmendLawNum` が `令和二年法律第一号` の附則の中に、`SupplProvisionAppdxTableTitle` が `附則別表第一`、`RelatedArticleNum` が `（附則第三条関係）` の `SupplProvisionAppdxTable` があり、その中に図 `./pict/s1.jpg` があるとき、`location` は `{ tag: "SupplProvisionAppdxTable", title: "附則別表第一", related_article: "（附則第三条関係）", amend_law_num: "令和二年法律第一号" }`（v0.17.0 では `{ tag: "SupplProvision", amend_law_num: "令和二年法律第一号" }` になる。この v0.17.0 の値は #72 が差し替えた XML で確かめたもの）。
+
+2026-10-03 10:15 JST に e-Gov の国民年金法（`334AC0000000141`）・厚生年金保険法（`329AC0000000115`）・所得税法（`340AC0000000033`）・地方税法（`325AC0000000226`）の本文に `SupplProvisionAppdxTable` と `SupplProvisionAppdxTableTitle` の要素があることを確かめた。この 4 法令の附則の別表の中に図（`Fig`）は無かった。`SupplProvisionAppdxStyle`・`SupplProvisionAppdxStyleTitle`・`SupplProvisionAppdx` の要素と、附則の別表・様式の中に図がある実際の法令は確かめていない（要素名は e-Gov の法令標準 XML スキーマの名前に合わせた）。
 
 ## できないこと
 

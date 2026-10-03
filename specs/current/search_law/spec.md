@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-search-explain-attachment` は 2026-10-03（PR #96）。差分 `20261003-law-type-and-reference-actions` は 2026-10-03（PR #99）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/egov-client.ts`、`src/errors.ts`、`src/tools/handlers.test.ts`、`src/server.test.ts`
 - 関連する Issue: なし
 
@@ -18,8 +18,7 @@
 | 引数       | 必須 | 内容                                                                                                                                      |
 | ---------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `keyword`  | 必須 | 検索キーワード。法令名の一部（例: `"消費税"`、`"労働基準"`）か略称（例: `"消法"`、`"労基法"`）                                            |
-| `law_type` | 任意 | 法令種別で絞り込む。`Act` / `CabinetOrder` / `ImperialOrdinance` / `MinisterialOrdinance` / `Rule` のどれか                               |
-| `domain`   | 任意 | 分野タグ。`tax` / `labor` / `accounting` / `commercial` / `civil` / `administrative` のどれか（v0.15.1 では絞り込みに使われない。未決 1） |
+| `law_type` | 任意 | 法令種別で絞り込む。`Constitution` / `Act` / `CabinetOrder` / `ImperialOrder` / `MinisterialOrdinance` / `Rule` のどれか（SPEC-EGOV-SEARCH-LAW-018。e-Gov の `law_type` の値と同じ） |
 | `limit`    | 任意 | 取得件数。既定は 10。1 以上 50 以下の整数（SPEC-EGOV-SEARCH-LAW-013） |
 
 ## 処理の流れ
@@ -28,7 +27,7 @@
 
 ```mermaid
 flowchart TD
-  A["呼び出し（keyword・law_type・domain・limit）"] --> B{"keyword は空か"}
+  A["呼び出し（keyword・law_type・limit）。domain は inputSchema で止まる（016）"] --> B{"keyword は空か"}
   B -- はい --> E1["INVALID_ARGUMENT を返す（001）"]
   B -- いいえ --> C{"keyword が略称辞書にあるか（全角英数字・ダッシュ類・全角空白を揃えて照合する。014）"}
   C -- "ある・管轄外" --> E3["OUT_OF_SCOPE を返し、e-Gov を引かない（015）"]
@@ -37,7 +36,9 @@ flowchart TD
   D --> G{"e-Gov から応答を得たか"}
   F --> G
   G -- "失敗した" --> E2["SOURCE_* のエラーを返す（未決 8）"]
-  G -- 得た --> H["query・total_count・results を返す（未決 5）"]
+  G -- 得た --> H{"一致が 0 件か"}
+  H -- いいえ --> H1["query・total_count（一致した総数）・results を返す（006）"]
+  H -- はい --> H2["hint と next_actions を付けて返す（017）"]
 ```
 
 ## できること
@@ -76,11 +77,13 @@ flowchart TD
 
 成功したときは、エラーにせず（`isError` を付けず）、`content[0].text` に次の形の JSON の文字列を返す。
 
-| フィールド       | 内容                                                                                      |
-| ---------------- | ----------------------------------------------------------------------------------------- |
-| `query`          | `keyword`（渡した値）。`law_type`（渡したときだけ）、`resolved`（SPEC-EGOV-SEARCH-LAW-002） |
-| `total_count`    | 数値（何を数えるかは houki-egov-mcp #55 で扱うので、この ID では約束にしない）             |
-| `results`        | e-Gov が返した法令の配列。e-Gov が返した順                                                |
+| フィールド     | 内容                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------ |
+| `query`        | `keyword`（渡した値）。`law_type`（渡したときだけ）、`resolved`（SPEC-EGOV-SEARCH-LAW-002）            |
+| `total_count`  | e-Gov で一致した法令の総数（e-Gov の応答の `total_count`。`limit` で切る前の件数）。`results` の件数とは限らない |
+| `results`      | e-Gov が返した法令の配列。e-Gov が返した順。件数は `limit` 以下                                        |
+| `hint`         | 一致が 0 件のときの案内の文（SPEC-EGOV-SEARCH-LAW-017）。1 件以上のときは `null`                      |
+| `next_actions` | 一致が 0 件のときの次の手（SPEC-EGOV-SEARCH-LAW-017）。1 件以上のときは `[]`                            |
 
 `results` の要素は次のフィールドを持つ。
 
@@ -89,13 +92,13 @@ flowchart TD
 | `law_id`            | 法令 ID                                                        |
 | `title`             | 法令名                                                         |
 | `law_num`           | 法令番号                                                       |
-| `law_type`          | 法令種別（`Act` など）                                         |
+| `law_type`          | 法令種別（`Act` など。e-Gov の値のまま）                       |
 | `promulgation_date` | 公布日（`YYYY-MM-DD`）。e-Gov の応答に無ければ付かない         |
 | `url`               | `https://laws.e-gov.go.jp/law/<law_id>`                        |
 
 出力の形式を選ぶ引数（`format` など）は無い。`format` を渡すと、inputSchema に無い引数として `INVALID_ARGUMENT`（`detail.issues[0].path: "format"`）を返す。
 
-例: `keyword: "消法"` で e-Gov が消費税法（法令 ID `363AC0000000108`、法令番号 `昭和六十三年法律第百八号`、公布日 `1988-12-30`）を返すと、`results[0]` は `law_id: "363AC0000000108"`・`title: "消費税法"`・`law_num: "昭和六十三年法律第百八号"`・`law_type: "Act"`・`promulgation_date: "1988-12-30"`・`url: "https://laws.e-gov.go.jp/law/363AC0000000108"`。e-Gov が 0 件を返すと（`keyword: "存在しない"`）、`total_count: 0`・`results: []` で、エラーにしない。
+例: `keyword: "消法"` で e-Gov が消費税法（法令 ID `363AC0000000108`、法令番号 `昭和六十三年法律第百八号`、公布日 `1988-12-30`）を返すと、`results[0]` は `law_id: "363AC0000000108"`・`title: "消費税法"`・`law_num: "昭和六十三年法律第百八号"`・`law_type: "Act"`・`promulgation_date: "1988-12-30"`・`url: "https://laws.e-gov.go.jp/law/363AC0000000108"`、`hint: null`、`next_actions: []`。`keyword: "保険", limit: 2`（辞書に無い）は、2026-10-03 10:20 JST の e-Gov が `/laws?law_title=保険` に `total_count: 278` を返すので、`total_count: 278`・`results` は 2 件（v0.17.0 では `total_count: 2`。同じ時刻に houki-egov-dev 0.17.0 で確かめた）。e-Gov が 0 件を返すと（`keyword: "存在しない"`）、`total_count: 0`・`results: []` で、エラーにせず SPEC-EGOV-SEARCH-LAW-017 の `hint` と `next_actions` を付ける。
 
 ### SPEC-EGOV-SEARCH-LAW-007 空白だけの keyword も検索せずにエラー `INVALID_ARGUMENT` を返す
 
@@ -151,6 +154,32 @@ tools/list の inputSchema の `limit` は `type: "integer"`、`minimum: 1`、`m
 
 例: `keyword: "消基通"` は `code: "OUT_OF_SCOPE"` で、e-Gov への問い合わせは 0 回（v0.15.4 では `law_title=消費税法基本通達` で問い合わせて `results: []` だった）。`keyword: "消費税"`（辞書に無い）は今までどおり e-Gov を検索する。
 
+### SPEC-EGOV-SEARCH-LAW-016 `domain` は引数に無く、渡すと `INVALID_ARGUMENT` にする
+
+tools/list の `search_law` の inputSchema は `domain` を持たない（0.17.0 までは受け付けたが、e-Gov の検索にも結果の選別にも使っていなかった）。`domain` を渡すと、inputSchema に無い引数として SPEC-EGOV-COMMON-ERRORS-004 の `INVALID_ARGUMENT`（`tool: "search_law"`、`detail.issues: [{ path: "domain", message: "inputSchema に無い引数です" }]`）を返し、e-Gov に問い合わせない。
+
+例: `{ keyword: "労働基準", domain: "tax", law_type: "Act" }` は `code: "INVALID_ARGUMENT"`、`detail.issues[0].path: "domain"`（v0.17.0 では `domain` を使わずに検索し、労働分野の `労働基準法` を返していた）。`{ keyword: "労働基準", law_type: "Act" }` は今までどおり検索する。
+
+### SPEC-EGOV-SEARCH-LAW-017 一致が 0 件のときは、法令の題名だけを探したことと次の手を返す
+
+e-Gov の検索が成功して 0 件だったときは、エラーにせず（`total_count: 0`・`results: []`）、次の `hint` と `next_actions` を付ける。
+
+- `hint`: `「<検索した名前>」を題名に含む法令は e-Gov にありません。search_law は法令の題名だけを探します。条文の本文にある語なら search_fulltext、略称なら resolve_abbreviation を試してください`。`<検索した名前>` は e-Gov に渡した `law_title`（略称なら正式名称）
+- `next_actions`（この順）:
+  1. `law_type` を渡したときだけ、`{ action: "search_law", reason: "法令種別を外して探せます", example: { keyword: <渡した keyword>, limit: <渡した limit（渡したときだけ）> } }`
+  2. `{ action: "search_fulltext", reason: "条文の本文から語を探せます（ローカル DB がある場合）", example: { keyword: <前後の空白を除いた keyword> } }`
+  3. `{ action: "resolve_abbreviation", reason: "略称・通称かどうかを確かめられます", example: { abbr: <前後の空白を除いた keyword> } }`
+
+例: `{ keyword: "存在しない" }` は `total_count: 0`、`results: []`、`hint` は `「存在しない」を題名に含む法令は e-Gov にありません。…` で始まり、`next_actions` の `action` は `["search_fulltext", "resolve_abbreviation"]`。`{ keyword: "存在しない", law_type: "Act" }` は `["search_law", "search_fulltext", "resolve_abbreviation"]` で、1 件目の `example` は `{ keyword: "存在しない" }`。v0.17.0 では `hint` も `next_actions` も無かった。
+
+### SPEC-EGOV-SEARCH-LAW-018 `law_type` の選択肢は e-Gov の `law_type` の値と同じで、勅令は `ImperialOrder`
+
+tools/list の `search_law` の inputSchema の `law_type` は、`enum: ["Constitution", "Act", "CabinetOrder", "ImperialOrder", "MinisterialOrdinance", "Rule"]` を持つ。どれも e-Gov 法令 API v2 の `/laws` の `law_type` が受け付け、応答の `results[].law_type` に入る値である。`ImperialOrdinance` は選択肢に無く、渡すと inputSchema の検査で `INVALID_ARGUMENT`（`tool: "search_law"`、`detail.issues: [{ path: "law_type", message: "Constitution・Act・CabinetOrder・ImperialOrder・MinisterialOrdinance・Rule のどれかで指定してください" }]`）を返し、e-Gov に問い合わせない。
+
+例: `{ keyword: "健康保険法", law_type: "ImperialOrder" }` は、e-Gov に `law_title=健康保険法&law_type=ImperialOrder` で問い合わせ、`results` に健康保険法施行令（`215IO0000000243`、大正十五年勅令第二百四十三号、`law_type: "ImperialOrder"`）が入る。`{ keyword: "健康保険法", law_type: "ImperialOrdinance" }` は `code: "INVALID_ARGUMENT"`・`detail.issues[0].path: "law_type"` で、e-Gov への問い合わせは 0 回（v0.17.0 では inputSchema を通り、e-Gov が 400・`400001` を返して `SOURCE_API_ERROR`・`retryable: false` だった。2026-10-03 10:19 JST に houki-egov-dev 0.17.0 で確かめた）。`{ keyword: "日本国憲法", law_type: "Constitution" }` は日本国憲法（`321CONSTITUTION`）を返す（v0.17.0 では `Constitution` が選択肢に無く `INVALID_ARGUMENT`）。
+
+2026-10-03 10:18 JST に e-Gov の `/laws?law_type=<値>&limit=1` で確かめた値: `Constitution` 1 件、`ImperialOrder` 74 件、`Rule` 453 件（いずれも 200）、`ImperialOrdinance` は 400・`{"code":"400001","message":"法令種別（law_type、law_num_type）が誤っています。"}`。
+
 ## できないこと
 
 - 条文の本文を検索すること（本文の全文検索は `search_fulltext`）
@@ -165,11 +194,8 @@ tools/list の inputSchema の `limit` は `type: "integer"`、`minimum: 1`、`m
 
 意図か不具合かの判断が要る項目は houki-egov-mcp の Issue に移し、ここには題と Issue の番号だけを残します。今の振る舞いのままでよくテストが無いだけの項目は、受入テストを書いてから「できること」に ID を振ります。
 
-1. **`domain` を受け付けるが絞り込みに使わない。** → houki-egov-mcp #55
-3. **`total_count` は返した件数で、一致した法令の総数ではない。** → houki-egov-mcp #55
 4. **略称を正式名称に置き換えて検索する。** → SPEC-EGOV-SEARCH-LAW-002・SPEC-EGOV-SEARCH-LAW-003・SPEC-EGOV-SEARCH-LAW-004・SPEC-EGOV-SEARCH-LAW-005
 5. **成功時の応答の形。** → SPEC-EGOV-SEARCH-LAW-006
 6. **空白だけの `keyword`。** → SPEC-EGOV-SEARCH-LAW-007
 7. **`law_type` で絞り込む。** → SPEC-EGOV-SEARCH-LAW-008
 8. **e-Gov への問い合わせに失敗したときのエラー。** → SPEC-EGOV-SEARCH-LAW-009・SPEC-EGOV-SEARCH-LAW-010・SPEC-EGOV-SEARCH-LAW-011・SPEC-EGOV-SEARCH-LAW-012（一部は約束にしていない。差分 `20260928-untested-behaviors` の proposal.md を参照）
-10. **0 件のときに次の手を案内しない。** → houki-egov-mcp #55

@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）。差分 `20261003-law-resolution` は 2026-10-03（PR #95）。差分 `20261003-law-type-and-reference-actions` は 2026-10-03（PR #99）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/reference-extractor.ts`、`src/services/law-relations.ts`、`src/services/law-service.references.test.ts`、`src/services/reference-extractor.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: houki-egov-mcp #20（施行令・施行規則の関連付けと条文内の参照抽出。v0.10.1 の条の引き継ぎを含む）
 
@@ -18,7 +18,7 @@
 | 引数        | 必須 | 内容                                                                         |
 | ----------- | ---- | ---------------------------------------------------------------------------- |
 | `law_name`  | 必須 | 法令名または略称。例: `"所得税法"`、`"所法"`、`"所得税法施行令"`             |
-| `article`   | 必須 | 条番号。例: `"57の2"`、`"第57条の2"`、`"第五十七条の二"`                     |
+| `article`   | 必須 | 条番号。例: `"57の2"`、`"第57条の2"`、`"第五十七条の二"`。本則の条だけを対象にする（SPEC-EGOV-GET-ARTICLE-REFERENCES-046） |
 | `paragraph` | 任意 | 項番号。1 以上の整数（SPEC-EGOV-GET-ARTICLE-REFERENCES-040）。指定するとその項の本文だけを対象にする。省略すると条全体 |
 | `at`        | 任意 | 時点指定。`YYYY-MM-DD`（SPEC-EGOV-GET-ARTICLE-REFERENCES-041。`get_law` と同じ） |
 
@@ -29,17 +29,17 @@
 ```mermaid
 flowchart TD
   A["呼び出し（law_name・article・paragraph・at）"] --> B{"law_name を法令に解決できるか"}
-  B -- いいえ --> E0["LAW_NOT_FOUND を返す"]
+  B -- いいえ --> E0["LAW_NOT_FOUND を返す（023・044）"]
   B -- はい --> C{"article は条番号として読めるか"}
   C -- いいえ --> E1["INVALID_ARTICLE_NUM を返す（019）"]
-  C -- はい --> D{"その条があるか。paragraph を指定したときはその項があるか"}
+  C -- はい --> D{"その条が本則にあるか。paragraph を指定したときはその項があるか（018・046）"}
   D -- いいえ --> E2["ARTICLE_NOT_FOUND を返す（018）"]
   D -- はい --> F["対象の本文を決める。paragraph があればその項だけ（014）"]
   F --> G["「法令名（法令番号）」を法令番号で e-Gov に問い合わせる。同じ法令番号は 1 回（001・017）"]
-  G --> H["本文の参照を出現順に取り出す（008）: external（001・002・010・011）、relative（007）、internal（005・006）。つながった項・号は直前の条を引き継ぐ（009）"]
+  G --> H["本文の参照を出現順に取り出す（008）: external（001・002・010・011）、relative（007）、internal（005・006）、附則の条 suppl（047）、施行規則の「令第N条」（048）。つながった項・号は直前の条を引き継ぐ（009）"]
   H --> I["名前だけの未解決の参照を、候補名の完全一致で e-Gov に問い合わせる。同じ候補名は 1 回（003・004・017）"]
-  I --> J["「政令で定める」「…省令で定める」を委任にまとめ、施行令・施行規則を付ける（012・013）"]
-  J --> K["meta・coverage を付け（020・022）、next_actions を作る（015・016）。参照が無ければ空の配列（021）"]
+  I --> J["「政令で定める」「…省令で定める」を委任にまとめ、委任先が確かなときだけ施行令・施行規則を付ける（012・013・049）"]
+  J --> K["meta・coverage を付け（020・022）、next_actions を作る（015・016・052）。参照が無ければ空の配列（021）"]
 ```
 
 ## できること
@@ -129,19 +129,19 @@ SPEC-EGOV-GET-ARTICLE-REFERENCES-005 の internal のうち、条も項も書か
 
 例: 所得税法を既知の法令名として持っていても、「旧所得税法第九条」は `law_name: "旧所得税法"`、`article: "9"`、`resolved: false` の external になる。
 
-### SPEC-EGOV-GET-ARTICLE-REFERENCES-012 「政令で定める」「…省令で定める」を委任として出現回数でまとめ、施行令・施行規則を付ける
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-012 「政令で定める」「…省令で定める」を委任として出現回数でまとめ、委任先が確かなときだけ施行令・施行規則を付ける
 
-本文の「政令で定める」「…省令で定める」（例: `財務省令で定める`）は、`references` ではなく `delegations` に入れる。同じ文言は 1 件にまとめ、`count` に出現回数を入れる。要素は次のフィールドを持つ。
+本文の「政令で定める」「…省令で定める」「内閣府令で定める」（例: `財務省令で定める`）は、`references` ではなく `delegations` に入れる。同じ文言は 1 件にまとめ、`count` に出現回数を入れる。要素は次のフィールドを持つ。
 
-| フィールド   | 内容                                                                                                                                                        |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`       | `delegation`                                                                                                                                                |
-| `raw`        | 文言（例: `政令で定める`・`財務省令で定める`）                                                                                                              |
-| `count`      | 出現回数                                                                                                                                                    |
-| `target`     | 政令は `enforcement_order`、省令は `enforcement_rule`                                                                                                       |
-| `target_law` | 委任先の法令。`relation`（`target` と同じ値）・`law_id`・`title`・`url`。法律の本文では、その法律の施行令（政令）・施行規則（省令）。委任先の条は特定しない |
+| フィールド   | 内容                                                                                                                                                                                                                                                  |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`       | `delegation`                                                                                                                                                                                                                                          |
+| `raw`        | 文言（例: `政令で定める`・`財務省令で定める`）                                                                                                                                                                                                        |
+| `count`      | 出現回数                                                                                                                                                                                                                                              |
+| `target`     | 政令は `enforcement_order`、省令・府令は `enforcement_rule`                                                                                                                                                                                           |
+| `target_law` | 委任先の法令。`relation`（`target` と同じ値）・`law_id`・`title`・`url`。法律の本文では、「政令で定める」はその法律の施行令、省令・府令は SPEC-EGOV-GET-ARTICLE-REFERENCES-049 で確かなときだけその法律の施行規則。確かでないときと実在しないときは `null`（031）。委任先の条は特定しない |
 
-例: 所得税法 第57条の2 全体では、`財務省令で定める`（`target_law` は所得税法施行規則 `340M50000040011`、`relation: "enforcement_rule"`）と `政令で定める`（`target_law` は所得税法施行令 `340CO0000000096`、`relation: "enforcement_order"`）の 2 件。「財務省令で定める」が 2 回、「政令で定める」が 1 回出る本文では、`財務省令で定める` の `count` が 2、`政令で定める` の `count` が 1。
+例: 所得税法 第57条の2 全体では、`財務省令で定める`（`target_law` は所得税法施行規則 `340M50000040011`、`relation: "enforcement_rule"`。施行規則の法令番号 `昭和四十年大蔵省令第十一号` の `大蔵省令` は 049 の表で `財務省令` に当たる）と `政令で定める`（`target_law` は所得税法施行令 `340CO0000000096`、`relation: "enforcement_order"`）の 2 件。「財務省令で定める」が 2 回、「政令で定める」が 1 回出る本文では、`財務省令で定める` の `count` が 2、`政令で定める` の `count` が 1。
 
 ### SPEC-EGOV-GET-ARTICLE-REFERENCES-013 施行令の本文の「政令で定める」は、その施行令自身への委任として self: true を付ける
 
@@ -155,12 +155,12 @@ SPEC-EGOV-GET-ARTICLE-REFERENCES-005 の internal のうち、条も項も書か
 
 例: `law_name: "所得税法"`、`article: "57の2"`、`paragraph: 1` では、`references` の `raw` は `["第二十八条第二項", "同項"]` で、`delegations` は空の配列（委任は第 2 項にしか無い）。
 
-### SPEC-EGOV-GET-ARTICLE-REFERENCES-015 解決できた参照ごとに get_law の引数を next_actions で付ける
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-015 条の分かる参照ごとに get_law の引数を next_actions で付ける
 
-`next_actions` には、`resolved: true` の `external` と `internal` の参照ごとに `action: "get_law"` を 1 件入れる。`example` はそのまま `get_law` の inputSchema を通る引数で、次のとおり。
+`next_actions` には、`resolved: true` の `external` と `internal` の参照ごとに `action: "get_law"` を 1 件入れる。ただし、条を持たない `external`（本文が「法令名（法令番号）」だけで、条・項・号が続かない参照）からは `get_law` を作らず、SPEC-EGOV-GET-ARTICLE-REFERENCES-052 の `get_toc` を入れる。`example` はそのまま `get_law` の inputSchema を通る引数で、次のとおり。
 
 - `law_name`: external は参照先の法令名、internal は `law_name` に指定した法令の正式名称
-- `article`: 参照の条。条を持たない internal は、指定した条
+- `article`: 参照の条。条を持たない internal（「第三号」のように条を書かない同一法令内の参照）は、指定した条
 - `paragraph` / `item`: 参照にあるときだけ
 
 `relative` と `resolved: false` の参照からは `next_actions` を作らない。
@@ -264,11 +264,11 @@ SPEC-EGOV-GET-ARTICLE-REFERENCES-003 で e-Gov に問い合わせる候補名は
 
 例: 本文が「架空一法第一条、架空二法第一条、…、架空二十一法第一条の規定。」（21 種類の候補名）の条で、e-Gov に `架空一法` と `架空二十一法` が実在するとき、`references` の 1 件めの `架空一法` は `resolved: true`（`law_id` 付き）、21 件めの `架空二十一法` は `resolved: false`（`law_id` 無し）。法令名での問い合わせは 20 回。
 
-### SPEC-EGOV-GET-ARTICLE-REFERENCES-031 委任先の法令が e-Gov に無ければ、target_law を付けずに delegations に入れ、search_fulltext を作らない
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-031 委任先の法令が e-Gov に無いとき・確かでないときは、`target_law: null` で delegations に入れ、search_fulltext を作らない
 
-委任先の施行令・施行規則が e-Gov に実在しないときも、その委任は `delegations` に入れる。ただし `target_law` のキーを付けず、SPEC-EGOV-GET-ARTICLE-REFERENCES-016 の `search_fulltext` の `next_actions` も作らない。
+委任先の施行令・施行規則が e-Gov に実在しないとき、または省令・府令の委任先が SPEC-EGOV-GET-ARTICLE-REFERENCES-049 で確かでないときも、その委任は `delegations` に入れる。`target_law` は `null` にし（キーは消さない）、SPEC-EGOV-GET-ARTICLE-REFERENCES-016 の `search_fulltext` の `next_actions` も作らない。
 
-例: `law_name: "民法"`（民法施行令が e-Gov に無い）で本文が「政令で定めるところによる。」の条では、`delegations` は `[{ kind: "delegation", raw: "政令で定める", count: 1, target: "enforcement_order" }]`（`target_law` のキーが無い）、`next_actions` は `[]`。
+例: `law_name: "民法"`（民法施行令が e-Gov に無い）で本文が「政令で定めるところによる。」の条では、`delegations` は `[{ kind: "delegation", raw: "政令で定める", count: 1, target: "enforcement_order", target_law: null }]`、`next_actions` は `[]`（v0.17.0 では `target_law` のキーが無かった）。
 
 ### SPEC-EGOV-GET-ARTICLE-REFERENCES-032 next_actions は example が同じ案内を 1 回だけ入れる
 
@@ -311,6 +311,7 @@ SPEC-EGOV-GET-ARTICLE-REFERENCES-012 の `target_law.url` は、委任先の法�
 | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `external` の参照からの `get_law`               | `引用先の条を読めます`                                                                                                           |
 | `internal` の参照からの `get_law`               | `同一法令内の参照先を読めます`                                                                                                   |
+| 条を持たない `external` の参照からの `get_toc`  | `引用先の法令の目次を見られます`（SPEC-EGOV-GET-ARTICLE-REFERENCES-052）                                                         |
 | 委任からの `search_fulltext`                    | `<target_law.title>の中で<対象の条の表記>を受けている条を探せます（ローカル DB がある場合。無ければ get_toc で目次から探してください）`。対象の条の表記は `第57条の2` の形 |
 
 例: `law_name: "所得税法"`、`article: "57の2"` では、`第二十八条第二項` からの `get_law` の `reason` は `同一法令内の参照先を読めます`、雇用保険法からの `get_law` は `引用先の条を読めます`、施行規則への `search_fulltext` は `所得税法施行規則の中で第57条の2を受けている条を探せます（ローカル DB がある場合。無ければ get_toc で目次から探してください）`。
@@ -357,6 +358,79 @@ tools/list の inputSchema の `paragraph` は `type: "integer"`、`minimum: 1` 
 
 例: `{ law_name: "ＰＬ法", article: "3" }` は `製造物責任法第 3 条の参照を返す`（v0.15.4 では辞書に無い扱いで、e-Gov の法令名検索に `ＰＬ法` を渡して `LAW_NOT_FOUND` だった）。`law_name: "労基法　"`（末尾が全角空白）も `労働基準法` として引く。
 
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-044 法令名が完全一致しないときは、参照を取り出さず候補を付けた `LAW_NOT_FOUND` を返す
+
+`law_name` の法令は SPEC-EGOV-COMMON-ERRORS-032 の規則で決める。略称辞書に law_id が無く、e-Gov の法令名検索の全件の中に題名の完全一致が無いときは、検索結果の先頭の法令の条文を取らず、032 の形の `LAW_NOT_FOUND`（`retryable: false`）を返す。`next_actions` の候補の要素は `action: "get_article_references"`、`example` は渡した引数（`article`・`paragraph`・`at` のうち渡したもの）の `law_name` だけを候補の題名に替えたもの。`at` を渡したときは、法令名の検索にも `asof=<at>` を付ける。
+
+例: `{ law_name: "所得税法施行", article: "1" }` は `code: "LAW_NOT_FOUND"`、`next_actions` の先頭は `{ action: "get_article_references", example: { law_name: "所得税法施行令", article: "1" } }`。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-045 本文の法令番号・法令名で他の法令を引くときも、完全一致だけを使い、検索結果の全件から探す
+
+本文の参照から他の法令を引くとき（SPEC-EGOV-GET-ARTICLE-REFERENCES-001 の法令番号、003 の候補名、010 の親の法律、012 の委任先、048 の兄弟の施行令）は、e-Gov の検索結果の全件（`total_count` の件数）の中から、法令番号は `law_info.law_num`、法令名は `revision_info.law_title` が完全に一致する法令だけを使う。完全一致が無ければ、検索結果の先頭の法令を使わず、その参照は `resolved: false`（001・003・048）、親の法律は無いもの（010 の「親の法律が分からない本文」と同じ）、委任先は `target_law: null`（031）にする。`at` を渡したときは、これらの検索にも `asof=<at>` を付ける。
+
+例: 本文の「法令名（法令番号）」の法令番号で e-Gov が返した検索結果に、`law_num` が一致する法令が無く別の法令番号の法令だけがあるときは、その参照を `resolved: false`・`law_id` 無しで返す（v0.17.0 では検索結果の先頭の法令の `law_id` を付けて `resolved: true` にしていた）。候補名 `保険法` は、`/laws?law_title=保険法` の 114 件（2026-10-03 10:10 JST）の 78 件目の完全一致 `保険法`（`420AC0000000056`）に解決する（v0.17.0 では上位 50 件の中に無いため `resolved: false`）。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-046 対象の条は本則の中だけで探し、附則にだけある条番号は `ARTICLE_NOT_FOUND` にする
+
+`article` の条は、本則（`MainProvision`）の中だけで探す。本則に無ければ、附則に同じ番号の条があってもその条の参照を取り出さず、`ARTICLE_NOT_FOUND` を返す。同じ番号の条を持つ附則があるときは、`hint` に `本則に第<条>条はありません。附則に同じ番号の条があります: 附則(<n1>) <改正法の法令番号、または 制定時>、…。このツールは本則の条だけを対象にします。附則の条の本文は get_law の suppl_index で読めます` を書き、`next_actions` に附則ごと（先頭の 5 件まで）の `{ action: "get_law", example: { law_name: <渡した law_name>, article: <渡した article>, suppl_index: <n> } }` を入れる。
+
+例: `{ law_name: "消費税法", article: "100" }` は `code: "ARTICLE_NOT_FOUND"`、`next_actions` は `get_law` の `suppl_index: 27` と `suppl_index: 168` の 2 件（2026-10-03 の消費税法。SPEC-EGOV-GET-LAW-042 と同じ附則）。v0.17.0 では附則(27)の第100条の本文から参照を取り出していた。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-047 本文の「附則第N条」は `kind: "suppl"`・`resolved: false` で返し、本則の条への internal にしない
+
+本文の「附則第N条」（項・号が続いてもよい。例: `附則第三条`・`附則第三十二条第二項`）は、`{ kind: "suppl", raw, article, paragraph, item, resolved: false }`（条・項・号は本文にあるものだけ）で返す。どの附則（制定時か、どの改正法か）の条かは特定しない。`kind: "internal"` にしないので、本則の条を指す `get_law` の `next_actions` を作らない。法令名が前に付く「<法令名>附則第N条」も同じく `kind: "suppl"` にし、`law_name` を付ける。
+
+例: 本文に「附則第三条の規定により」とある条では、`references` に `{ kind: "suppl", raw: "附則第三条", article: "3", resolved: false }` が入り、`next_actions` に `{ action: "get_law", example: { law_name: …, article: "3" } }` は入らない（v0.17.0 では `{ kind: "internal", raw: "第三条", article: "3" }` になり、本則の第3条を指す `get_law` を案内していた）。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-048 施行規則の本文の「令第N条」は、兄弟の施行令への external で返す
+
+`law_name` が施行規則（名前の末尾が「施行規則」）に解決され、末尾を「施行令」に替えた兄弟の施行令が e-Gov に実在する（SPEC-EGOV-GET-ARTICLE-REFERENCES-045 の完全一致）ときは、本文の「令第N条…」（候補名 `令`）をその施行令への `external`（`resolved: true`、`law_id` 付き）として返し、SPEC-EGOV-GET-ARTICLE-REFERENCES-015 の `get_law` の `next_actions` を付ける。条・項・号と、つながった項・号の引き継ぎ（009）は「法第N条」（010）と同じ。施行規則以外の本文の「令第N条」と、兄弟の施行令が無いときは、今までどおり候補名 `令` の `resolved: false`。施行令の本文の「規則第N条」は解決しない（候補名 `規則` の `resolved: false` のまま）。
+
+例: `{ law_name: "所得税法施行規則", article: "3" }` の「令第二十四条第一号」は、`{ kind: "external", raw: "令第二十四条第一号", law_name: "所得税法施行令", law_num: "昭和四十年政令第九十六号", law_id: "340CO0000000096", article: "24", item: "1", resolved: true }`。`next_actions` に `{ action: "get_law", example: { law_name: "所得税法施行令", article: "24", item: "1" } }` が入る（2026-10-03 10:14 JST に houki-egov-dev 0.17.0 で同じ引数を呼ぶと、`law_name: "令"`・`resolved: false` だった）。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-049 省令・府令の委任は、施行規則を定めた命令の名前が委任の文言と合うときだけ施行規則に結び付ける
+
+「<命令の名前>で定める」（`財務省令で定める`・`厚生労働省令で定める`・`内閣府令で定める` など）の委任は、その法律の施行規則（名前の末尾に「施行規則」を付けた法令）が e-Gov に実在し、かつ施行規則の法令番号（例: `昭和四十年大蔵省令第十一号`）の命令の名前（`大蔵省令`）が、委任の文言の命令の名前と同じか、次の表で同じ省に当たるときだけ、`target_law` に施行規則を入れる。
+
+| 施行規則の法令番号の命令の名前 | 委任の文言の命令の名前 |
+| ------------------------------ | ---------------------- |
+| `大蔵省令`                     | `財務省令`             |
+| `厚生省令`・`労働省令`         | `厚生労働省令`         |
+| `通商産業省令`                 | `経済産業省令`         |
+| `運輸省令`・`建設省令`         | `国土交通省令`         |
+| `郵政省令`・`自治省令`         | `総務省令`             |
+| `文部省令`                     | `文部科学省令`         |
+| `農林省令`                     | `農林水産省令`         |
+| `総理府令`                     | `内閣府令`             |
+
+次のときは `target_law: null`（SPEC-EGOV-GET-ARTICLE-REFERENCES-031）にする。`target` は `enforcement_rule` のまま。
+
+- 命令の名前が合わない（例: 施行規則が `総理府令` で、委任の文言が `国土交通省令`）
+- 委任の文言が `主務省令で定める`（どの省か本文からは決まらない）
+- 施行規則の法令番号の命令の名前が複数の省の連名（例: `内閣府・総務省令`）で、委任の文言と同じでない
+
+「政令で定める」は今までどおり施行令に結び付ける（施行令が実在しないときは `null`）。施行令・施行規則の本文で委任先が自身になるとき（013）も今までどおり。
+
+例: 道路交通法 第2条（2026-10-03 10:13 JST に houki-egov-dev 0.17.0 で確かめた。道路交通法施行規則 `335M50000002060` の法令番号は `昭和三十五年総理府令第六十号`）では、`内閣府令で定める`（`count: 9`）は `総理府令` が `内閣府令` に当たるので `target_law` は道路交通法施行規則、`環境省令で定める` と `国土交通省令で定める`（本文は「内閣府令・環境省令で定める」「内閣府令・国土交通省令で定める」の連名）は `target_law: null` で、`search_fulltext` の `next_actions` を作らない（v0.17.0 では 3 件とも `target_law` が道路交通法施行規則だった）。労働基準法 第15条の `厚生労働省令で定める` は、労働基準法施行規則の法令番号 `昭和二十二年厚生省令第二十三号` の `厚生省令` が表で `厚生労働省令` に当たるので、`target_law` は労働基準法施行規則（`322M40000100023`）のまま。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-050 施行規則の条からは、施行令への委任の search_fulltext を作らない
+
+`law_name` が施行規則のとき、本文の「政令で定める」の委任（`target_law` が施行令）からは、SPEC-EGOV-GET-ARTICLE-REFERENCES-016 の `search_fulltext` の `next_actions` を作らない。施行令の本文は施行規則の条を「規則第N条」と書かないため、呼び名 `規則` の `keyword`（例: `所得税法施行令 規則第一条`）で当たる見込みが低いからである。`delegations` の要素と `target_law` は今までどおり返す。
+
+例: `law_name: "所得税法施行規則"` で本文が「政令で定める場合」の条では、`delegations` に `政令で定める`（`target_law` は所得税法施行令 `340CO0000000096`）が入り、`next_actions` に `{ action: "search_fulltext", example: { keyword: "所得税法施行令 規則第…条" } }` は入らない。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-051 対象の法令本文の取得で e-Gov が 404・時点の 400 を返したときは `LAW_NOT_FOUND`・`INVALID_ARGUMENT`
+
+`law_name` の法令を決めた後の法令本文の取得で e-Gov が 429 以外の 4xx を返したときは、SPEC-EGOV-COMMON-ERRORS-033 の表のとおりに返す。404・`404004` は `LAW_NOT_FOUND`（`retryable: false`）、400・`400044` は `INVALID_ARGUMENT`（`tool: "get_article_references"`、`detail.issues[0].path: "at"`）、そのほかの 4xx は `SOURCE_API_ERROR`（`retryable: false`、`detail.status`）。本文の参照から他の法令を引く検索（045）が 400・`400044` を返したときも、同じ `INVALID_ARGUMENT` にする。
+
+例: `{ law_name: "所得税法", article: "57の2", at: "2000-01-01" }` は `code: "INVALID_ARGUMENT"`、`detail.issues: [{ path: "at", message: "e-Gov が受け付ける時点の範囲の外です" }]`。
+
+### SPEC-EGOV-GET-ARTICLE-REFERENCES-052 条を持たない external の参照からは、呼んだ条の番号を使わず、参照先の法令の get_toc を案内する
+
+`resolved: true` の `external` で、本文に条が続かない参照（`article` を持たない）からは、`get_law` を作らない。代わりに `{ action: "get_toc", reason: "引用先の法令の目次を見られます", example: { law_name: <参照先の法令名> } }` を、`references` の順の位置に 1 件入れる。呼び出しで指定した `article` を、参照先の法令の条として使わない。同じ法令の `get_toc` が 2 件になるときは、SPEC-EGOV-GET-ARTICLE-REFERENCES-032 のとおり 1 件にする。
+
+例: `{ law_name: "所得税法施行規則", article: "3" }` の参照 `日本国との平和条約に基づき日本の国籍を離脱した者等の出入国管理に関する特例法（平成三年法律第七十一号）`（`law_id: "403AC0000000071"`、`article` 無し）からは、`{ action: "get_toc", reason: "引用先の法令の目次を見られます", example: { law_name: "日本国との平和条約に基づき日本の国籍を離脱した者等の出入国管理に関する特例法" } }` を入れる。v0.17.0 では `{ action: "get_law", example: { law_name: "日本国との平和条約…特例法", article: "3" } }` で、特例法の第3条を指していた（2026-10-03 10:14 JST に houki-egov-dev 0.17.0 で確かめた。houki-egov-mcp #98）。
+
 ## できないこと
 
 - 「前項」「同法」「同条」「次条」などが指す条・法令を特定すること（`relative` で `resolved: false` のまま返す）
@@ -365,6 +439,8 @@ tools/list の inputSchema の `paragraph` は `type: "integer"`、`minimum: 1` 
 - 参照先の条文の本文を返すこと（`next_actions` で `get_law` を案内するだけ）
 - 引用している参照が網羅されていると保証すること（正規表現で取れた範囲だけ）
 - 逆方向の参照（この条を引用している他の条）を返すこと
+- 附則の中の条を対象にすること（本則の条だけ。附則の条は `get_law` の `suppl_index` で読む）
+- 本文の「附則第N条」が、どの附則の条かを特定すること（`kind: "suppl"`・`resolved: false` で返す）
 
 ## 未決
 
@@ -382,8 +458,3 @@ tools/list の inputSchema の `paragraph` は `type: "integer"`、`minimum: 1` 
 8. **`next_actions` の重複を除くこと。** → SPEC-EGOV-GET-ARTICLE-REFERENCES-032
 9. **複数の項にまたがる同じ委任の文言。** → SPEC-EGOV-GET-ARTICLE-REFERENCES-033
 10. **応答のフィールドのうちテストで確かめていないもの。** → SPEC-EGOV-GET-ARTICLE-REFERENCES-034・SPEC-EGOV-GET-ARTICLE-REFERENCES-035・SPEC-EGOV-GET-ARTICLE-REFERENCES-036・SPEC-EGOV-GET-ARTICLE-REFERENCES-037・SPEC-EGOV-GET-ARTICLE-REFERENCES-038（一部は約束にしていない。差分 `20260928-untested-behaviors` の proposal.md を参照）
-13. **法令名が完全一致しないとき、部分一致の先頭の法令を採る。** → houki-egov-mcp #45
-14. **「附則第三条」が本則の条への internal になる。** → houki-egov-mcp #51
-15. **施行規則の本文の「令第N条」「規則第N条」を解決しない。** → houki-egov-mcp #63
-16. **省令の種類を問わず、委任先を施行規則にする。** → houki-egov-mcp #63
-17. **法令番号で完全一致しないとき、検索結果の先頭を採る。** → houki-egov-mcp #45
