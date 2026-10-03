@@ -94,6 +94,43 @@ Architecture E では、通達・判例等は **独立 MCP パッケージ**と�
 
 Skill の書き方は本プロジェクトのスコープ外ですが、作ったものを他人に共有する場合は **「本MCPが返す事実情報に基づく判断ツリー」** と明示することを推奨します（利用者が判断の根拠を追えるように）。
 
+## ローカル DB を使う開発
+
+開発中のビルドで公開版の DB を壊さないための決まりです。
+
+手元のビルド（`node dist/index.js` を起動する MCP サーバーや、`node dist/index.js --sync` などの CLI）も、`HOUKI_EGOV_DB_PATH` が無ければ、plugin（公開版）と同じ `~/.cache/houki-egov-mcp/laws.db` を開きます。次の作業では、この DB を共有しないでください。
+
+| 作業 | 共有すると起きること |
+|---|---|
+| 古いコミット（0.18.x 以前）を起動する | 0.18.x 以前は版の違う DB を見つけると全テーブルを消すので、版 3 の `laws.db` の中身が消えます |
+| DB の版（`SCHEMA_VERSION`）を上げる変更を試す | `--bulk-download-everything` が `laws.db` を新しい版で作り直すので、公開版の plugin からは「版が新しい DB」になり、`search_fulltext` が `search_law` に切り替わります |
+| 取り込みの処理（`src/services/bulk/`）を変えて試す | 試している途中の中身を、公開版の `search_fulltext` が読みます |
+
+開発用の DB は別のファイルにします。MCP の設定ファイルの `env` と、CLI を実行するシェルの両方に同じ値を設定してください（JSON では `~` が展開されないので絶対パスで書きます）。
+
+```bash
+export HOUKI_EGOV_DB_PATH=~/.cache/houki-egov-mcp/laws.dev.db
+node dist/index.js --bulk-download-everything
+node dist/index.js --status   # 2 行目の「DB:」が laws.dev.db であることを確かめる
+```
+
+```json
+// 開発中の動作確認 (.mcp.json)
+{
+  "mcpServers": {
+    "houki-egov-local": {
+      "command": "node",
+      "args": ["/absolute/path/to/houki-egov-mcp/dist/index.js"],
+      "env": {
+        "HOUKI_EGOV_DB_PATH": "/Users/you/.cache/houki-egov-mcp/laws.dev.db"
+      }
+    }
+  }
+}
+```
+
+開発用に作った新しい版の DB を、公開後に plugin で使いたいときは、README の「別のファイルで作った DB を `laws.db` に移す」の手順で名前を変えます。取り込み直しは要りません。
+
 ## コーディング規約
 
 - TypeScript 7.x / ESM / Node.js >= 22（CI は 22 と 24）

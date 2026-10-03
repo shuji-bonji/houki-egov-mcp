@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Documentation
+
+- README: ローカル DB の節に、起動のしかた（plugin・MCP の設定ファイルに書いたサーバー・ターミナルの CLI）ごとに開く DB の表を足した。plugin は `env` を持たないので既定の `laws.db` を開き、`HOUKI_EGOV_DB_PATH` を付けずに実行した CLI は plugin と同じ `laws.db` を作る・更新する
+- README: CLI の例を、どのフォルダーからでも動く `npx -y @shuji-bonji/houki-egov-mcp@latest <フラグ>` に直した（`houki-egov-mcp <フラグ>` はグローバルにインストールしたときだけ、`npx houki-egov-mcp` は 404）。MCP の設定ファイルの例も `@latest` にした
+- README: 「日々の更新と作り直し」（`--sync` と `--bulk-download-everything` の使い分け）、「`search_fulltext` が `api-fallback` になるとき」（`note` の先頭ごとの原因と確かめ方）、「別のファイルで作った DB を `laws.db` に移す」（`PRAGMA wal_checkpoint(TRUNCATE)` の後に名前を変える。取り込み直しは不要）を足した
+- CONTRIBUTING.md: 「ローカル DB を使う開発」を足した。古いコミットや DB の版を上げる変更を試すときは `HOUKI_EGOV_DB_PATH` を別のファイル（例: `laws.dev.db`）に向ける
+- `--help`: どのフォルダーからでも動く `npx -y @shuji-bonji/houki-egov-mcp@latest <フラグ>` の形と、`HOUKI_EGOV_DB_PATH` を付けない CLI が plugin と同じ `laws.db` を扱うことを書いた。`--sync` の行に「ふだんの更新はこのコマンド」を足した
+
 ### In progress (Phase 2 — 残作業)
 
 - Phase 2-13: API enrichment（`category` / `revisions_meta` / PreviousEnforced・Repeal の精緻化）

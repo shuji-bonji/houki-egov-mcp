@@ -42,7 +42,7 @@
   "mcpServers": {
     "houki-egov": {
       "command": "npx",
-      "args": ["-y", "@shuji-bonji/houki-egov-mcp"]
+      "args": ["-y", "@shuji-bonji/houki-egov-mcp@latest"]
     }
   }
 }
@@ -127,6 +127,8 @@ npm test
 }
 ```
 
+手元のビルドも、`HOUKI_EGOV_DB_PATH` が無ければ plugin と同じ `~/.cache/houki-egov-mcp/laws.db` を開きます。古いコミットや DB の版を上げる変更を試すときは、別のファイルに向けてください（[CONTRIBUTING.md の「ローカル DB を使う開発」](CONTRIBUTING.md#ローカル-db-を使う開発)）。
+
 ## 使用例
 
 ```
@@ -178,14 +180,22 @@ npm test
 
 ```bash
 # 全法令 zip (約 290 MB) を DL して DB に取り込む (初回)
-npx @shuji-bonji/houki-egov-mcp --bulk-download-everything
+npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything
 
 # 最終同期日から今日までの日次差分を取り込む (2 回目以降。v0.8.0+)
-npx @shuji-bonji/houki-egov-mcp --sync
+npx -y @shuji-bonji/houki-egov-mcp@latest --sync
 
 # DB の件数と鮮度 (freshness) を表示
-npx @shuji-bonji/houki-egov-mcp --status
+npx -y @shuji-bonji/houki-egov-mcp@latest --status
 ```
+
+コマンドは、どのフォルダーからでも動く `npx -y @shuji-bonji/houki-egov-mcp@latest <フラグ>` の形で書いています。
+
+- `npm install -g @shuji-bonji/houki-egov-mcp` でグローバルにインストールしたときは、`houki-egov-mcp <フラグ>` でも動きます。インストールしていないと `command not found` になります
+- `npx houki-egov-mcp <フラグ>` は、npm に `houki-egov-mcp` という名前のパッケージが無いので 404 になります（このリポジトリのフォルダーの中でだけ動きます）
+- `@latest` を付けると、npx が以前に取得した古い版を使わずに、公開中の最新版で実行します。plugin と同じ版で DB を作り、更新するために付けています（0.18.x 以前の版で版 3 の DB を開くと全テーブルが消えるので、古い版を使わないことが大切です）
+
+`search_fulltext` の応答の `next_actions` と `--help` の使い方には `houki-egov-mcp --bulk-download-everything` の形で出ます。グローバルにインストールしていないときは、上の `npx -y @shuji-bonji/houki-egov-mcp@latest` の形に読み替えてください。
 
 `--sync` は、差分が無い日（土日など）を飛ばし、途中で失敗しても成功した日までを記録して終わります。最終同期から 90 日（`HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS`）を超えて空いているときは、e-Gov の日次差分の公開範囲を超えるので、何もせずに `--bulk-download-everything` を促します。1 日分は数百 KB〜30 MB、13 日分でおよそ 1〜2 分です。
 
@@ -195,12 +205,25 @@ DB は既定で `~/.cache/houki-egov-mcp/laws.db` に作られます。場所を
 
 引数を打ち間違えたとき（`houki-egov-mcp status` のような `-` の無い引数、`--sync --status` のようにフラグの後に続く引数）は、何もせずにエラーと使い方を出して終了コード 2 で終わります（0.19.0 から。それまでは MCP サーバーとして起動するか、最初のフラグだけを実行していました）。
 
+### 日々の更新と作り直し
+
+ふだんの更新は `--sync` だけで足ります。`--bulk-download-everything` を使うのは、表の 2〜4 行目の 3 つのときです。
+
+| 場面 | 使うコマンド | すること |
+|---|---|---|
+| ふだんの更新（毎日・毎週など） | `--sync` | 最後に同期した日から今日までの日次差分を取り込みます。差分の無い日は `差分なし` で飛ばします |
+| 初めて DB を作るとき | `--bulk-download-everything` | 全件の zip（約 290 MB）を取得して DB を作ります |
+| 最後の同期から 90 日（`HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS`）を超えたとき | `--bulk-download-everything` | `--sync` は何もせずに、このコマンドを促して終了コード 1 で終わります |
+| houki-egov-mcp を上げて DB の版が変わったとき（0.19.0 で版 2 → 3） | `--bulk-download-everything` | 版の古い DB を作り直して取り込みます（取り込んだ中身は消えます） |
+
+版が同じ DB に `--bulk-download-everything` を実行しても、作り直しはしません。全件の zip を取り直して、中身の変わった法令だけを書き換えます。ふだんの更新に使う必要はありません。
+
 ### 0.19.0 に上げたら DB を作り直してください
 
 0.19.0 で DB のスキーマの版を 2 から 3 に上げました。0.18.x 以前に作った DB は 0.19.0 では使えないので、次のコマンドで作り直してください。全件の zip（約 290 MB）を取得し直し、取り込み直します。
 
 ```bash
-npx @shuji-bonji/houki-egov-mcp@0.19.0 --bulk-download-everything
+npx -y @shuji-bonji/houki-egov-mcp@0.19.0 --bulk-download-everything
 ```
 
 - 作り直すまで、`search_fulltext` は条文本文を検索せずに `search_law`（法令名のタイトル一致）の結果を返し、`note` で作り直しを案内します。`--sync`・`--status`・`--bulk-download-by-date` は DB に触れずにエラー（終了コード 1）で終わります
@@ -228,6 +251,16 @@ DB の場所は、次の順で決まります。
 2. 無ければ、環境変数 `XDG_CACHE_HOME` の下の `houki-egov-mcp/laws.db`
 3. どちらも無ければ、`~/.cache/houki-egov-mcp/laws.db`
 
+起動のしかたによって、環境変数が渡るかどうかが違います。どのファイルを開くかは次のとおりです。
+
+| 起動のしかた | 環境変数 | 開く DB |
+|---|---|---|
+| Claude Code plugin（`.claude-plugin/plugin.json`） | plugin は `env` を持たず、Claude Desktop のような GUI アプリはシェルの環境変数を受け継がない | `~/.cache/houki-egov-mcp/laws.db` |
+| MCP の設定ファイル（`claude_desktop_config.json`・`.mcp.json`）に書いたサーバー | 設定の `env` だけ | `env` に `HOUKI_EGOV_DB_PATH` があればそのファイル。無ければ `~/.cache/houki-egov-mcp/laws.db` |
+| ターミナルの CLI（`--bulk-download-everything`・`--sync`・`--status`） | そのシェルの環境変数 | `HOUKI_EGOV_DB_PATH` があればそのファイル。無ければ `${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/laws.db` |
+
+**環境変数を付けずに CLI を実行すると、plugin が使う `laws.db` を作り、更新します。** plugin で使う DB は、環境変数を付けずに CLI で作り、`--sync` で更新してください。逆に、plugin と別の DB を試したいときは、CLI にだけ `HOUKI_EGOV_DB_PATH` を付けます。そのときに作った DB を plugin は読みません。シェルの設定（`~/.zshrc` など）で `HOUKI_EGOV_DB_PATH` を `export` しているときは、plugin と同じ DB を扱う CLI の前に `env -u HOUKI_EGOV_DB_PATH` を付けます（例: `env -u HOUKI_EGOV_DB_PATH npx -y @shuji-bonji/houki-egov-mcp@latest --sync`）。
+
 `HOUKI_EGOV_DB_PATH` を使うのは、DB を別のディスクに置きたいとき、版の違う houki-egov-mcp を並べて使うとき（0.18.x の plugin と 0.19.0 など）、試しに別の DB を作りたいときです。設定するときは、次の 3 点に気を付けてください。
 
 - **CLI と MCP サーバーの両方に、同じ値を設定します。** DB を作る CLI（`--bulk-download-everything` など）と、DB を読む MCP サーバー（`search_fulltext`）は別々に起動するので、片方だけに設定すると、CLI が作った DB を MCP サーバーが見つけられません（`search_fulltext` が `bulk DL 未実行のため` で `search_law` に切り替わります）
@@ -238,8 +271,8 @@ CLI での指定（ターミナル）:
 
 ```bash
 export HOUKI_EGOV_DB_PATH=~/data/houki-egov/laws.db
-npx @shuji-bonji/houki-egov-mcp --bulk-download-everything
-npx @shuji-bonji/houki-egov-mcp --status   # 2 行目の「DB:」に使っている場所が出ます
+npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything
+npx -y @shuji-bonji/houki-egov-mcp@latest --status   # 2 行目の「DB:」に使っている場所が出ます
 ```
 
 MCP サーバーでの指定（`claude_desktop_config.json` や `.mcp.json`）:
@@ -249,7 +282,7 @@ MCP サーバーでの指定（`claude_desktop_config.json` や `.mcp.json`）:
   "mcpServers": {
     "houki-egov": {
       "command": "npx",
-      "args": ["-y", "@shuji-bonji/houki-egov-mcp"],
+      "args": ["-y", "@shuji-bonji/houki-egov-mcp@latest"],
       "env": {
         "HOUKI_EGOV_DB_PATH": "/Users/you/data/houki-egov/laws.db"
       }
@@ -260,6 +293,32 @@ MCP サーバーでの指定（`claude_desktop_config.json` や `.mcp.json`）:
 
 設定を変えたら、MCP クライアント（Claude Desktop など）を起動し直してください。MCP サーバーが使っている場所は、`search_fulltext` の応答だけでは分からないので、同じ値を付けて CLI の `--status` を実行し、`DB:` の行と `laws:` の件数で確かめてください。
 
+### `search_fulltext` が `api-fallback` になるとき
+
+ローカル DB を作ったはずなのに `search_fulltext` が `source: "api-fallback"` を返すときは、`note` の先頭で原因を見分けます。
+
+| `note` の先頭 | 考えられる原因 | 確かめ方・直し方 |
+|---|---|---|
+| `bulk DL 未実行のため` | (a) DB をまだ作っていない。(b) MCP サーバーが開いているファイルと、CLI で作ったファイルが違う（`HOUKI_EGOV_DB_PATH` を片方にだけ設定した、設定がもう無いファイルを指している、など） | MCP サーバーと同じ環境変数で `--status` を実行し、`DB:` の行のファイルがあるかを見ます。plugin なら `HOUKI_EGOV_DB_PATH` を付けずに実行します（上の `env -u`）。ファイルが無ければ、そのパスで `--bulk-download-everything` を実行するか、作った DB を下の手順でそのパスに移します |
+| `bulk DB の版 (<n>) がこの houki-egov-mcp (<m>) より古いため` | 開いた DB が、前の版の houki-egov-mcp で作ったもの | `--bulk-download-everything` で作り直します。新しい版の DB が別のファイルにあるなら、下の手順で移すと取り込み直さずに済みます |
+| `bulk DB の版 (<n>) がこの houki-egov-mcp (<m>) より新しいため` | 開いた DB が、新しい版の houki-egov-mcp で作ったもの（plugin の版が CLI より古い、など） | plugin と CLI の版をそろえます |
+| `bulk DB を開けなかったため` | パスがフォルダーを指している、途中が普通のファイル、権限が無い | `HOUKI_EGOV_DB_PATH` の値を直します |
+
+`bulk DL 未実行のため` の文は、(a) と (b) を区別しません。`note` だけでは開こうとしたファイルが分からないので、上のとおり `--status` の `DB:` の行で確かめてください。
+
+### 別のファイルで作った DB を `laws.db` に移す
+
+`HOUKI_EGOV_DB_PATH` で別のファイル（例: `laws.v3.db`）に作った DB は、名前を `laws.db` に変えれば、取り込み直さずに plugin から使えます。
+
+1. その DB を開いている MCP サーバーを止めます（Claude Desktop などを終了し、`--sync` などの CLI も動いていないことを確かめます）
+2. WAL の中身を DB ファイルに書き戻します: `sqlite3 ~/.cache/houki-egov-mcp/laws.v3.db 'PRAGMA wal_checkpoint(TRUNCATE);'`
+3. 今の `laws.db` を退避します: `mv ~/.cache/houki-egov-mcp/laws.db ~/.cache/houki-egov-mcp/laws.v2.bak.db`（`laws.db-wal`・`laws.db-shm` があれば、同じように名前を変えるか消します）
+4. 名前を変えます: `mv ~/.cache/houki-egov-mcp/laws.v3.db ~/.cache/houki-egov-mcp/laws.db`（2 で空になった `laws.v3.db-wal`・`laws.v3.db-shm` は、`laws.db` の名前に付け替えずに消すか別の名前にします）
+5. 環境変数を付けずに `npx -y @shuji-bonji/houki-egov-mcp@latest --status` を実行し、`DB:` が `laws.db` で `laws:` の件数が入っていることを確かめます
+6. `HOUKI_EGOV_DB_PATH` で古いファイル名を指している設定（MCP の設定ファイルの `env`、シェルの `export`）があれば、消すか `laws.db` に直します。古い名前を指したままのサーバーは、ファイルが無いので `bulk DL 未実行のため` を返します
+
+退避した古い DB は、確かめた後に消してかまいません。
+
 ### SQLite と DB の置き場所（npx / plugin 経由で使う場合）
 
 SQLite は本パッケージが依存する `better-sqlite3` に同梱されています（SQLite 3.53 系の amalgamation。OS の sqlite3 は使いません）。`npx` や plugin で初めて起動したときに npm が `better-sqlite3` を取り込み、実行中の Node.js と OS に合ったビルド済みバイナリ（`prebuild-install`）を GitHub Releases から取得します。対応する prebuilt がない Node.js の場合は `node-gyp` でその場でコンパイルするため、Python と C++ ビルドツール（macOS なら Xcode Command Line Tools）が必要になります。Node 22 / 24 の LTS では prebuilt が用意されているので、通常はコンパイルは走りません。
@@ -268,9 +327,11 @@ DB ファイルはパッケージの中ではなく、上記のユーザーの�
 
 | 起動方法 | 実行されるコード | 読む DB |
 |---|---|---|
-| `npx @shuji-bonji/houki-egov-mcp --bulk-download-everything`（CLI） | npx のキャッシュ内のパッケージ | `~/.cache/houki-egov-mcp/laws.db` |
-| Claude Desktop / Claude Code plugin（`npx -y …`） | 同上（`@latest` 指定なら起動ごとにレジストリを確認） | 同上 |
-| ローカル開発（`node dist/index.js`） | リポジトリの `dist` | 同上 |
+| `npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything`（CLI） | npx のキャッシュ内のパッケージ | `~/.cache/houki-egov-mcp/laws.db` |
+| Claude Desktop / Claude Code plugin（`npx -y …@latest`） | 同上（`@latest` 指定なら起動ごとにレジストリを確認） | 同上 |
+| ローカル開発（`node dist/index.js`） | リポジトリの `dist` | 同上。古いコミットや DB の版を上げる変更を試すときは、`HOUKI_EGOV_DB_PATH` で別のファイルに向けてください（[CONTRIBUTING.md](CONTRIBUTING.md#ローカル-db-を使う開発)） |
+
+どれも環境変数が無いときの場所です。`HOUKI_EGOV_DB_PATH` を設定した起動だけが別のファイルを開きます（上の「DB の場所を変える」）。
 
 このため、DB の構築は一度 CLI で行えば、plugin 経由の `search_fulltext` からもそのまま使えます。`--bulk-download-everything` のあとに MCP server を再起動する必要はありません（`search_fulltext` は呼び出しごとに DB を開いて閉じます）。書き込みは CLI だけが行い、MCP server は読むだけです（journal は WAL なので、取り込み中に検索しても壊れません）。DB を作るのは `--bulk-download-everything` だけで、`search_fulltext` と `--status` は DB が無くてもファイルやフォルダーを作りません（0.19.0 から）。
 

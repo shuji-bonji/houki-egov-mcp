@@ -532,6 +532,7 @@ USAGE:
                                                   (既定 90) 日を超えたとき。DB を作る・版の古い DB を
                                                   作り直すのはこのコマンドだけ
   houki-egov-mcp --sync                           最終同期日から今日までの日次差分を DL + ingest。
+                                                  ふだんの更新はこのコマンド。
                                                   差分が無い日は飛ばし、途中で失敗しても
                                                   成功した日までを記録する
                                                   （--bulk-download-incremental も同じです）
@@ -541,12 +542,19 @@ USAGE:
   houki-egov-mcp --version, -v                    バージョン表示
   houki-egov-mcp --help                           この使い方を表示
 
+  グローバルにインストールしていないときは、どのフォルダーからでも
+  npx -y @shuji-bonji/houki-egov-mcp@latest <フラグ> の形で実行する
+  (npx houki-egov-mcp は npm にその名前のパッケージが無いので 404)
+
 ENVIRONMENT:
   HOUKI_EGOV_DB_PATH=/path/to/laws.db
                                     DB ファイルのパス (フォルダーではなくファイル名まで)。
                                     MCP サーバーの設定にも同じ値を入れる。JSON の env では
                                     ~ が展開されないので絶対パスで書く
                                     (default: \${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/laws.db)
+                                    plugin は env を持たないので既定の laws.db を開く。
+                                    この変数を付けずに実行した CLI は、plugin と同じ
+                                    laws.db を作る・更新する
   HOUKI_EGOV_BULK_RETRY=3           bulk DL 失敗時に試す回数 (1 以上の整数。既定 3)
   HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS=90
                                     --sync が差分で追える最大日数 (超えたら全件取り込みを促す)
