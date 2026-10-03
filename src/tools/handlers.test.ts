@@ -186,7 +186,8 @@ describe('handleSearchFulltext (Phase 2-7)', () => {
     expect(r.freshness?.last_sync_date).toBe('2026-09-01');
     expect(['fresh', 'stale', 'outdated']).toContain(r.freshness?.staleness);
     expect(r.filters.domain.applied).toBe(false);
-    expect(r.expanded_keywords).toEqual({ from: '適格請求書', to: '消費税法' });
+    // 通称は元の語で条が当たれば正式名称に展開しない（SPEC-EGOV-SEARCH-FULLTEXT-007）
+    expect(r.expanded_keywords).toBeUndefined();
   });
 
   it('SPEC-EGOV-SEARCH-FULLTEXT-010 SPEC-EGOV-SEARCH-FULLTEXT-011 law_type / limit 引数が効く', async () => {
@@ -229,11 +230,14 @@ describe('handleSearchFulltext (Phase 2-7)', () => {
     expect(r.short_tokens).toBeUndefined();
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-022 domain は受け付けるが applied=false + note', async () => {
-    const r = await handleSearchFulltext({ keyword: '適格請求書', domain: 'tax' }, { dbPath });
+  it('SPEC-EGOV-SEARCH-FULLTEXT-022 filters.domain はキーを残し、requested: null・applied: false と外したことを書く', async () => {
+    const r = await handleSearchFulltext({ keyword: '適格請求書' }, { dbPath });
     if (r.source !== 'bulk') throw new Error('expected bulk');
-    expect(r.filters.domain.requested).toBe('tax');
-    expect(r.filters.domain.note).toContain('Phase 2-13');
+    expect(r.filters.domain).toEqual({
+      requested: null,
+      applied: false,
+      note: '分野での絞り込みはしていません（domain の引数は 0.18.0 で外しました）',
+    });
   });
 
   it('SPEC-EGOV-SEARCH-FULLTEXT-002 bulk DL 未実行 (articles 0 件) なら search_law フォールバック + 誘導 note', async () => {

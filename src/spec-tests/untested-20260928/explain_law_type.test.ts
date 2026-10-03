@@ -82,10 +82,10 @@ describe('explain_law_type — found: true の応答', () => {
     expect(r.info?.law_type_code).toBe('MinisterialOrdinance');
   });
 
-  it('SPEC-EGOV-EXPLAIN-LAW-TYPE-012 憲法の info は aliases: [日本国憲法] を持ち law_type_code を持たない', async () => {
+  it('SPEC-EGOV-EXPLAIN-LAW-TYPE-012 SPEC-EGOV-EXPLAIN-LAW-TYPE-022 憲法の info は aliases: [日本国憲法] と law_type_code: Constitution を持つ', async () => {
     const r = await explain('憲法');
     expect(r.info?.aliases).toEqual(['日本国憲法']);
-    expect(r.info && Object.hasOwn(r.info, 'law_type_code')).toBe(false);
+    expect(r.info?.law_type_code).toBe('Constitution');
   });
 
   it('SPEC-EGOV-EXPLAIN-LAW-TYPE-013 憲法の sources は e-Gov の URL を持つ', async () => {

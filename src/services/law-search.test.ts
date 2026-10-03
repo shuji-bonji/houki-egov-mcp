@@ -68,10 +68,11 @@ describe('buildFtsQueryWithAbbreviation', () => {
   it('SPEC-EGOV-SEARCH-FULLTEXT-007 辞書にない語は展開しない', () => {
     expect(buildFtsQueryWithAbbreviation('課税仕入れ').query).toBe('"課税仕入れ"');
   });
-  it('SPEC-EGOV-SEARCH-FULLTEXT-007 通称 alias (適格請求書) も 消費税法 に OR 展開される', () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-007 通称 alias (適格請求書) は元の語だけで引き、正式名称は条が 0 件のときの探し直しに回す', () => {
     const r = buildFtsQueryWithAbbreviation('適格請求書');
-    expect(r.query).toBe('("適格請求書") OR ("消費税法")');
-    expect(r.expandedTo).toBe('消費税法');
+    expect(r.query).toBe('"適格請求書"');
+    expect(r.expandedTo).toBeUndefined();
+    expect(r.aliasRetry).toEqual({ query: '"消費税法"', from: '適格請求書', to: '消費税法' });
   });
   it('SPEC-EGOV-SEARCH-FULLTEXT-007 2 文字の略称 (消法) は formal だけで検索する', () => {
     const r = buildFtsQueryWithAbbreviation('消法');
@@ -205,10 +206,12 @@ describe('searchLawsInDb', () => {
     expect(r.short_tokens?.fts_min_token_length).toBe(3);
     expect(r.short_tokens?.hits_by_match_type.article).toBe(0);
     expect(r.short_tokens?.note).toContain('条の本文は引いていません');
+    // 1 件目は example を付けず、reason に「<法令名> <語>」の形を書く
     expect(r.short_tokens?.next_actions?.map((a) => a.example)).toEqual([
-      { keyword: '民法 控除' },
+      undefined,
       { keyword: '控除', scan_body: true },
     ]);
+    expect(r.short_tokens?.next_actions?.[0].reason).toContain('「<法令名> 控除」');
   });
 
   it('SPEC-EGOV-SEARCH-FULLTEXT-019 scan_body: true のときだけ articles の本文を走査する (#23)', () => {
