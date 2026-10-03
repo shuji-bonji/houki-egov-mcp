@@ -64,14 +64,15 @@ export interface ParsedArticle {
   /**
    * Article 識別子。
    * - 本則: Article@Num の値そのまま (例: `1`, `12_2` (12 条の 2))
+   * - 条を持たず段落だけの本則: `MainProvision`（段落の文を改行でつないだ 1 行。SPEC-EGOV-CLI-BULK-DOWNLOAD-027）
    * - 附則: `Suppl{idx}_{Num}` (例: `Suppl1_1`)
    * - 別表: `Appendix{idx}` (`AppdxTable` / `AppdxNote` / `AppdxFig` / `AppdxStyle` をまとめて)
    */
   article_num: string;
   /** ArticleCaption テキスト or 別表タイトル (空文字 → null) */
   caption: string | null;
-  /** Part > Chapter > Section > Subsection > Division を連結したパス (空可) */
-  chapter_path: string;
+  /** Part > Chapter > Section > Subsection > Division を連結したパス (空可。段落だけの本則は null) */
+  chapter_path: string | null;
   /** Article 内の全テキスト (Caption / Title 除く) を連結したもの */
   body_raw: string;
 }
@@ -156,6 +157,23 @@ export function parseLawXml(xml: string): ParsedLaw {
   // 本則
   if (lawBody.MainProvision) {
     walkArticles(lawBody.MainProvision, [], articles, '');
+    // 条を持たず段落だけの本則（改暦ノ布告など）は、段落の文を改行でつないで 1 行にする
+    // （SPEC-EGOV-CLI-BULK-DOWNLOAD-027）。条が 1 つでもあればこの行は作らない
+    const main = lawBody.MainProvision as Record<string, unknown>;
+    if (articles.length === 0 && Array.isArray(main.Paragraph) && main.Paragraph.length > 0) {
+      const mainBody = (main.Paragraph as unknown[])
+        .map((p) => extractInlineText(p).trim())
+        .filter(Boolean)
+        .join('\n');
+      if (mainBody) {
+        articles.push({
+          article_num: 'MainProvision',
+          caption: null,
+          chapter_path: null,
+          body_raw: mainBody,
+        });
+      }
+    }
   }
 
   // 附則 (複数ある場合あり)

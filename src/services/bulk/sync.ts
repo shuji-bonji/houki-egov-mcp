@@ -135,9 +135,15 @@ export function planSync(args: {
   };
 }
 
-/** 差分 zip が無い日の応答か (2026-09-19 実測では 500。将来 404 に変わっても拾う) */
+/**
+ * 差分 zip が無い日の HTTP の status (2026-09-19 実測では 500。将来 404 に変わっても拾う)。
+ * この応答は取り直さずに 1 回目で「差分なし」にする（SPEC-EGOV-CLI-SYNC-005）
+ */
+export const NO_DIFF_STATUSES: readonly number[] = [404, 500];
+
+/** 差分 zip が無い日の応答か */
 export function isNoDiffResponse(err: unknown): boolean {
-  return err instanceof BulkHttpError && (err.status === 404 || err.status === 500);
+  return err instanceof BulkHttpError && NO_DIFF_STATUSES.includes(err.status);
 }
 
 /**

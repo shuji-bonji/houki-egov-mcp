@@ -17,16 +17,27 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BULK_CONFIG, EGOV_BULK, HTTP_CONFIG, PACKAGE_INFO } from '../config.js';
-import { closeDb, defaultDbPath, openDb } from '../db/index.js';
+import {
+  closeDb,
+  type DbState,
+  dbStateErrorMessage,
+  defaultDbPath,
+  inspectDb,
+  openDbForFullIngest,
+  openUsableDb,
+} from '../db/index.js';
 import { type IngestResult, ingestZip } from '../services/bulk/ingester.js';
 import {
   createSqliteSyncStore,
+  isNoDiffResponse,
+  NO_DIFF_STATUSES,
   runSync,
   type SyncDayResult,
   type SyncResult,
 } from '../services/bulk/sync.js';
 import {
   BulkFetchError,
+  type BulkHttpError,
   type BulkProgress,
   downloadFullZip,
   downloadIncrementalZip,
@@ -45,6 +56,19 @@ export interface CliResult {
 /** 引数なし or 認識できないフラグなら MCP fallback として呼び出し元に委ねる */
 const NOT_A_COMMAND = '__not_cli__';
 
+/** 受け付けるフラグと、フラグの後に受け取る引数の数（SPEC-EGOV-CLI-ENTRY-009） */
+const FLAG_ARITY: Record<string, number> = {
+  '--help': 0,
+  '-h': 0,
+  '--version': 0,
+  '-v': 0,
+  '--bulk-download-everything': 0,
+  '--sync': 0,
+  '--bulk-download-incremental': 0,
+  '--bulk-download-by-date': 1,
+  '--status': 0,
+};
+
 /**
  * CLI を実行する。CLI コマンドにマッチしなかった場合は `'__not_cli__'` を返し、
  * 呼び出し側 (index.ts) が MCP server 起動にフォールバックする。
@@ -57,7 +81,41 @@ export async function runCli(argv: string[]): Promise<CliResult> {
     return { exitCode: 0, command: NOT_A_COMMAND };
   }
 
-  const cmd = args[0];
+  const cmd = args[0] as string;
+
+  // - で始まらない最初の引数は MCP サーバーとして起動せずにエラー（SPEC-EGOV-CLI-ENTRY-008）
+  if (!cmd.startsWith('-')) {
+    console.error(`ERROR: 未知の引数: ${cmd}`);
+    printHelp();
+    return { exitCode: 2, command: 'unknown' };
+  }
+
+  const arity = FLAG_ARITY[cmd];
+  if (arity === undefined) {
+    // 認識できないフラグ — MCP server に委ねる前にエラー (誤入力検知。SPEC-EGOV-CLI-ENTRY-004)
+    console.error(`ERROR: 未知のフラグ: ${cmd}`);
+    printHelp();
+    return { exitCode: 2, command: 'unknown' };
+  }
+
+  // 値の検査は余分な引数の検査より先（SPEC-EGOV-CLI-ENTRY-009）
+  if (cmd === '--bulk-download-by-date') {
+    const date = args[1];
+    if (!date || !/^\d{8}$/.test(date)) {
+      console.error(
+        'ERROR: --bulk-download-by-date は YYYYMMDD 形式の日付を必要とします (例: 20260507)'
+      );
+      return { exitCode: 2, command: 'bulk-download-by-date' };
+    }
+  }
+
+  // フラグが受け取る数より後の引数は、何もせずにエラー（SPEC-EGOV-CLI-ENTRY-009）
+  const extra = args[1 + arity];
+  if (extra !== undefined) {
+    console.error(`ERROR: 余分な引数: ${extra}`);
+    printHelp();
+    return { exitCode: 2, command: 'unknown' };
+  }
 
   if (cmd === '--help' || cmd === '-h') {
     printHelp();
@@ -79,29 +137,10 @@ export async function runCli(argv: string[]): Promise<CliResult> {
   }
 
   if (cmd === '--bulk-download-by-date') {
-    const date = args[1];
-    if (!date || !/^\d{8}$/.test(date)) {
-      console.error(
-        'ERROR: --bulk-download-by-date は YYYYMMDD 形式の日付を必要とします (例: 20260507)'
-      );
-      return { exitCode: 2, command: 'bulk-download-by-date' };
-    }
-    return await runBulkDownloadByDate(date);
+    return await runBulkDownloadByDate(args[1] as string);
   }
 
-  if (cmd === '--status') {
-    return await runStatus();
-  }
-
-  // 認識できないフラグ — MCP server に委ねる前にエラー (誤入力検知)
-  if (cmd.startsWith('--') || cmd.startsWith('-')) {
-    console.error(`ERROR: 未知のフラグ: ${cmd}`);
-    printHelp();
-    return { exitCode: 2, command: 'unknown' };
-  }
-
-  // それ以外 (位置引数のみ) は MCP fallback
-  return { exitCode: 0, command: NOT_A_COMMAND };
+  return await runStatus();
 }
 
 /** `runCli` の結果が MCP fallback を意味するかを判定 */
@@ -109,8 +148,39 @@ export function shouldFallbackToMcp(result: CliResult): boolean {
   return result.command === NOT_A_COMMAND;
 }
 
+/**
+ * DB を作らない入口（--sync・--bulk-download-by-date）で、版が今の版でない・開けない DB のエラーを出す。
+ * 出したら true（呼び出し側は exit 1）。ファイルが無い・版の記録が無いときは出さずに false
+ */
+function reportUnusableDb(state: DbState, dbPath: string): boolean {
+  if (state.kind === 'error') {
+    console.error(`[ERROR] DB を開けません: ${state.message}`);
+    return true;
+  }
+  const msg = dbStateErrorMessage(state, dbPath);
+  if (msg) {
+    console.error(msg);
+    return true;
+  }
+  return false;
+}
+
+/** e-Gov の一括ダウンロードのページに届くことを確かめる（SPEC-EGOV-CLI-SYNC-004・SPEC-EGOV-CLI-BULK-DOWNLOAD-028） */
+async function checkEgovReachable(): Promise<void> {
+  const res = await fetch(EGOV_BULK.indexUrl, {
+    method: 'HEAD',
+    headers: { 'User-Agent': HTTP_CONFIG.userAgent },
+  });
+  if (!res.ok) {
+    throw new BulkFetchError(
+      `e-Gov に接続できません (HTTP ${res.status} from ${EGOV_BULK.indexUrl})`
+    );
+  }
+}
+
 /** 全件 bulk DL + ingest */
 async function runBulkDownloadEverything(): Promise<CliResult> {
+  const command = 'bulk-download-everything';
   const tmpDir = await mkdtemp(join(tmpdir(), 'houki-egov-bulk-'));
   const zipPath = join(tmpDir, 'all_xml.zip');
   const dbPath = defaultDbPath();
@@ -121,7 +191,25 @@ async function runBulkDownloadEverything(): Promise<CliResult> {
   console.error(`  DB:         ${dbPath}`);
 
   try {
-    // 1) Download
+    // 0) 取得の前に DB の状態を確かめる（SPEC-EGOV-CLI-BULK-DOWNLOAD-029）。
+    //    新しい版・読めない版・開けない DB は取得せずに止める。古い版は取得に成功した後で作り直す
+    const state = inspectDb(dbPath);
+    if (state.kind === 'error') {
+      console.error(`[ERROR] DB を開けません: ${state.message}`);
+      return { exitCode: 1, command };
+    }
+    if (state.kind === 'new' || state.kind === 'unreadable') {
+      console.error(dbStateErrorMessage(state, dbPath));
+      return { exitCode: 1, command };
+    }
+    if (state.kind === 'old') {
+      console.error(
+        `  DB の版 (${state.version}) が古いため、取得の後で作り直します（取り込んだ中身は消えます）`
+      );
+    }
+
+    // 1) Download。同期の状態の基準は取得を始めた時刻（SPEC-EGOV-CLI-BULK-DOWNLOAD-017）
+    const fetchStartedIso = new Date().toISOString();
     console.error(`[1/2] zip ダウンロード中...`);
     const dl = await downloadFullZip({
       dest: zipPath,
@@ -131,9 +219,9 @@ async function runBulkDownloadEverything(): Promise<CliResult> {
       `\n  DL 完了: ${formatBytes(dl.bytes)} / ${formatDuration(dl.durationMs)} / attempts=${dl.attempts}`
     );
 
-    // 2) Ingest
+    // 2) Ingest。DB を作る・作り直すのはここだけ（SPEC-EGOV-DB-SCHEMA-025）
     console.error(`[2/2] DB に ingest 中...`);
-    const db = openDb(dbPath);
+    const db = openDbForFullIngest(dbPath);
     let result: IngestResult;
     try {
       const zip = await openZipFile(zipPath);
@@ -141,6 +229,7 @@ async function runBulkDownloadEverything(): Promise<CliResult> {
         db,
         zip,
         source: 'all_xml',
+        syncBaseIso: fetchStartedIso,
         onProgress: (p) =>
           process.stderr.write(
             `\r  ingest: ${p.processed.toString().padStart(6)} / ${p.total} laws`
@@ -154,17 +243,18 @@ async function runBulkDownloadEverything(): Promise<CliResult> {
 
     const totalMs = Date.now() - startedAt;
     console.error(`[完了] 全体 ${formatDuration(totalMs)}`);
-    return { exitCode: 0, command: 'bulk-download-everything' };
+    return { exitCode: 0, command };
   } catch (err) {
     console.error(`[ERROR] ${(err as Error).message ?? err}`);
-    return { exitCode: 1, command: 'bulk-download-everything' };
+    return { exitCode: 1, command };
   } finally {
     await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
-/** 単日差分 bulk DL + ingest (デバッグ用) */
+/** 単日差分 bulk DL + ingest (デバッグ用)。同期の状態は変えない（SPEC-EGOV-CLI-BULK-DOWNLOAD-018） */
 async function runBulkDownloadByDate(yyyymmdd: string): Promise<CliResult> {
+  const command = 'bulk-download-by-date';
   const tmpDir = await mkdtemp(join(tmpdir(), 'houki-egov-diff-'));
   const zipPath = join(tmpDir, `R${yyyymmdd.slice(2)}.zip`);
   const dbPath = defaultDbPath();
@@ -174,29 +264,56 @@ async function runBulkDownloadByDate(yyyymmdd: string): Promise<CliResult> {
   console.error(`  DB:         ${dbPath}`);
 
   try {
-    console.error(`[1/2] 差分 zip ダウンロード中...`);
-    const dl = await downloadIncrementalZip(yyyymmdd, {
-      dest: zipPath,
-      // 差分は数 MB なので expectedBytes を小さく
-      expectedBytes: 5_000_000,
-      onProgress: (p) => printProgress(p, 'DL'),
-    });
-    console.error(`\n  DL 完了: ${formatBytes(dl.bytes)} / ${formatDuration(dl.durationMs)}`);
+    // 版が今の版の DB にだけ取り込む。DB を作らず、作り直さない（SPEC-EGOV-CLI-BULK-DOWNLOAD-030）
+    const { state, db } = openUsableDb(dbPath);
+    if (!db) {
+      if (!reportUnusableDb(state, dbPath)) {
+        console.error(
+          '[ERROR] DB がまだありません。先に houki-egov-mcp --bulk-download-everything を実行してください'
+        );
+      }
+      return { exitCode: 1, command };
+    }
 
-    console.error(`[2/2] DB に ingest 中...`);
-    const db = openDb(dbPath);
-    let result: IngestResult;
     try {
+      // e-Gov に届くことを確かめてから取得する。届くなら 404・500 は「差分なし」（SPEC-EGOV-CLI-BULK-DOWNLOAD-028）
+      await checkEgovReachable();
+
+      console.error(`[1/2] 差分 zip ダウンロード中...`);
+      let dl: Awaited<ReturnType<typeof downloadIncrementalZip>>;
+      try {
+        dl = await downloadIncrementalZip(yyyymmdd, {
+          dest: zipPath,
+          // 差分は数 MB なので expectedBytes を小さく
+          expectedBytes: 5_000_000,
+          noRetryStatuses: NO_DIFF_STATUSES,
+          onProgress: (p) => printProgress(p, 'DL'),
+        });
+      } catch (err) {
+        if (isNoDiffResponse(err)) {
+          console.error(`  差分なし (HTTP ${(err as BulkHttpError).status})`);
+          return { exitCode: 0, command };
+        }
+        throw err;
+      }
+      console.error(`\n  DL 完了: ${formatBytes(dl.bytes)} / ${formatDuration(dl.durationMs)}`);
+
+      console.error(`[2/2] DB に ingest 中...`);
       const zip = await openZipFile(zipPath);
-      result = await ingestZip({ db, zip, source: 'incremental' });
+      const result = await ingestZip({
+        db,
+        zip,
+        source: 'incremental',
+        updateSyncState: false,
+      });
+      console.error(`  ingest 完了: ${formatIngestResult(result)}`);
+      return { exitCode: 0, command };
     } finally {
       closeDb(db);
     }
-    console.error(`  ingest 完了: ${formatIngestResult(result)}`);
-    return { exitCode: 0, command: 'bulk-download-by-date' };
   } catch (err) {
     console.error(`[ERROR] ${(err as Error).message ?? err}`);
-    return { exitCode: 1, command: 'bulk-download-by-date' };
+    return { exitCode: 1, command };
   } finally {
     await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
@@ -209,33 +326,31 @@ async function runBulkDownloadByDate(yyyymmdd: string): Promise<CliResult> {
 async function runSyncCommand(): Promise<CliResult> {
   const command = 'sync';
   const dbPath = defaultDbPath();
-  const tmpDir = await mkdtemp(join(tmpdir(), 'houki-egov-sync-'));
 
   console.error(`[sync] 差分同期`);
   console.error(`  DB: ${dbPath}`);
 
-  const db = openDb(dbPath);
+  // 版が今の版の DB にだけ書き込む。DB を作らない（SPEC-EGOV-CLI-SYNC-009・019）
+  const { state, db } = openUsableDb(dbPath);
+  if (!db) {
+    if (!reportUnusableDb(state, dbPath)) printSyncResult(NO_STATE_RESULT);
+    return { exitCode: 1, command };
+  }
+
+  const tmpDir = await mkdtemp(join(tmpdir(), 'houki-egov-sync-'));
   try {
     const store = createSqliteSyncStore(db);
     const result = await runSync({
       store,
       limitDays: BULK_CONFIG.incrementalLimitDays,
-      checkReachable: async () => {
-        const res = await fetch(EGOV_BULK.indexUrl, {
-          method: 'HEAD',
-          headers: { 'User-Agent': HTTP_CONFIG.userAgent },
-        });
-        if (!res.ok) {
-          throw new BulkFetchError(
-            `e-Gov に接続できません (HTTP ${res.status} from ${EGOV_BULK.indexUrl})`
-          );
-        }
-      },
+      checkReachable: checkEgovReachable,
       downloadDay: async (yyyymmdd) => {
         const zipPath = join(tmpDir, `R${yyyymmdd.slice(2)}.zip`);
         const dl = await downloadIncrementalZip(yyyymmdd, {
           dest: zipPath,
           expectedBytes: 5_000_000,
+          // 差分の無い日は 1 回目の応答で「差分なし」にする（SPEC-EGOV-CLI-SYNC-005）
+          noRetryStatuses: NO_DIFF_STATUSES,
         });
         return { zipPath, bytes: dl.bytes };
       },
@@ -255,6 +370,14 @@ async function runSyncCommand(): Promise<CliResult> {
     await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
 }
+
+/** DB が無い・版の記録が無いときの同期の結果（同期の状態が無いときと同じ文を出す） */
+const NO_STATE_RESULT: SyncResult = {
+  plan: { kind: 'no-state' },
+  days: [],
+  lastSyncDate: null,
+  durationMs: 0,
+};
 
 /** 同期結果を表示し、exit code を返す */
 function printSyncResult(r: SyncResult): number {
@@ -317,20 +440,31 @@ async function runStatus(): Promise<CliResult> {
   console.log(`[status] ${PACKAGE_INFO.name} v${PACKAGE_INFO.version}`);
   console.log(`  DB: ${dbPath}`);
 
-  let db: ReturnType<typeof openDb>;
-  try {
-    db = openDb(dbPath);
-  } catch (err) {
-    console.error(`[ERROR] DB を開けません: ${(err as Error).message}`);
+  // 読むだけで開く。DB を作らず、作り直さない（SPEC-EGOV-CLI-STATUS-010・011）
+  const { state, db } = openUsableDb(dbPath, { readonly: true });
+  if (!db) {
+    if (state.kind === 'missing' || state.kind === 'no-version') {
+      console.log(`  (DB がまだありません — houki-egov-mcp --bulk-download-everything で作ります)`);
+      return { exitCode: 0, command: 'status' };
+    }
+    if (state.kind === 'error') {
+      console.error(`[ERROR] DB を開けません: ${state.message}`);
+    } else {
+      console.error(dbStateErrorMessage(state, dbPath));
+    }
     return { exitCode: 1, command: 'status' };
   }
 
   try {
-    const lawsCount = (db.prepare('SELECT count(*) as c FROM laws').get() as { c: number }).c;
+    const counts = db
+      .prepare('SELECT count(DISTINCT law_id) AS laws, count(*) AS revisions FROM laws')
+      .get() as { laws: number; revisions: number };
     const articlesCount = (db.prepare('SELECT count(*) as c FROM articles').get() as { c: number })
       .c;
-    // 区切りは環境の言語設定によらず `,`（#74）
-    console.log(`  laws:     ${lawsCount.toLocaleString('en-US')}`);
+    // 区切りは環境の言語設定によらず `,`（#74）。法令の数と版の数を分けて出す（SPEC-EGOV-CLI-STATUS-005）
+    console.log(
+      `  laws:     ${counts.laws.toLocaleString('en-US')} (版: ${counts.revisions.toLocaleString('en-US')})`
+    );
     console.log(`  articles: ${articlesCount.toLocaleString('en-US')}`);
 
     let fresh: ReturnType<typeof summarizeFreshness>;

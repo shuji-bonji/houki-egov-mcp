@@ -16,7 +16,7 @@
  *  - `repeal_status` は `'None'` 固定 (API 拡張で更新)
  *  - `updated` は ingester 実行時刻 (`fetched_at` と同じ) を proxy として入れる
  *  - `promulgation_date` は XML 属性 (Era + Year + PromulgateMonth + PromulgateDay) から
- *    西暦 ISO date を構築。Era → Gregorian 変換テーブルを内蔵
+ *    西暦 ISO date を構築。Era → Gregorian 変換テーブルを内蔵。作れないときは NULL
  *  - `db.transaction()` で 100 件単位の batch 化 (大量法令でも spike なくこなす)
  *  - 既存 articles は INSERT 前に DELETE で全置換 (revision の本文差し替え用)
  *  - laws_fts は standalone なので INSERT/UPDATE 時に手動で同期する
@@ -52,9 +52,16 @@ export interface IngestZipOptions {
   batchSize?: number;
   /**
    * ingest 後に sync_state を書き換えるか (default true)。
-   * `--sync` は日ごとに自分で `upsertSyncState` を呼ぶので false を渡す
+   * `--sync` は日ごとに自分で `upsertSyncState` を呼び、`--bulk-download-by-date` は同期の状態を
+   * 変えない（SPEC-EGOV-CLI-BULK-DOWNLOAD-018）ので、どちらも false を渡す
    */
   updateSyncState?: boolean;
+  /**
+   * 同期の状態の基準の時刻 (ISO 8601。default `nowIso`)。
+   * `--bulk-download-everything` は全件の zip の取得を始めた時刻を渡す。`last_sync_date` はこの時刻の
+   * 日本時間の日付、`last_full_dl_at` はこの時刻になる（SPEC-EGOV-CLI-BULK-DOWNLOAD-017）
+   */
+  syncBaseIso?: string;
 }
 
 /** 進捗イベント */
@@ -123,6 +130,7 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     onXmlError = 'skip',
     batchSize = 200,
     updateSyncState = true,
+    syncBaseIso = nowIso,
   } = opts;
 
   const start = Date.now();
@@ -345,8 +353,8 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
   // 7) sync_state を更新 (差分 zip の CSV は当日更新分だけなので total_laws は DB の件数を使う)
   if (updateSyncState) {
     upsertSyncState(db, {
-      last_sync_date: isoDateOnly(nowIso),
-      last_full_dl_at: source === 'all_xml' ? nowIso : null,
+      last_sync_date: jstDateOf(syncBaseIso),
+      last_full_dl_at: source === 'all_xml' ? syncBaseIso : null,
       total_laws: source === 'all_xml' ? csvRows.length : countLaws(db),
       bulk_source: source,
     });
@@ -391,7 +399,8 @@ interface LawRow {
   law_title_kana: string | null;
   abbrev: string | null;
   category: string | null;
-  promulgation_date: string;
+  /** 公布日を XML から作れないときは null（SPEC-EGOV-DB-SCHEMA-027） */
+  promulgation_date: string | null;
   amendment_promulgate_date: string | null;
   amendment_enforcement_date: string | null;
   amendment_scheduled_enforcement_date: string | null;
@@ -413,7 +422,8 @@ function buildLawRow(args: {
   nowIso: string;
 }): LawRow {
   const { csvRow, parsed, contentHash, nowIso } = args;
-  const promulgation_date = buildPromulgationDate(parsed) ?? '0001-01-01'; // 失敗時 fallback
+  // 作れないときは NULL（v0.18.x までは実在しない 0001-01-01 を入れていた。#59）
+  const promulgation_date = buildPromulgationDate(parsed);
   const amendment_enforcement_date = formatYyyymmddToIso(csvRow.enforcement_date);
 
   return {
@@ -536,9 +546,11 @@ export function contentHashOf(xml: Buffer): string {
   return createHash('sha256').update(xml).update(`\n#ingest_v${INGEST_VERSION}`).digest('hex');
 }
 
-/** ISO 8601 timestamp → YYYY-MM-DD */
-function isoDateOnly(iso: string): string {
-  return iso.slice(0, 10);
+/** ISO 8601 timestamp → その時刻の日本時間の日付 (YYYY-MM-DD)。解釈できなければ先頭 10 文字 */
+function jstDateOf(iso: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return iso.slice(0, 10);
+  return new Date(ms + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 // CSV_PATTERN は将来的に多 csv 検出が必要な場合に使う。現時点では不使用だが

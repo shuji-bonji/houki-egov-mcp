@@ -173,11 +173,13 @@ export function isSupplementaryArticle(articleNum: string): boolean {
  * articles.article_num (xml-parser の識別子) を表示用に整形する。
  *
  * - 本則: `30` → `30`、`30_2` → `30の2`
+ * - 条を持たず段落だけの本則: `MainProvision` → `本則`（SPEC-EGOV-SEARCH-FULLTEXT-004）
  * - 附則: `Suppl3_1` → `附則(3) 1`、`Suppl137_51_2` → `附則(137) 51の2`
  *   ※ 括弧内は法令 XML 内での附則の通し番号 (改正法ごとに附則が積み重なる)
  * - 別表: `Appendix2` → `別表(2)`
  */
 export function formatArticleNumForDisplay(articleNum: string): string {
+  if (articleNum === 'MainProvision') return '本則';
   const suppl = articleNum.match(/^Suppl(\d+)_(.+)$/);
   if (suppl) return `附則(${suppl[1]}) ${fromEgovArticleNum(suppl[2])}`;
   const appendix = articleNum.match(/^Appendix(\d+)$/);

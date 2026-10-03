@@ -82,6 +82,12 @@ export interface DownloadZipOptions {
   fetchImpl?: typeof fetch;
   /** AbortSignal (キャンセル用) */
   signal?: AbortSignal;
+  /**
+   * この HTTP の status が返ったら取り直さずに `BulkHttpError` を投げる。
+   * 差分 zip の取得で、差分の無い日の 404・500 を 1 回目の応答で「差分なし」にするために使う
+   * （SPEC-EGOV-CLI-SYNC-005・SPEC-EGOV-CLI-BULK-DOWNLOAD-028）。全件の取得では渡さない
+   */
+  noRetryStatuses?: readonly number[];
 }
 
 /** downloadZip の戻り値 */
@@ -115,6 +121,7 @@ export async function downloadZip(opts: DownloadZipOptions): Promise<DownloadZip
     progressIntervalBytes = DEFAULT_PROGRESS_INTERVAL_BYTES,
     fetchImpl = fetch,
     signal,
+    noRetryStatuses = [],
   } = opts;
 
   await mkdir(dirname(dest), { recursive: true });
@@ -148,6 +155,10 @@ export async function downloadZip(opts: DownloadZipOptions): Promise<DownloadZip
       // ユーザ abort の場合はリトライしない
       if (signal?.aborted) {
         throw new BulkFetchError('aborted by signal', err);
+      }
+      // 差分の無い日の応答は取り直さない
+      if (err instanceof BulkHttpError && noRetryStatuses.includes(err.status)) {
+        throw err;
       }
       if (attempt === maxRetries) break;
       const backoffMs = 1000 * 2 ** (attempt - 1);

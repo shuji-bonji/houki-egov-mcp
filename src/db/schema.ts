@@ -22,7 +22,7 @@
  *    日本語混在テキストの N-gram 検索を可能にする。`unicode61` は CJK を 1 トークンとして
  *    扱うため部分一致検索ができない
  *
- * SCHEMA_VERSION を上げたら initSchema() がマイグレーション戦略を切替える。
+ * SCHEMA_VERSION を上げたら、古い版の DB は `--bulk-download-everything` が `recreateSchema()` で作り直す。
  */
 
 import type DatabaseT from 'better-sqlite3';
@@ -35,8 +35,12 @@ import type DatabaseT from 'better-sqlite3';
  *       `normalizeJpText` 済みで投入するよう ingester を変更した。v1 で作った DB は
  *       content_hash が一致して再 ingest が no-op になってしまうため、バージョン不一致で
  *       DROP & CREATE し、`--bulk-download-everything` の再実行で全件を normalize 済みにする
+ * - v3: v0.19.0 — `laws.promulgation_date` の `NOT NULL` を外した（公布日を作れないときは `NULL`。#59）、
+ *       `laws.law_revision_id` に `NOT NULL` を付けた（#71）、版に連動しない `sync_state.schema_version`
+ *       列を外した（#60）。作り直すのは `--bulk-download-everything` が全件の zip の取得に成功した後だけで、
+ *       ほかの入口は版の違う DB を作り直さない（新しい版・読めない版の DB はどの入口も書き換えない）
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const SCHEMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -50,7 +54,7 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 
 -- ===== laws (1 行 = 1 revision) =====
 CREATE TABLE IF NOT EXISTS laws (
-  law_revision_id TEXT PRIMARY KEY,
+  law_revision_id TEXT NOT NULL PRIMARY KEY,
   law_id TEXT NOT NULL,
   law_type TEXT NOT NULL,
   law_num TEXT NOT NULL,
@@ -59,7 +63,7 @@ CREATE TABLE IF NOT EXISTS laws (
   abbrev TEXT,
   category TEXT,
 
-  promulgation_date TEXT NOT NULL,
+  promulgation_date TEXT,
   amendment_promulgate_date TEXT,
   amendment_enforcement_date TEXT,
   amendment_scheduled_enforcement_date TEXT,
@@ -113,8 +117,7 @@ CREATE TABLE IF NOT EXISTS sync_state (
   last_sync_date TEXT NOT NULL,
   last_full_dl_at TEXT NOT NULL,
   total_laws INTEGER NOT NULL DEFAULT 0,
-  bulk_source TEXT NOT NULL DEFAULT 'all_xml',
-  schema_version INTEGER NOT NULL DEFAULT 2
+  bulk_source TEXT NOT NULL DEFAULT 'all_xml'
 );
 
 -- ===== FTS5 =====
@@ -156,27 +159,54 @@ CREATE TRIGGER IF NOT EXISTS articles_au AFTER UPDATE ON articles BEGIN
 END;
 `;
 
+/** schema_meta の schema_version を読んだ結果 */
+export type SchemaVersionRead =
+  /** schema_meta が無い、または schema_version の行が無い */
+  | { kind: 'none' }
+  /** 整数として読めた */
+  | { kind: 'version'; version: number }
+  /** 整数として読めない（空文字を含む） */
+  | { kind: 'unreadable'; value: string };
+
+/** schema_meta の schema_version を読む。「記録が無い」と「整数として読めない」を分けて返す */
+export function readSchemaVersion(db: DatabaseT.Database): SchemaVersionRead {
+  const table = db
+    .prepare("SELECT 1 AS x FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'")
+    .get();
+  if (!table) return { kind: 'none' };
+  const row = db.prepare('SELECT value FROM schema_meta WHERE key = ?').get('schema_version') as
+    | { value: string | null }
+    | undefined;
+  if (!row) return { kind: 'none' };
+  const value = row.value == null ? '' : String(row.value);
+  if (!/^-?\d+$/.test(value)) return { kind: 'unreadable', value };
+  return { kind: 'version', version: Number.parseInt(value, 10) };
+}
+
+/** schema_meta から schema_version を読む。記録が無い・整数として読めないときは null */
+export function getSchemaVersion(db: DatabaseT.Database): number | null {
+  const r = readSchemaVersion(db);
+  return r.kind === 'version' ? r.version : null;
+}
+
 /**
- * DB を初期化（スキーマ作成 + バージョン記録）。
+ * 版の記録が無い DB にテーブルを作り、今の版を記録する。今の版の DB には何もしない。
  *
- * 既にスキーマがある場合は CREATE IF NOT EXISTS で skip。
- * バージョン不一致時は dropAndRecreate でフルリセット
- * （v1 は初版なので追加マイグレーションパスはまだない）。
+ * 版の違う DB（古い版・新しい版・読めない版）は書き換えずに例外を投げる。
+ * 古い版の作り直しは `recreateSchema()`（`--bulk-download-everything` だけが呼ぶ）。
  */
 export function initSchema(db: DatabaseT.Database): void {
-  db.exec(SCHEMA_SQL);
-  const cur = getSchemaVersion(db);
-  if (cur === null) {
-    db.prepare('INSERT INTO schema_meta(key, value) VALUES (?, ?)').run(
-      'schema_version',
-      String(SCHEMA_VERSION)
-    );
+  const cur = readSchemaVersion(db);
+  if (cur.kind === 'version' && cur.version === SCHEMA_VERSION) {
+    db.exec(SCHEMA_SQL);
     return;
   }
-  if (cur === SCHEMA_VERSION) return;
-
-  // 想定外の遷移は DROP & CREATE (v2 以降で個別 migration を追加する)
-  dropAndRecreate(db);
+  if (cur.kind !== 'none') {
+    const v = cur.kind === 'version' ? String(cur.version) : cur.value;
+    throw new Error(`DB の版 (${v}) が ${SCHEMA_VERSION} ではないため、テーブルを作りません`);
+  }
+  db.exec(SCHEMA_SQL);
+  setSchemaVersion(db, SCHEMA_VERSION);
 }
 
 /** schema_meta の schema_version を更新する */
@@ -187,22 +217,11 @@ function setSchemaVersion(db: DatabaseT.Database, v: number): void {
   ).run(String(v));
 }
 
-/** schema_meta から schema_version を読む。未設定なら null */
-export function getSchemaVersion(db: DatabaseT.Database): number | null {
-  try {
-    const row = db.prepare('SELECT value FROM schema_meta WHERE key = ?').get('schema_version') as
-      | { value?: string }
-      | undefined;
-    if (!row?.value) return null;
-    const n = parseInt(row.value, 10);
-    return Number.isFinite(n) ? n : null;
-  } catch {
-    return null;
-  }
-}
-
-/** スキーマ全体を DROP して再作成（単純マイグレーション） */
-function dropAndRecreate(db: DatabaseT.Database): void {
+/**
+ * スキーマ全体を DROP して今の版で作り直す（古い版の DB 用）。
+ * `--bulk-download-everything` が全件の zip の取得に成功した後でだけ呼ぶ（SPEC-EGOV-DB-SCHEMA-016）
+ */
+export function recreateSchema(db: DatabaseT.Database): void {
   db.exec(`
     DROP TRIGGER IF EXISTS articles_au;
     DROP TRIGGER IF EXISTS articles_ad;
@@ -217,19 +236,4 @@ function dropAndRecreate(db: DatabaseT.Database): void {
   `);
   db.exec(SCHEMA_SQL);
   setSchemaVersion(db, SCHEMA_VERSION);
-}
-
-/**
- * DB の中身を全削除（テスト用 / 強制再 DL 用）。
- * スキーマは保持し、行データだけ消す。
- */
-export function clearAllData(db: DatabaseT.Database): void {
-  db.exec(`
-    DELETE FROM articles;
-    DELETE FROM revisions_meta;
-    DELETE FROM laws;
-    DELETE FROM sync_state;
-    INSERT INTO laws_fts(laws_fts) VALUES ('rebuild');
-    INSERT INTO articles_fts(articles_fts) VALUES ('rebuild');
-  `);
 }
