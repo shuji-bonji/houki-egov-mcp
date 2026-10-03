@@ -1,6 +1,6 @@
 {
   "name": "@shuji-bonji/houki-egov-mcp",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "日本の法令（憲法・法律・政令・省令・規則）を e-Gov 法令API v2 から、条・項・号の単位で、法令番号と URL を添えて返す MCP サーバー。税法・労働法・会社法・民法など全分野の条文を LLM から引けます。 Japanese statutes from e-Gov Law API v2 — laws and ordinances per article, with law number and URL.",
   "mcpName": "io.github.shuji-bonji/houki-egov-mcp",
   "keywords": [

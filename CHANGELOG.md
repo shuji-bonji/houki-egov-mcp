@@ -15,6 +15,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.18.0] - 2026-10-04
+
+✨ **minor リリース** — 段階 5 のうち法令の引き当て・検索と解説と添付（houki-hub `docs/notes/2026-09-29-plan-spec-issues.md`）。仕様 PR [#95](https://github.com/shuji-bonji/houki-egov-mcp/pull/95)（`20261003-law-resolution`）/ [#96](https://github.com/shuji-bonji/houki-egov-mcp/pull/96)（`20261003-search-explain-attachment`）/ [#99](https://github.com/shuji-bonji/houki-egov-mcp/pull/99)（`20261003-law-type-and-reference-actions`）で承認した差分を実装し、`specs/current/` に取り込んだ。閉じる Issue: #45 #51 #63 #87 #55 #67 #88 #62 #72 #97 #98。
+
+### 互換性
+
+0.x の minor だが、応答の `code`、受け付ける引数、応答のフィールドが変わる。T2 の決め方（houki-hub `docs/DECISIONS.md` 2026-09-29「T2 code」）に従い、旧 code を並行して返す期間は設けない。同じ日に houki-research-skill の `docs/ERROR-CODES.md` を直す（`LAW_NOT_FOUND`・`INVALID_ARGUMENT` の場面の追加、`OUT_OF_SCOPE` を返すツールに `search_fulltext`、参照の `kind` に `suppl`）。応答のフィールドを消す・名前を付け替える変更は無い（消すのは引数 `domain` だけ）。
+
+**法令名・条・委任先（`20261003-law-resolution`）**
+
+| 場面 | 0.17.0 | 0.18.0 | Issue・仕様 ID |
+| --- | --- | --- | --- |
+| 辞書に無い法令名で、e-Gov に題名の完全一致が無い（9 ツール） | 成功（検索結果の先頭の法令） | `LAW_NOT_FOUND`（候補を `hint` と `next_actions` に入れる） | #45。SPEC-EGOV-COMMON-ERRORS-032、SPEC-EGOV-GET-LAW-041、SPEC-EGOV-GET-TOC-028、SPEC-EGOV-GET-LAW-RANGE-034、SPEC-EGOV-GET-LAW-REVISIONS-018、SPEC-EGOV-GET-RELATED-LAWS-019、SPEC-EGOV-GET-ARTICLE-REFERENCES-044、SPEC-EGOV-LIST-ATTACHMENTS-024、SPEC-EGOV-GET-ATTACHMENT-030、SPEC-EGOV-GET-LAW-FILE-023 |
+| 法令名の検索で完全一致を探す範囲 | 先頭の 5 件（`verify_citations` は 50 件。`reason` の件数も 50 で頭打ち） | 検索結果の全件（`total_count`）。`at` を渡したときは検索にも `asof` を付ける | #45・#87。SPEC-EGOV-COMMON-ERRORS-032、SPEC-EGOV-VERIFY-CITATIONS-045、SPEC-EGOV-GET-ARTICLE-REFERENCES-045 |
+| law_id を決めた後に e-Gov が 404・`404004`（改正履歴は `404001`） | `SOURCE_API_ERROR`（`retryable: false`） | `LAW_NOT_FOUND`（`detail.cause` に e-Gov の code） | #87。SPEC-EGOV-COMMON-ERRORS-033、SPEC-EGOV-GET-LAW-031、SPEC-EGOV-GET-TOC-029、SPEC-EGOV-GET-LAW-RANGE-035、SPEC-EGOV-GET-LAW-REVISIONS-008、SPEC-EGOV-GET-ARTICLE-REFERENCES-051、SPEC-EGOV-LIST-ATTACHMENTS-018、SPEC-EGOV-GET-ATTACHMENT-031、SPEC-EGOV-GET-LAW-FILE-014 |
+| `at` が 2017-04-01 より前（e-Gov が 400・`400044`） | `SOURCE_API_ERROR`（`retryable: false`）。`verify_citations` は件ごとの `LAW_NOT_FOUND` | `INVALID_ARGUMENT`（`path: "at"`、`hint` に e-Gov の文）。`verify_citations` もツール全体 | #87。SPEC-EGOV-COMMON-ERRORS-029・033、SPEC-EGOV-VERIFY-CITATIONS-048 |
+| `verify_citations` で `400044` 以外の 400 | 件ごとの `LAW_NOT_FOUND` | ツール全体の `SOURCE_API_ERROR`（`retryable: false`） | #87。SPEC-EGOV-VERIFY-CITATIONS-015・048 |
+| `get_law` / `verify_citations` で、本則に無く附則にある条番号 | 附則の条を本則の条として返す（`found`） | `ARTICLE_NOT_FOUND`（附則の番号を案内） | #51。SPEC-EGOV-GET-LAW-008・042、SPEC-EGOV-VERIFY-CITATIONS-046 |
+| `get_article_references` の対象の条 | 法令全体から探す（附則の条も対象） | 本則の条だけ。附則にだけある条番号は `ARTICLE_NOT_FOUND` | #51。SPEC-EGOV-GET-ARTICLE-REFERENCES-046 |
+| `get_article_references` の本文の「附則第N条」 | `kind: "internal"`（本則の条を指す） | `kind: "suppl"`、`resolved: false`。`kind` の値が 1 つ増える | #51。SPEC-EGOV-GET-ARTICLE-REFERENCES-047 |
+| `get_article_references` の `target_law` | 委任先が無いとキーが無い。省令は名前を問わず施行規則 | キーは常にあり、無い・確かでないときは `null`。省令・府令は施行規則を定めた命令の名前が合うときだけ | #63。SPEC-EGOV-GET-ARTICLE-REFERENCES-012・031・049 |
+| `get_article_references` の施行規則の本文の「令第N条」 | 候補名 `令` の `resolved: false` | 兄弟の施行令への `external`（`get_law` を案内） | #63。SPEC-EGOV-GET-ARTICLE-REFERENCES-048 |
+| `get_article_references` の施行規則の条からの `search_fulltext` | 施行令への委任から作る | 作らない | #63。SPEC-EGOV-GET-ARTICLE-REFERENCES-050 |
+| `get_related_laws` に法律でない法令（末尾が「施行令」「施行規則」でない） | 名前を作って問い合わせ、`not_found` に入れる | `related: []`・`not_found: []`、`note` に理由 | #63。SPEC-EGOV-GET-RELATED-LAWS-004・020 |
+| `get_law` の json の `data`、`verify_citations` の `article` | — | `suppl_index` を足す（本則の条は `null`） | #51。SPEC-EGOV-GET-LAW-043、SPEC-EGOV-VERIFY-CITATIONS-005・047 |
+
+**検索・解説・添付（`20261003-search-explain-attachment`）**
+
+| 場面 | 0.17.0 | 0.18.0 | Issue・仕様 ID |
+| --- | --- | --- | --- |
+| `search_law` / `search_fulltext` に `domain` を渡す | 受け付けて無視（成功） | `INVALID_ARGUMENT`（`path: "domain"`）。引数を外したので、渡している呼び出しは失敗する | #55。SPEC-EGOV-SEARCH-LAW-016、SPEC-EGOV-SEARCH-FULLTEXT-022 |
+| `search_law` の `total_count` | `results` の件数 | e-Gov で一致した総数（`limit` を超えうる） | #55。SPEC-EGOV-SEARCH-LAW-006 |
+| `search_law` の応答 | `query`・`total_count`・`results` | `hint`（1 件以上は `null`）・`next_actions`（1 件以上は `[]`）を足す。`search_fulltext` の `fallback` の中にも入る | #55。SPEC-EGOV-SEARCH-LAW-006・017 |
+| `search_fulltext` の `filters.domain.note` | `domain 絞り込みは v0.5.0 では未実効です (…)` | `分野での絞り込みはしていません（domain の引数は 0.18.0 で外しました）`（`requested` は常に `null`） | #55。SPEC-EGOV-SEARCH-FULLTEXT-022 |
+| `search_fulltext` の通称（`インボイス` など） | 常に正式名称にも展開 | 元の語で条が 0 件のときだけ展開。件数・並びが変わる | #67。SPEC-EGOV-SEARCH-FULLTEXT-007 |
+| `search_fulltext` の 2 文字の語の `short_tokens.next_actions[0]` | `example: { keyword: "民法 <語>" }` | `example` 無し。`reason` に形を書く | #67。SPEC-EGOV-SEARCH-FULLTEXT-018 |
+| `search_fulltext` に `keyword` 全体が管轄外の略称 | 成功（DB があれば 0 件、無ければ `fallback.code: "OUT_OF_SCOPE"`） | `OUT_OF_SCOPE`（`isError`） | #88。SPEC-EGOV-SEARCH-FULLTEXT-037 |
+| `explain_law_type` の `通達` の `info.aliases` | `["通知", "基本通達", "取扱通達"]` | `["基本通達", "取扱通達"]` | #62。SPEC-EGOV-EXPLAIN-LAW-TYPE-012・021 |
+| `explain_law_type` の `Constitution`・`Rule` | `found: false` | `found: true`（憲法・規則）。`憲法` の `info.law_type_code: "Constitution"`、`規則` は `"Rule"` | #62。SPEC-EGOV-EXPLAIN-LAW-TYPE-012・022 |
+| `list_attachments` / `get_attachment` の附則の別表・様式・付録の中の図 | `{ tag: "SupplProvision", amend_law_num }` | `{ tag: "SupplProvisionAppdxTable" など, title, related_article, amend_law_num }` | #72。SPEC-EGOV-LIST-ATTACHMENTS-002・025 |
+
+**law_type の勅令と、条の無い参照（`20261003-law-type-and-reference-actions`）**
+
+| 場面 | 0.17.0 | 0.18.0 | Issue・仕様 ID |
+| --- | --- | --- | --- |
+| `search_law` / `search_fulltext` に `law_type: "ImperialOrdinance"` | `search_law` は `SOURCE_API_ERROR`、`search_fulltext` は 0 件の成功 | `INVALID_ARGUMENT`（`path: "law_type"`）。勅令は `ImperialOrder` で絞る | #97。SPEC-EGOV-SEARCH-LAW-018、SPEC-EGOV-SEARCH-FULLTEXT-038 |
+| `law_type: "Constitution"` / `"ImperialOrder"` | `INVALID_ARGUMENT` | 受け付ける | #97。SPEC-EGOV-SEARCH-LAW-018、SPEC-EGOV-SEARCH-FULLTEXT-038 |
+| `law_type` の `enum` の文（`INVALID_ARGUMENT` の `message`） | `Act・CabinetOrder・ImperialOrdinance・MinisterialOrdinance・Rule のどれかで指定してください` | `Constitution・Act・CabinetOrder・ImperialOrder・MinisterialOrdinance・Rule のどれかで指定してください` | #97。SPEC-EGOV-COMMON-ERRORS-013 |
+| `get_article_references` の条を持たない external | `get_law`（呼んだ条の番号） | `get_toc`（参照先の法令名） | #98。SPEC-EGOV-GET-ARTICLE-REFERENCES-015・036・052 |
+
+### Added
+
+- **`get_law` の `suppl_index`** と、`verify_citations` の `citations[].suppl_index`: 附則の番号（`get_toc` の `suppl_provisions[].index` と同じ）で附則を指し、その附則の中の条を取る・確かめる（#51）
+- **`search_law` の `hint` と `next_actions`**: 0 件のときに、題名だけを探したことと `search_fulltext`・`resolve_abbreviation` を案内する（#55）
+- **`get_article_references` の `kind: "suppl"`**（#51）
+- **受入テスト**: `src/spec-tests/20261003-law-resolution/`・`20261003-search-explain-attachment/`・`20261003-law-type-and-reference-actions/`
+
+### Changed
+
+- 「互換性」の節のとおり。仕様 ID では ADDED 37 件（law-resolution 28、search-explain-attachment 6、law-type-and-reference-actions 3）、MODIFIED 22 件（law-resolution 13、search-explain-attachment 6、law-type-and-reference-actions 3）
+- tools/list の description: `get_law`・`verify_citations`・`get_article_references`・`get_related_laws`・`search_law`・`search_fulltext` と、`explain_law_type` の `name`・`law_type` の説明を 0.18.0 の振る舞いに合わせ、「〜します」の文にした
+- README: 提供ツールの表、「エラー」の表（`LAW_NOT_FOUND`・`INVALID_ARGUMENT`・`ARTICLE_NOT_FOUND`・`OUT_OF_SCOPE`・`SOURCE_API_ERROR`）、施行令・施行規則と参照・引用の実在確認・2 文字の語の検索の節を直した
+
+### Fixed
+
+- `search_law` / `search_fulltext` の `law_type` の選択肢 `ImperialOrdinance` を e-Gov が受け付けず、勅令で絞れなかった（#97）
+- `get_article_references` が、条番号の付かない他法令の参照から、呼んだ条の番号を参照先の法令の条として `get_law` を案内していた（#98）
+
 ## [0.17.0] - 2026-10-03
 
 ✨ **minor リリース** — 段階 4 の後半（houki-hub `docs/notes/2026-09-29-plan-spec-issues.md`）。仕様 PR [#91](https://github.com/shuji-bonji/houki-egov-mcp/pull/91)（T4 応答の形）/ [#92](https://github.com/shuji-bonji/houki-egov-mcp/pull/92)（T5 文書と実装の食い違い）で承認した差分を実装し、`specs/current/` に取り込んだ。対象 Issue: #56 #64 #65 #66。
