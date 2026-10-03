@@ -215,11 +215,17 @@ describe('parseLawXml — 最小法令 (改暦ノ布告)', () => {
     expect(law.promulgate_day).toBe('09');
   });
 
-  it('Article がない場合でも articles=[] でパースできる (本文 Paragraph 直下)', () => {
-    // 改暦ノ布告は MainProvision 直下に Paragraph しかない
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-027 Article がない本則は、段落の文を MainProvision の 1 行にする (本文 Paragraph 直下)', () => {
+    // 改暦ノ布告は MainProvision 直下に Paragraph しかない。v0.18.x までは articles=[] だった（#59）
     const law = parseLawXml(MINIMAL_LAW);
-    // walkArticles は Article のみ拾うので、Paragraph 単独は articles に入らない
-    expect(law.articles).toEqual([]);
+    expect(law.articles).toEqual([
+      {
+        article_num: 'MainProvision',
+        caption: null,
+        chapter_path: null,
+        body_raw: '今般改暦ノ儀別紙　詔書ノ通被　仰出候条此旨相達候事',
+      },
+    ]);
   });
 });
 

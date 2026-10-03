@@ -4,6 +4,8 @@
  * 期待値は specs/changes/20260928-untested-behaviors/specs/db_schema/spec.md から取る。
  * DB は OS の一時ディレクトリに作り、テスト後に消す。
  * 置き場所は環境変数を import 時に読むので、環境変数を設定してから vi.resetModules() で読み直す。
+ * 0.19.0 から DB を作る・作り直すのは --bulk-download-everything（openDbForFullIngest）だけなので、
+ * 作る場面はその関数で確かめる（CLI を通した確認は spec-tests/20261003-db-cli/db_schema.test.ts）。
  */
 
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -88,7 +90,7 @@ describe('DB の置き場所', () => {
     const dbPath = join(tmp, 'a', 'b', 'x.db');
     setEnv('HOUKI_EGOV_DB_PATH', dbPath);
     setEnv('XDG_CACHE_HOME', join(tmp, 'xdg'));
-    const { openDb } = await loadDb();
+    const { openDbForFullIngest: openDb } = await loadDb();
     track(openDb());
     expect(existsSync(dbPath)).toBe(true);
     expect(existsSync(join(tmp, 'xdg', 'houki-egov-mcp', 'laws.db'))).toBe(false);
@@ -97,7 +99,7 @@ describe('DB の置き場所', () => {
   it('SPEC-EGOV-DB-SCHEMA-013 HOUKI_EGOV_DB_PATH が空文字なら $XDG_CACHE_HOME/houki-egov-mcp/laws.db に置く', async () => {
     setEnv('HOUKI_EGOV_DB_PATH', '');
     setEnv('XDG_CACHE_HOME', join(tmp, 'xdg'));
-    const { openDb } = await loadDb();
+    const { openDbForFullIngest: openDb } = await loadDb();
     track(openDb());
     expect(existsSync(join(tmp, 'xdg', 'houki-egov-mcp', 'laws.db'))).toBe(true);
   });
@@ -105,7 +107,7 @@ describe('DB の置き場所', () => {
   it('SPEC-EGOV-DB-SCHEMA-013 HOUKI_EGOV_DB_PATH が無くても $XDG_CACHE_HOME/houki-egov-mcp/laws.db に置く', async () => {
     setEnv('HOUKI_EGOV_DB_PATH', undefined);
     setEnv('XDG_CACHE_HOME', join(tmp, 'xdg2'));
-    const { openDb } = await loadDb();
+    const { openDbForFullIngest: openDb } = await loadDb();
     track(openDb());
     expect(existsSync(join(tmp, 'xdg2', 'houki-egov-mcp', 'laws.db'))).toBe(true);
   });
@@ -115,7 +117,7 @@ describe('DB の置き場所', () => {
     setEnv('HOUKI_EGOV_DB_PATH', '');
     setEnv('XDG_CACHE_HOME', '');
     expect(existsSync(join(tmp, '.cache'))).toBe(false);
-    const { openDb } = await loadDb();
+    const { openDbForFullIngest: openDb } = await loadDb();
     track(openDb());
     expect(existsSync(join(tmp, '.cache', 'houki-egov-mcp', 'laws.db'))).toBe(true);
   });
@@ -124,7 +126,7 @@ describe('DB の置き場所', () => {
     setEnv('HOME', tmp);
     setEnv('HOUKI_EGOV_DB_PATH', undefined);
     setEnv('XDG_CACHE_HOME', undefined);
-    const { openDb } = await loadDb();
+    const { openDbForFullIngest: openDb } = await loadDb();
     track(openDb());
     expect(existsSync(join(tmp, '.cache', 'houki-egov-mcp', 'laws.db'))).toBe(true);
   });
@@ -133,7 +135,7 @@ describe('DB の置き場所', () => {
     const dbPath = join(tmp, 'a', 'b', 'x.db');
     expect(existsSync(join(tmp, 'a'))).toBe(false);
     setEnv('HOUKI_EGOV_DB_PATH', dbPath);
-    const { openDb } = await loadDb();
+    const { openDbForFullIngest: openDb } = await loadDb();
     track(openDb());
     expect(existsSync(join(tmp, 'a', 'b'))).toBe(true);
     expect(existsSync(dbPath)).toBe(true);
@@ -143,7 +145,7 @@ describe('DB の置き場所', () => {
 describe('スキーマの版 1 からの作り直し', () => {
   async function openV1Recreated(): Promise<DatabaseT.Database> {
     const dbPath = join(tmp, 'v1.db');
-    const { openDb } = await loadDb();
+    const { openDbForFullIngest: openDb } = await loadDb();
     const first = openDb(dbPath);
     insertLaw(first);
     insertArticle(first, 1, '第一条の本文');
@@ -162,7 +164,7 @@ describe('スキーマの版 1 からの作り直し', () => {
     return track(openDb(dbPath));
   }
 
-  it('SPEC-EGOV-DB-SCHEMA-016 版 1 の DB を開くと中身を消して版 2 の空の DB にする', async () => {
+  it('SPEC-EGOV-DB-SCHEMA-016 版 1 の DB を作り直しの入口で開くと中身を消して版 3 の空の DB にする', async () => {
     const db = await openV1Recreated();
     expect(count(db, 'SELECT count(*) AS c FROM laws')).toBe(0);
     expect(count(db, 'SELECT count(*) AS c FROM articles')).toBe(0);
@@ -173,7 +175,7 @@ describe('スキーマの版 1 からの作り直し', () => {
       count(db, "SELECT count(*) AS c FROM articles_fts WHERE articles_fts MATCH '本文'")
     ).toBe(0);
     expect(db.prepare('SELECT key, value FROM schema_meta').all()).toEqual([
-      { key: 'schema_version', value: '2' },
+      { key: 'schema_version', value: '3' },
     ]);
   });
 
@@ -209,7 +211,7 @@ describe('テーブルの列と FTS', () => {
   let db: DatabaseT.Database;
 
   beforeEach(async () => {
-    const { openDb } = await loadDb();
+    const { openDbForFullIngest: openDb } = await loadDb();
     db = track(openDb(join(tmp, 'cols.db')));
   });
 
@@ -255,7 +257,6 @@ describe('テーブルの列と FTS', () => {
       'last_full_dl_at',
       'total_laws',
       'bulk_source',
-      'schema_version',
     ]);
   });
 
@@ -284,7 +285,7 @@ describe('テーブルの列と FTS', () => {
 describe('書き込み中の読み取り', () => {
   it('SPEC-EGOV-DB-SCHEMA-023 書き込みトランザクション中も別の接続から確定した行だけ読める', async () => {
     const dbPath = join(tmp, 'wal.db');
-    const { openDb } = await loadDb();
+    const { openDbForFullIngest: openDb } = await loadDb();
     const a = track(openDb(dbPath));
     insertLaw(a);
     insertArticle(a, 1, '一');

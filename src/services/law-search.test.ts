@@ -235,11 +235,12 @@ describe('searchLawsInDb', () => {
     expect(new Set(r.hits.map((h) => h.law_revision_id)).size).toBe(1);
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-019 本文に無い 2 文字語は走査しても hits_by_match_type で本文 0 件と分かる (#23)', () => {
-    // 「改暦」は法令名にだけあり、条の本文には無い
+  it('SPEC-EGOV-SEARCH-FULLTEXT-019 SPEC-EGOV-CLI-BULK-DOWNLOAD-027 走査で当たった件数を hits_by_match_type で分ける。段落だけの本則の行ができたので「改暦」は本文で当たる (#23・#59)', () => {
+    // v0.18.x では「改暦」は法令名にだけあり（本則の段落を取り込まなかった）{ article: 0, law_meta: 1 } だった。
+    // 0.19.0 からは改暦ノ布告の本則の段落が MainProvision の行になり、本文「今般改暦ノ儀…」で当たる
     const r = searchLawsInDb(db, '改暦', { scanBody: true });
     expect(r.short_tokens?.body_search).toBe('like_all_articles');
-    expect(r.short_tokens?.hits_by_match_type).toEqual({ article: 0, law_meta: 1 });
+    expect(r.short_tokens?.hits_by_match_type).toEqual({ article: 1, law_meta: 0 });
     expect(r.short_tokens?.note).toContain('scan_body: true');
   });
 

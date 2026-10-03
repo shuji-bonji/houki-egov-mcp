@@ -152,7 +152,7 @@ describe('cli_status（差分 20260928-untested-behaviors）', () => {
     expect(lines(stdoutChunks)).toEqual([
       `[status] ${pkg.name} v${pkg.version}`,
       `  DB: ${dbPath}`,
-      '  laws:     1',
+      '  laws:     1 (版: 1)',
       '  articles: 2',
       '  sync:',
       '    last_sync_date:  2026-05-08',
@@ -165,14 +165,19 @@ describe('cli_status（差分 20260928-untested-behaviors）', () => {
   });
 
   it('SPEC-EGOV-CLI-STATUS-005 同期の状態が無い空の DB なら件数 0 と未取り込みの 1 行で exit 0', async () => {
+    // 0.19.0 から --status は DB を作らない（SPEC-EGOV-CLI-STATUS-010）ので、空の DB を先に作る
+    mkdirSync(join(root, 'empty'));
     const dbPath = join(root, 'empty', 'laws.db');
+    const empty = new Database(dbPath);
+    initSchema(empty);
+    empty.close();
     const code = await runStatus(dbPath);
 
     expect(code).toBe(0);
     expect(lines(stdoutChunks)).toEqual([
       `[status] ${pkg.name} v${pkg.version}`,
       `  DB: ${dbPath}`,
-      '  laws:     0',
+      '  laws:     0 (版: 0)',
       '  articles: 0',
       '  sync:     (まだ bulk DL されていません — --bulk-download-everything を実行)',
     ]);

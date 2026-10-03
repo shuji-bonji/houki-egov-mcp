@@ -120,7 +120,7 @@ function stubDefaultLocale(locale: string): void {
 }
 
 describe('cli_status — 件数の区切り（差分 20260930-bugfix-batch）', () => {
-  it('SPEC-EGOV-CLI-STATUS-008 既定の言語設定が de-DE でも laws: 1,234 と articles: 5 を出す', async () => {
+  it('SPEC-EGOV-CLI-STATUS-008 既定の言語設定が de-DE でも laws: 1,234 (版: 1,234) と articles: 5 を出す', async () => {
     const dbPath = join(root, 'laws.db');
     seedCounts(dbPath, 1234, 5);
     stubDefaultLocale('de-DE');
@@ -131,12 +131,12 @@ describe('cli_status — 件数の区切り（差分 20260930-bugfix-batch）', 
 
     expect(code).toBe(0);
     const out = lines(stdoutChunks);
-    expect(out).toContain('  laws:     1,234');
+    expect(out).toContain('  laws:     1,234 (版: 1,234)');
     expect(out).toContain('  articles: 5');
     expect(lines(stderrChunks)).toEqual([]);
   });
 
-  it('SPEC-EGOV-CLI-STATUS-008 既定の言語設定が en-US でも laws: 1,234 と articles: 5 を出す', async () => {
+  it('SPEC-EGOV-CLI-STATUS-008 既定の言語設定が en-US でも laws: 1,234 (版: 1,234) と articles: 5 を出す', async () => {
     const dbPath = join(root, 'laws.db');
     seedCounts(dbPath, 1234, 5);
     stubDefaultLocale('en-US');
@@ -145,7 +145,7 @@ describe('cli_status — 件数の区切り（差分 20260930-bugfix-batch）', 
 
     expect(code).toBe(0);
     const out = lines(stdoutChunks);
-    expect(out).toContain('  laws:     1,234');
+    expect(out).toContain('  laws:     1,234 (版: 1,234)');
     expect(out).toContain('  articles: 5');
   });
 
@@ -158,7 +158,7 @@ describe('cli_status — 件数の区切り（差分 20260930-bugfix-batch）', 
 
     expect(code).toBe(0);
     const out = lines(stdoutChunks);
-    expect(out).toContain('  laws:     999');
+    expect(out).toContain('  laws:     999 (版: 999)');
     expect(out).toContain('  articles: 3');
   });
 });

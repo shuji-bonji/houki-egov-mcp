@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { crc32 } from 'node:zlib';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { initSchema } from '../../db/schema.js';
 
 // ---------- fixture: 法令一覧 CSV と XML、zip ----------
 
@@ -214,6 +215,26 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
+const INDEX_URL = 'https://laws.e-gov.go.jp/bulkdownload/';
+
+/**
+ * 0.19.0 から --bulk-download-by-date は版が同じ DB にだけ取り込み（SPEC-EGOV-CLI-BULK-DOWNLOAD-030）、
+ * 取得の前に e-Gov に届くかを HEAD で確かめる（SPEC-EGOV-CLI-BULK-DOWNLOAD-028）。
+ * 1 日分のテストは、先に版 3 の空の DB を作り、HEAD に 200 を返す
+ */
+function seedEmptyDb(): void {
+  const dbPath = process.env.HOUKI_EGOV_DB_PATH as string;
+  mkdirSync(join(root, 'db'), { recursive: true });
+  const db = new Database(dbPath);
+  initSchema(db);
+  db.close();
+}
+
+function withHead(handler: FetchHandler): FetchHandler {
+  return (url, init) =>
+    url === INDEX_URL ? new Response(null, { status: 200 }) : handler(url, init);
+}
+
 function readLawTypes(dbPath: string): Record<string, string> {
   const db = new Database(dbPath, { readonly: true });
   try {
@@ -264,8 +285,9 @@ describe('cli_bulk_download（差分 20260928-untested-behaviors）', () => {
     );
   });
 
-  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-021 1 日分の差分の取り込みが終わると経過を順に出し、保存名は R<YYMMDD>.zip、exit 0', async () => {
-    stubFetch(() => zipResponse(DAY_ZIP));
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-021 SPEC-EGOV-CLI-BULK-DOWNLOAD-030 1 日分の差分の取り込みが終わると経過を順に出し、保存名は R<YYMMDD>.zip、exit 0', async () => {
+    seedEmptyDb();
+    stubFetch(withHead(() => zipResponse(DAY_ZIP)));
     const { runCli } = await loadCli();
     const result = await runCli(['node', 'index.js', '--bulk-download-by-date', '20260917']);
 
@@ -284,7 +306,8 @@ describe('cli_bulk_download（差分 20260928-untested-behaviors）', () => {
     ]);
     // 全件と違い、試した回数は出さない
     expect(err.some((l) => /attempts=/.test(l))).toBe(false);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('update_date=20260917');
+    // 1 回目は e-Gov に届くかの確認（HEAD）、2 回目が差分 zip の取得（SPEC-EGOV-CLI-BULK-DOWNLOAD-028）
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('update_date=20260917');
   });
 
   it('SPEC-EGOV-CLI-BULK-DOWNLOAD-022 全件の取得に HTTP 503 が返ってあきらめたら [ERROR] を出して exit 1', async () => {
@@ -309,8 +332,9 @@ describe('cli_bulk_download（差分 20260928-untested-behaviors）', () => {
     expect(lines(stderrChunks)).toContain(`[ERROR] HTTP 503  from ${FULL_URL}`);
   });
 
-  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-022 1 日分の差分の取り込みに失敗（zip に CSV が無い）したら [ERROR] を出して exit 1', async () => {
-    stubFetch(() => zipResponse(buildZip([xmlEntry(REV_YOKIN, XML_YOKIN)])));
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-022 SPEC-EGOV-CLI-BULK-DOWNLOAD-030 1 日分の差分の取り込みに失敗（zip に CSV が無い）したら [ERROR] を出して exit 1', async () => {
+    seedEmptyDb();
+    stubFetch(withHead(() => zipResponse(buildZip([xmlEntry(REV_YOKIN, XML_YOKIN)]))));
     const { runCli } = await loadCli();
     const result = await runCli(['node', 'index.js', '--bulk-download-by-date', '20260917']);
 
@@ -318,10 +342,13 @@ describe('cli_bulk_download（差分 20260928-untested-behaviors）', () => {
     expect(lines(stderrChunks)).toContainEqual(expect.stringMatching(/^\[ERROR\] .+/));
   });
 
-  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-022 1 日分の差分の取得に HTTP 503 が返ってあきらめたら [ERROR] を出して exit 1', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-022 SPEC-EGOV-CLI-BULK-DOWNLOAD-030 1 日分の差分の取得に HTTP 503 が返ってあきらめたら [ERROR] を出して exit 1', async () => {
     process.env.HOUKI_EGOV_BULK_RETRY = '1';
+    seedEmptyDb();
     stubFetch(
-      () => new Response('unavailable', { status: 503, statusText: 'Service Unavailable' })
+      withHead(
+        () => new Response('unavailable', { status: 503, statusText: 'Service Unavailable' })
+      )
     );
     const { runCli } = await loadCli();
     const result = await runCli(['node', 'index.js', '--bulk-download-by-date', '20260917']);
@@ -351,8 +378,9 @@ describe('cli_bulk_download（差分 20260928-untested-behaviors）', () => {
     expect(readdirSync(tmpDirForZip)).toEqual([]);
   });
 
-  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-023 1 日分: 成功しても失敗しても、終わった後の TMPDIR は空', async () => {
-    stubFetch(() => zipResponse(DAY_ZIP));
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-023 SPEC-EGOV-CLI-BULK-DOWNLOAD-030 1 日分: 成功しても失敗しても、終わった後の TMPDIR は空', async () => {
+    seedEmptyDb();
+    stubFetch(withHead(() => zipResponse(DAY_ZIP)));
     let cli = await loadCli();
     expect(
       (await cli.runCli(['node', 'index.js', '--bulk-download-by-date', '20260917'])).exitCode
@@ -365,7 +393,9 @@ describe('cli_bulk_download（差分 20260928-untested-behaviors）', () => {
     );
 
     process.env.HOUKI_EGOV_BULK_RETRY = '1';
-    stubFetch(() => new Response('x', { status: 503, statusText: 'Service Unavailable' }));
+    stubFetch(
+      withHead(() => new Response('x', { status: 503, statusText: 'Service Unavailable' }))
+    );
     cli = await loadCli();
     expect(
       (await cli.runCli(['node', 'index.js', '--bulk-download-by-date', '20260917'])).exitCode

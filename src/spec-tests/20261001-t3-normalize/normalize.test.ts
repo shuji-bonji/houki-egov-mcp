@@ -10,8 +10,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { closeDb, openDb } from '../../db/index.js';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSchemaVersion, initSchema } from '../../db/schema.js';
 import { ingestZip } from '../../services/bulk/ingester.js';
 import { createMemoryZip } from '../../services/bulk/zip-reader.js';
@@ -319,11 +318,13 @@ describe('search_fulltext と db_schema のダッシュ類 (20261001-t3-normaliz
     legacy = join(root, 'legacy.db');
     await seedDashDb(fresh);
     await seedDashDb(legacy);
-    // 0.15.4 以前に取り込んだ行（本文のダッシュ類が ― のまま）を再現する
+    // 0.15.4 以前に取り込んだ行（本文のダッシュ類が ― のまま）を再現する。
+    // その DB はスキーマの版 2 なので、版も 2 にする（0.19.0 の版 3 の DB にはこの行は無い。SPEC-EGOV-SEARCH-FULLTEXT-036）
     const db = new Database(legacy);
     db.prepare(
       `UPDATE articles SET body = replace(body, '183-2', '183―2') WHERE law_revision_id = ?`
     ).run(DASH_REV);
+    db.prepare("UPDATE schema_meta SET value = '2' WHERE key = 'schema_version'").run();
     db.close();
   });
   afterAll(() => {
@@ -349,14 +350,25 @@ describe('search_fulltext と db_schema のダッシュ類 (20261001-t3-normaliz
     }
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-036 0.15.4 以前に取り込んだ本文（183―2 のまま）は、ダッシュ類を含む検索語では当たらない（hits: []）', async () => {
-    const r = (await handleSearchFulltext({ keyword: '183-2' }, { dbPath: legacy })) as AnyObj;
-    expect(r.source).toBe('bulk');
-    expect(r.hits).toEqual([]);
+  it('SPEC-EGOV-SEARCH-FULLTEXT-036 0.15.4 以前に取り込んだ本文（183―2 のまま、版 2 の DB）は引かずに search_law に切り替える', async () => {
+    // v0.16.0〜v0.18.x では版 2 の DB を引き、hits: [] だった
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ total_count: 0, laws: [] }), { status: 200 }))
+    );
+    try {
+      const r = (await handleSearchFulltext({ keyword: '183-2' }, { dbPath: legacy })) as AnyObj;
+      expect(r.source).toBe('api-fallback');
+      expect(r.note.startsWith('bulk DB の版 (2) がこの houki-egov-mcp (3) より古いため、')).toBe(
+        true
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('SPEC-EGOV-DB-SCHEMA-024 版 2 の DB を 0.16.0 で開いても schema_version は 2 のままで、既存の行の本文は書き換えない', async () => {
-    const db = openDb(legacy);
+    const db = new Database(legacy);
     try {
       expect(getSchemaVersion(db)).toBe(2);
       const row = db
@@ -366,7 +378,7 @@ describe('search_fulltext と db_schema のダッシュ類 (20261001-t3-normaliz
       };
       expect(row.body).toContain('183―2');
     } finally {
-      closeDb(db);
+      db.close();
     }
   });
 });

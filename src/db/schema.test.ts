@@ -9,8 +9,8 @@
 import type DatabaseT from 'better-sqlite3';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { closeDb, openDb } from './index.js';
-import { clearAllData, getSchemaVersion, initSchema, SCHEMA_VERSION } from './schema.js';
+import { closeDb, openDbForFullIngest } from './index.js';
+import { getSchemaVersion, initSchema, SCHEMA_VERSION } from './schema.js';
 
 function listTables(db: DatabaseT.Database): Set<string> {
   const rows = db
@@ -200,21 +200,6 @@ describe('initSchema (Phase 2-1)', () => {
     ).toThrow();
   });
 
-  it('clearAllData で laws/articles は消えるが schema_meta は残る', () => {
-    insertLaw(db);
-    db.prepare(
-      `INSERT INTO articles (law_revision_id, article_num, caption, chapter_path, ord, body, body_raw)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run('TEST_REV', '1', '', '', 1, 'foo', 'foo');
-
-    clearAllData(db);
-
-    expect((db.prepare('SELECT count(*) as c FROM laws').get() as { c: number }).c).toBe(0);
-    expect((db.prepare('SELECT count(*) as c FROM articles').get() as { c: number }).c).toBe(0);
-    // schema_version は維持
-    expect(getSchemaVersion(db)).toBe(SCHEMA_VERSION);
-  });
-
   it('SPEC-EGOV-DB-SCHEMA-011 initSchema は冪等 (二度呼んでも壊れない)', () => {
     initSchema(db);
     initSchema(db);
@@ -223,9 +208,9 @@ describe('initSchema (Phase 2-1)', () => {
   });
 });
 
-describe('openDb (in-memory)', () => {
+describe('openDbForFullIngest (in-memory)', () => {
   it('SPEC-EGOV-DB-SCHEMA-001 :memory: で開いて initSchema が走る', () => {
-    const db = openDb(':memory:');
+    const db = openDbForFullIngest(':memory:');
     try {
       expect(getSchemaVersion(db)).toBe(SCHEMA_VERSION);
     } finally {
@@ -234,7 +219,7 @@ describe('openDb (in-memory)', () => {
   });
 
   it('closeDb は二度呼んでも壊れない', () => {
-    const db = openDb(':memory:');
+    const db = openDbForFullIngest(':memory:');
     closeDb(db);
     closeDb(db); // no-op であること
   });
