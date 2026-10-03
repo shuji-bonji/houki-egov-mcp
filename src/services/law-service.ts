@@ -584,7 +584,8 @@ export async function searchLawByKeyword(opts: {
   }
   const { laws, total_count } = cached;
 
-  const empty = laws.length === 0;
+  // 一致が 0 件かどうかは e-Gov の total_count で決める（SPEC-EGOV-SEARCH-LAW-017。results の件数ではない）
+  const empty = total_count === 0;
   return {
     query: {
       keyword: opts.keyword,
