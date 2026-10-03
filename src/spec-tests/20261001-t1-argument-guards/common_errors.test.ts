@@ -96,12 +96,13 @@ describe('common_errors (20261001-t1-argument-guards)', () => {
       {
         name: 'search_law',
         args: { keyword: '消費税', law_type: 'Bogus' },
-        error: `${PREFIX}law_type: Act・CabinetOrder・ImperialOrdinance・MinisterialOrdinance・Rule のどれかで指定してください`,
+        // law_type の選択肢は e-Gov の値（SPEC-EGOV-SEARCH-LAW-018。勅令は ImperialOrder）
+        error: `${PREFIX}law_type: Constitution・Act・CabinetOrder・ImperialOrder・MinisterialOrdinance・Rule のどれかで指定してください`,
         issues: [
           {
             path: 'law_type',
             message:
-              'Act・CabinetOrder・ImperialOrdinance・MinisterialOrdinance・Rule のどれかで指定してください',
+              'Constitution・Act・CabinetOrder・ImperialOrder・MinisterialOrdinance・Rule のどれかで指定してください',
           },
         ],
       },
