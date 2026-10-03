@@ -6,7 +6,7 @@
  * 検索経路 (docs/PHASE2-7-PLAN.md §3):
  *
  * ```
- * keyword → normalizeSearchQuery → resolveAbbreviation (OR 展開)
+ * keyword → normalizeSearchQuery → resolveAbbreviation (略称は OR 展開、通称は条が 0 件のときだけ正式名称で引き直す)
  *         → articles_fts MATCH (条本文)  ─┐
  *         → laws_fts MATCH (法令名・略称) ─┴→ laws と JOIN (CurrentEnforced に絞る)
  *         → relevance scoring → limit
@@ -25,8 +25,9 @@
  *    2 文字語だけのクエリは MATCH に乗らない。法令名で絞れているときはその範囲を、絞れていない
  *    ときは articles 全体を LIKE で走査し、どの経路を通ったかを `short_tokens` で申告する
  *  - re-rank のため FTS からは `min(limit * 3, 150)` 件取り、スコア順に並べ替えてから limit 件返す
- *  - `domain` フィルタは `laws.category` が Phase 2-13 まで全 null のため **本モジュールでは受け付けない**
- *    (handler 側で「未実効」の note を返す)
+ *  - 分野（`domain`）では絞らない。`laws.category` が Phase 2-13 まで全 null のため、引数は 0.18.0 で
+ *    inputSchema から外した（SPEC-EGOV-SEARCH-FULLTEXT-022）。応答の `filters.domain` は handler が
+ *    `requested: null`・`applied: false` で返す
  */
 
 import {
