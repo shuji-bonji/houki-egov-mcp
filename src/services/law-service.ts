@@ -210,8 +210,8 @@ const lawDataCache = new LRUCache<string, EgovLawDataResponse>(
   CACHE_CONFIG.parsed.name
 );
 
-/** 検索結果のキャッシュ。キーは検索パラメータの正規化文字列 */
-const searchCache = new LRUCache<string, LawListItem[]>(
+/** search_law の検索結果のキャッシュ。キーは検索パラメータの正規化文字列 */
+const searchCache = new LRUCache<string, { laws: LawListItem[]; total_count: number }>(
   CACHE_CONFIG.searchResults.maxSize,
   CACHE_CONFIG.searchResults.name
 );
@@ -518,6 +518,25 @@ export async function fetchLawData(lawId: string, at?: string): Promise<EgovLawD
   return fresh;
 }
 
+/** search_law の成功の応答（SPEC-EGOV-SEARCH-LAW-006） */
+export interface SearchLawResponse {
+  query: { keyword: string; law_type?: string; resolved?: string };
+  /** e-Gov で一致した法令の総数（limit で切る前の件数） */
+  total_count: number;
+  results: Array<{
+    law_id: string;
+    title: string;
+    law_num: string;
+    law_type: string;
+    promulgation_date?: string;
+    url: string;
+  }>;
+  /** 一致が 0 件のときの案内。1 件以上のときは null（SPEC-EGOV-SEARCH-LAW-017） */
+  hint: string | null;
+  /** 一致が 0 件のときの次の手。1 件以上のときは []（SPEC-EGOV-SEARCH-LAW-017） */
+  next_actions: NextAction[];
+}
+
 /**
  * search_law ツールの本実装
  */
@@ -525,20 +544,7 @@ export async function searchLawByKeyword(opts: {
   keyword: string;
   law_type?: string;
   limit?: number;
-}): Promise<
-  LawServiceResult<{
-    query: { keyword: string; law_type?: string; resolved?: string };
-    total_count: number;
-    results: Array<{
-      law_id: string;
-      title: string;
-      law_num: string;
-      law_type: string;
-      promulgation_date?: string;
-      url: string;
-    }>;
-  }>
-> {
+}): Promise<LawServiceResult<SearchLawResponse>> {
   const trimmed = opts.keyword.trim();
   if (!trimmed) {
     return makeError('INVALID_ARGUMENT', 'keyword が空です', {
@@ -556,29 +562,36 @@ export async function searchLawByKeyword(opts: {
   const searchTitle = abbr?.formal ?? trimmed;
 
   const cacheKey = `${searchTitle}|${opts.law_type ?? ''}|${opts.limit ?? 10}`;
-  let laws = searchCache.get(cacheKey);
+  let cached = searchCache.get(cacheKey);
 
-  if (!laws) {
+  if (!cached) {
     try {
       const res = await searchLaws({
         law_title: searchTitle,
         law_type: opts.law_type,
         limit: opts.limit ?? 10,
       });
-      laws = res.laws;
-      searchCache.set(cacheKey, laws);
+      const laws = res.laws ?? [];
+      // total_count は e-Gov で一致した総数（SPEC-EGOV-SEARCH-LAW-006）。応答に無ければ返った件数
+      cached = {
+        laws,
+        total_count: typeof res.total_count === 'number' ? res.total_count : laws.length,
+      };
+      searchCache.set(cacheKey, cached);
     } catch (err) {
       return egovHttpErrorToLawError(err);
     }
   }
+  const { laws, total_count } = cached;
 
+  const empty = laws.length === 0;
   return {
     query: {
       keyword: opts.keyword,
       law_type: opts.law_type,
       resolved: abbr ? abbr.formal : undefined,
     },
-    total_count: laws.length,
+    total_count,
     results: laws.map((l) => ({
       law_id: l.law_info.law_id,
       title: l.revision_info.law_title,
@@ -587,7 +600,43 @@ export async function searchLawByKeyword(opts: {
       promulgation_date: l.law_info.promulgation_date,
       url: EGOV_API.publicLawUrl(l.law_info.law_id),
     })),
+    // 0 件のときだけ、題名だけを探したことと次の手を返す。1 件以上は null と []（SPEC-EGOV-SEARCH-LAW-017、T4）
+    hint: empty
+      ? `「${searchTitle}」を題名に含む法令は e-Gov にありません。search_law は法令の題名だけを探します。条文の本文にある語なら search_fulltext、略称なら resolve_abbreviation を試してください`
+      : null,
+    next_actions: empty ? searchLawZeroHitActions(opts, trimmed) : [],
   };
+}
+
+/** search_law の一致が 0 件のときの next_actions（SPEC-EGOV-SEARCH-LAW-017） */
+function searchLawZeroHitActions(
+  opts: { keyword: string; law_type?: string; limit?: number },
+  trimmed: string
+): NextAction[] {
+  const out: NextAction[] = [];
+  if (opts.law_type !== undefined) {
+    out.push({
+      action: 'search_law',
+      reason: '法令種別を外して探せます',
+      example: {
+        keyword: opts.keyword,
+        ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+      },
+    });
+  }
+  out.push(
+    {
+      action: 'search_fulltext',
+      reason: '条文の本文から語を探せます（ローカル DB がある場合）',
+      example: { keyword: trimmed },
+    },
+    {
+      action: 'resolve_abbreviation',
+      reason: '略称・通称かどうかを確かめられます',
+      example: { abbr: trimmed },
+    }
+  );
+  return out;
 }
 
 /**

@@ -548,13 +548,18 @@ const APPENDIX_TAGS: Record<string, string> = {
   AppdxFormat: 'AppdxFormatTitle',
   AppdxFig: 'AppdxFigTitle',
   Appdx: 'ArithFormulaNum',
+  // 附則の別表・様式・付録（SPEC-EGOV-LIST-ATTACHMENTS-025。要素名は e-Gov の法令標準 XML スキーマ）
+  SupplProvisionAppdxTable: 'SupplProvisionAppdxTableTitle',
+  SupplProvisionAppdxStyle: 'SupplProvisionAppdxStyleTitle',
+  SupplProvisionAppdx: 'ArithFormulaNum',
 };
 
 /** 法令の中で図（添付ファイル）が置かれている場所 */
 export interface FigureLocation {
   /**
    * 置かれている要素。別表（AppdxTable）・別記（AppdxNote）・様式（AppdxStyle）・書式（AppdxFormat）・
-   * 別図（AppdxFig）・付録（Appdx）・条（Article）・附則の項（SupplProvision）のいずれか。
+   * 別図（AppdxFig）・付録（Appdx）・附則の別表（SupplProvisionAppdxTable）・附則の様式（SupplProvisionAppdxStyle）・
+   * 附則の付録（SupplProvisionAppdx）・条（Article）・附則の項（SupplProvision）のいずれか。
    * どれにも当たらなければ "Law"
    */
   tag: string;

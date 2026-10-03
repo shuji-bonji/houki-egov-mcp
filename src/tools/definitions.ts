@@ -6,7 +6,6 @@
  */
 import type { Tool } from '@modelcontextprotocol/server';
 import {
-  DOMAINS,
   LAW_FILE_TYPES,
   LIMITS,
   OUTPUT_FORMATS,
@@ -37,11 +36,6 @@ export const searchLawTool = {
         type: 'string',
         enum: ['Act', 'CabinetOrder', 'ImperialOrdinance', 'MinisterialOrdinance', 'Rule'],
         description: '法令種別で絞り込み',
-      },
-      domain: {
-        type: 'string',
-        enum: [...DOMAINS],
-        description: '分野タグで絞り込み（略称辞書ベース）',
       },
       limit: {
         type: 'integer',
@@ -162,12 +156,6 @@ export const searchFulltextTool = {
         minLength: 1,
         description:
           '検索キーワード。スペース区切りで AND 検索。法令名・略称を含めると（例: "民法 不法行為", "労基法 時間外"）その法令の条に絞って本文を検索する。「第30条」を含めると該当条番号のヒットを上位に寄せ、法令名 + 条番号だけ（例: "民法 第709条"）ならその条を直接返す（漢数字は未対応）。2 文字の語だけのとき（例: "相殺"）は索引を引けないため、既定では条本文を引かず法令名の照合だけを返す。法令名か 3 文字以上の語を添えると索引で本文を引ける',
-      },
-      domain: {
-        type: 'string',
-        enum: [...DOMAINS],
-        description:
-          '分野タグ。v0.5.0 では受け付けるが絞り込みは行わない（bulk DB の category 列が未投入のため。Phase 2-13 で実効化）',
       },
       law_type: {
         type: 'string',

@@ -21,6 +21,7 @@ import {
   searchLawsInDb,
 } from '../services/law-search.js';
 import {
+  checkAbbreviationScope,
   getArticleReferences,
   getLawArticle,
   getLawRange,
@@ -154,8 +155,8 @@ export interface SearchFulltextBulkResponse {
   freshness: FreshnessInfo | null;
   filters: {
     law_type: string | null;
-    /** domain は laws.category が Phase 2-13 まで未投入のため受け付けるが絞り込みは行わない */
-    domain: { requested: string | null; applied: false; note: string };
+    /** 分野での絞り込みはしない。domain の引数は 0.18.0 で外した（SPEC-EGOV-SEARCH-FULLTEXT-022）。キーは残す */
+    domain: { requested: null; applied: false; note: string };
   };
 }
 
@@ -169,7 +170,7 @@ export interface SearchFulltextFallbackResponse {
 }
 
 const DOMAIN_NOT_APPLIED_NOTE =
-  'domain 絞り込みは v0.5.0 では未実効です (bulk DB の category 列が Phase 2-13 の API enrichment まで空のため)';
+  '分野での絞り込みはしていません（domain の引数は 0.18.0 で外しました）';
 
 /**
  * search_fulltext — 全文検索 (Phase 2-7 本実装)
@@ -188,6 +189,11 @@ export async function handleSearchFulltext(
   const keyword = (args.keyword ?? '').trim();
   // limit は inputSchema の検査（1〜30 の整数）を通った値なので丸めない（SPEC-EGOV-SEARCH-FULLTEXT-033）
   const limit = args.limit ?? LIMITS.fulltextDefault;
+
+  // keyword 全体が houki-egov 以外の管轄の略称（通達など）なら、DB も e-Gov も引かずに OUT_OF_SCOPE
+  // （SPEC-EGOV-SEARCH-FULLTEXT-037）。別の語と組み合わせたときは本文を探す
+  const scopeError = checkAbbreviationScope(keyword);
+  if (scopeError) return scopeError;
 
   let db: ReturnType<typeof openDb> | null = null;
   try {
@@ -224,11 +230,7 @@ export async function handleSearchFulltext(
       freshness,
       filters: {
         law_type: args.law_type ?? null,
-        domain: {
-          requested: args.domain ?? null,
-          applied: false,
-          note: DOMAIN_NOT_APPLIED_NOTE,
-        },
+        domain: { requested: null, applied: false, note: DOMAIN_NOT_APPLIED_NOTE },
       },
     };
     if (result.short_tokens) response.short_tokens = result.short_tokens;

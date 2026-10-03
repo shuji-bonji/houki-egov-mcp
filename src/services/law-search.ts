@@ -29,7 +29,11 @@
  *    (handler 側で「未実効」の note を返す)
  */
 
-import { normalizeSearchQuery, resolveAbbreviation } from '@shuji-bonji/houki-abbreviations';
+import {
+  normalizeJpText,
+  normalizeSearchQuery,
+  resolveAbbreviation,
+} from '@shuji-bonji/houki-abbreviations';
 import type DatabaseT from 'better-sqlite3';
 import { SCAN_BODY_SECONDS } from '../constants.js';
 import type { NextAction } from '../errors.js';
@@ -233,13 +237,22 @@ export function extractShortTokens(raw: string): string[] {
  * 略称展開を行ったうえで FTS5 の MATCH 式を組み立てる。
  *
  * `resolveAbbreviation(keyword, { normalize: true })` が `source_mcp_hint: 'houki-egov'`
- * のエントリを返した場合、`(main) OR (formal)` に展開する。
- * 例: `消法` → `("消法") OR ("消費税法")`、`インボイス` → `("インボイス") OR ("消費税法")`
+ * のエントリを返した場合、当たり方で扱いを分ける（SPEC-EGOV-SEARCH-FULLTEXT-007）。
+ *
+ * - 略称（エントリの abbr そのもの）: `(main) OR (formal)` に展開する。例: `労基法` → `("労基法") OR ("労働基準法")`
+ * - 通称（エントリの aliases）: 元の語だけで引く。条のヒットが 0 件のときだけ正式名称で引き直すので、
+ *   その MATCH 式を `aliasRetry` に入れる。例: `インボイス` → query `"インボイス"`、aliasRetry `"消費税法"`
  */
 export function buildFtsQueryWithAbbreviation(
   keyword: string,
   options: { enableExpansion?: boolean } = {}
-): { query: string; expandedFrom?: string; expandedTo?: string } {
+): {
+  query: string;
+  expandedFrom?: string;
+  expandedTo?: string;
+  /** 通称のとき、元の語で条が当たらなければ引き直す正式名称の MATCH 式と、その名前 */
+  aliasRetry?: { query: string; from: string; to: string };
+} {
   const enable = options.enableExpansion !== false;
   const trimmed = keyword?.trim() ?? '';
   const main = sanitizeFtsQuery(trimmed);
@@ -252,6 +265,13 @@ export function buildFtsQueryWithAbbreviation(
 
   const formalPhrase = sanitizeFtsQuery(abbr.formal);
   if (!formalPhrase) return { query: main };
+
+  // 略称と通称は、辞書のエントリのどこで当たったかで見分ける（全角・半角を揃えて比べる）
+  const isAbbr = normalizeJpText(abbr.abbr) === normalizeJpText(trimmed);
+  if (!isAbbr) {
+    if (normalizeJpText(abbr.formal) === normalizeJpText(trimmed)) return { query: main };
+    return { query: main, aliasRetry: { query: formalPhrase, from: trimmed, to: abbr.formal } };
+  }
 
   // 「消法」のように略称自体が trigram に乗らない場合は formal だけで検索する
   const query = main ? `(${main}) OR (${formalPhrase})` : formalPhrase;
@@ -625,9 +645,10 @@ function describeShortTokenSearch(input: {
       note = `${head}条の本文は引いていません。返したヒットは法令名・略称・番号の照合によるものです。法令名を添えると、索引でその法令の条本文を引けます。法令名が分からないときは scan_body: true を付けると全法令の条本文を端から照合します (索引を使わないため ${SCAN_BODY_SECONDS}かかります)。`;
       nextActions = [
         {
+          // 語から法令名は決まらないので example は付けない。置き換え前提の文字列をそのまま渡すと 0 件になるため
+          // （SPEC-EGOV-SEARCH-FULLTEXT-018）
           action: 'search_fulltext',
-          reason: '法令名を添えると、その法令の条本文を引けます (索引が使えるので速い)',
-          example: { keyword: `民法 ${input.tokens[0]}` },
+          reason: `法令名を添えて keyword を「<法令名> ${input.tokens.join(' ')}」の形にすると、その法令の条本文を索引で引けます`,
         },
         {
           action: 'search_fulltext',
@@ -683,13 +704,50 @@ export function searchLawsInDb(
   const built = buildFtsQueryWithAbbreviation(searchText, {
     enableExpansion: options.enableAbbreviationExpansion,
   });
+  const first = runBodyAndMetaSearch(db, searchText, built, scope, limit, options);
+  // 通称は元の語の条のヒットが 0 件のときだけ、正式名称で探し直す（SPEC-EGOV-SEARCH-FULLTEXT-007、houki-nta-mcp #21）
+  if (built.aliasRetry && first.articleCount === 0) {
+    const retry = built.aliasRetry;
+    const again = runBodyAndMetaSearch(
+      db,
+      retry.to,
+      { query: retry.query, expandedFrom: retry.from, expandedTo: retry.to },
+      scope,
+      limit,
+      options
+    );
+    return withScope(again.result, scope);
+  }
+  return withScope(first.result, scope);
+}
+
+function withScope(result: LawSearchResult, scope: LawScope[]): LawSearchResult {
+  if (scope.length > 0) result.law_scope = scope;
+  return result;
+}
+
+/**
+ * 本文（articles）と法令名（laws）を引いてマージし、スコア順に limit 件にする。
+ * `searchText` はスコアの計算と 2 文字の語の取り出しに使う語、`built` は FTS5 の MATCH 式。
+ * 返り値の articleCount は、limit で切る前の条のヒットの件数（通称の探し直しの判定に使う）。
+ */
+function runBodyAndMetaSearch(
+  db: DatabaseT.Database,
+  searchText: string,
+  built: { query: string; expandedFrom?: string; expandedTo?: string },
+  scope: LawScope[],
+  limit: number,
+  options: LawSearchOptions
+): { result: LawSearchResult; articleCount: number } {
   const shortTokens = extractShortTokens(searchText);
   // 短トークンで後段絞り込みするときは多めに取る
   const fetchLimit =
     shortTokens.length > 0
       ? RERANK_MAX_FETCH
       : Math.min(limit * RERANK_FETCH_MULTIPLIER, RERANK_MAX_FETCH);
-  if (!built.query && shortTokens.length === 0) return { hits: [], fts_query: '' };
+  if (!built.query && shortTokens.length === 0) {
+    return { result: { hits: [], fts_query: '' }, articleCount: 0 };
+  }
 
   // 略称辞書側の abbr / aliases を boost 判定に使う (formal が一致する法令のみ)
   const dictEntry = resolveAbbreviation(searchText.trim(), { normalize: true });
@@ -780,9 +838,8 @@ export function searchLawsInDb(
       hits: sorted,
     });
   }
-  if (scope.length > 0) result.law_scope = scope;
   if (built.expandedFrom && built.expandedTo) {
     result.expanded = { from: built.expandedFrom, to: built.expandedTo };
   }
-  return result;
+  return { result, articleCount: articleRows.length };
 }

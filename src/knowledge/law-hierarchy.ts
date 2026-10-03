@@ -12,13 +12,19 @@
 
 import type { LawTypeCode } from '../constants.js';
 
+/**
+ * 解説に結び付ける e-Gov の法令種別コード。略称辞書の LawTypeCode に、e-Gov の `law_type` が返す
+ * `Constitution` を足したもの（SPEC-EGOV-EXPLAIN-LAW-TYPE-012・022）
+ */
+export type ExplainLawTypeCode = LawTypeCode | 'Constitution';
+
 export interface LawHierarchyEntry {
   /** 日本語名称（主名） */
   name: string;
   /** 別称・通称 */
   aliases?: string[];
   /** e-Gov の law_type コード（該当する場合） */
-  law_type_code?: LawTypeCode;
+  law_type_code?: ExplainLawTypeCode;
   /** 制定主体 */
   enacting_body: string;
   /** 階層順位（1=憲法、数字大きいほど下位／法令外は 99） */
@@ -43,6 +49,7 @@ export const LAW_HIERARCHY: Record<string, LawHierarchyEntry> = {
   憲法: {
     name: '憲法',
     aliases: ['日本国憲法'],
+    law_type_code: 'Constitution',
     enacting_body: '国民（憲法改正は国民投票による承認）',
     hierarchy_rank: 1,
     level: 'national',
@@ -121,6 +128,7 @@ export const LAW_HIERARCHY: Record<string, LawHierarchyEntry> = {
 
   規則: {
     name: '規則',
+    law_type_code: 'Rule',
     enacting_body:
       '最高裁判所／国会（衆議院・参議院）／会計検査院／人事院／地方公共団体の長・委員会 等',
     hierarchy_rank: 4,
@@ -200,7 +208,8 @@ export const LAW_HIERARCHY: Record<string, LawHierarchyEntry> = {
 
   通達: {
     name: '通達',
-    aliases: ['通知', '基本通達', '取扱通達'],
+    // 通知は別の種別（SPEC-EGOV-EXPLAIN-LAW-TYPE-021）なので別名に入れない
+    aliases: ['基本通達', '取扱通達'],
     enacting_body: '上級行政機関（各省庁・国税庁・最高裁等）',
     hierarchy_rank: 99,
     level: 'agency-internal',
