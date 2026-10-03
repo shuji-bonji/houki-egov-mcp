@@ -8,6 +8,54 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const packageJson = require('../package.json') as { name: string; version: string };
 
+/** 数値の環境変数の名前と既定値（SPEC-EGOV-CLI-ENTRY-010・011）。確かめる順もこの順 */
+export const NUMERIC_ENV_DEFAULTS = [
+  { name: 'HOUKI_EGOV_BULK_RETRY', defaultValue: 3 },
+  { name: 'HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS', defaultValue: 90 },
+  { name: 'HOUKI_EGOV_CONCURRENCY', defaultValue: 4 },
+] as const;
+
+export type NumericEnvName = (typeof NUMERIC_ENV_DEFAULTS)[number]['name'];
+
+/** 1 以上の整数でない値の環境変数（変数名・値・既定値） */
+export interface InvalidNumericEnv {
+  name: NumericEnvName;
+  value: string;
+  defaultValue: number;
+}
+
+/** 1 以上の整数を 10 進の数字だけで書いたもの（前後の空白・符号・小数点は不正） */
+const POSITIVE_INT = /^[1-9][0-9]*$/;
+
+/**
+ * 数値の環境変数を読む。
+ *
+ * - 無い・空文字: 既定値
+ * - 1 以上の整数（`^[1-9][0-9]*$`）: その値
+ * - それ以外（`0`・負の数・小数・`abc`・前後の空白を含むもの）: 既定値。不正な値は
+ *   `findInvalidNumericEnv()` で取り出し、CLI は終了コード 2、MCP サーバーは警告を出して既定値を使う
+ *
+ * モジュールの読み込み時（`HTTP_CONFIG` などを作るとき）に呼ぶので、不正な値でも例外を投げない
+ * （`egov-client.ts` が読み込み時に `createLimit(HTTP_CONFIG.concurrency)` を呼ぶため）
+ */
+export function readNumericEnv(name: NumericEnvName, env: NodeJS.ProcessEnv = process.env): number {
+  const def = NUMERIC_ENV_DEFAULTS.find((d) => d.name === name)?.defaultValue as number;
+  const raw = env[name];
+  if (raw === undefined || raw === '') return def;
+  return POSITIVE_INT.test(raw) ? Number.parseInt(raw, 10) : def;
+}
+
+/** 1 以上の整数でない数値の環境変数を、NUMERIC_ENV_DEFAULTS の順に返す（無い・空文字は含めない） */
+export function findInvalidNumericEnv(env: NodeJS.ProcessEnv = process.env): InvalidNumericEnv[] {
+  const out: InvalidNumericEnv[] = [];
+  for (const { name, defaultValue } of NUMERIC_ENV_DEFAULTS) {
+    const raw = env[name];
+    if (raw === undefined || raw === '') continue;
+    if (!POSITIVE_INT.test(raw)) out.push({ name, value: raw, defaultValue });
+  }
+  return out;
+}
+
 /**
  * Package information (dynamically loaded from package.json)
  */
@@ -79,10 +127,10 @@ export const HTTP_CONFIG = {
   maxRetries: 3,
   /**
    * e-Gov API への同時リクエスト数の上限。
-   * レート制限 (429) 対策。環境変数 HOUKI_EGOV_CONCURRENCY で上書き可能。
-   * 既定値 4 は実測ベース（保守的）。
+   * レート制限 (429) 対策。環境変数 HOUKI_EGOV_CONCURRENCY（1 以上の整数）で上書き可能。
+   * 既定値 4 は実測ベース（保守的）。不正な値は既定値を使う（readNumericEnv）
    */
-  concurrency: Number.parseInt(process.env.HOUKI_EGOV_CONCURRENCY ?? '', 10) || 4,
+  concurrency: readNumericEnv('HOUKI_EGOV_CONCURRENCY'),
 } as const;
 
 /**
@@ -130,13 +178,16 @@ export const RUNTIME_FLAGS = {
  * - HOUKI_EGOV_BULK_RETRY: max retries for full-zip download (default 3)
  * - HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS: max days to look back for incremental
  *   diff zips before falling back to full download (default 90 — 公式仕様の上限)
+ *
+ * 数値の 2 つ（と HTTP_CONFIG.concurrency）は 1 以上の整数だけを受け付け、不正な値は既定値を使う。
+ * CLI の取り込み・同期・状態の表示は不正な値で終了コード 2、MCP サーバーは警告を出して起動を続ける
+ * （SPEC-EGOV-CLI-ENTRY-010・011。検査は cli/index.ts）
  */
 export const BULK_CONFIG = {
   /** override of cache DB path */
   dbPath: process.env.HOUKI_EGOV_DB_PATH,
   /** max retries on full-zip download failure */
-  bulkRetry: Number.parseInt(process.env.HOUKI_EGOV_BULK_RETRY ?? '', 10) || 3,
+  bulkRetry: readNumericEnv('HOUKI_EGOV_BULK_RETRY'),
   /** look-back days for incremental diff before full-DL fallback */
-  incrementalLimitDays:
-    Number.parseInt(process.env.HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS ?? '', 10) || 90,
+  incrementalLimitDays: readNumericEnv('HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS'),
 } as const;

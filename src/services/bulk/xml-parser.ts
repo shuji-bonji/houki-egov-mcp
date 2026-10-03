@@ -195,9 +195,10 @@ export function parseLawXml(xml: string): ParsedLaw {
           (a) => a.article_num.startsWith(`Suppl${i + 1}_`) && !a.article_num.endsWith('_intro')
         );
         if (!hasArticleInThisSuppl) {
+          // 条の見出しの列は NULL。附則の見出しは chapter_path に置く（SPEC-EGOV-CLI-BULK-DOWNLOAD-012。#101）
           articles.push({
             article_num: `Suppl${i + 1}_intro`,
-            caption: supplLabel,
+            caption: null,
             chapter_path: supplLabel,
             body_raw: supplBody,
           });

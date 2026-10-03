@@ -16,7 +16,13 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BULK_CONFIG, EGOV_BULK, HTTP_CONFIG, PACKAGE_INFO } from '../config.js';
+import {
+  BULK_CONFIG,
+  EGOV_BULK,
+  findInvalidNumericEnv,
+  HTTP_CONFIG,
+  PACKAGE_INFO,
+} from '../config.js';
 import {
   closeDb,
   type DbState,
@@ -44,6 +50,7 @@ import {
 } from '../services/bulk/zip-fetcher.js';
 import { openZipFile } from '../services/bulk/zip-reader.js';
 import { SyncDateError, summarizeFreshness } from '../services/freshness.js';
+import { logger } from '../utils/logger.js';
 
 /** CLI ハンドラの戻り値 */
 export interface CliResult {
@@ -78,6 +85,14 @@ export async function runCli(argv: string[]): Promise<CliResult> {
   const args = argv.slice(2);
 
   if (args.length === 0) {
+    // MCP サーバーは不正な数値の環境変数に既定値を使い、警告を出して起動を続ける（SPEC-EGOV-CLI-ENTRY-011）。
+    // 既定値への置き換えは config.ts の読み込み時に済んでいる
+    for (const v of findInvalidNumericEnv()) {
+      logger.warn(
+        'server',
+        `警告: ${v.name} は 1 以上の整数で指定してください: ${v.value}（既定値 ${v.defaultValue} を使います）`
+      );
+    }
     return { exitCode: 0, command: NOT_A_COMMAND };
   }
 
@@ -125,6 +140,14 @@ export async function runCli(argv: string[]): Promise<CliResult> {
   if (cmd === '--version' || cmd === '-v') {
     console.log(`${PACKAGE_INFO.name} v${PACKAGE_INFO.version}`);
     return { exitCode: 0, command: 'version' };
+  }
+
+  // 取り込み・同期・状態の表示は、DB を開く前・e-Gov に接続する前に数値の環境変数を確かめる。
+  // そのコマンドが使わない変数も 3 つとも確かめ、不正なら最初の 1 つだけを出す（SPEC-EGOV-CLI-ENTRY-010）
+  const invalid = findInvalidNumericEnv()[0];
+  if (invalid) {
+    console.error(`ERROR: ${invalid.name} は 1 以上の整数で指定してください: ${invalid.value}`);
+    return { exitCode: 2, command: 'invalid-env' };
   }
 
   if (cmd === '--bulk-download-everything') {
@@ -518,9 +541,13 @@ USAGE:
 ENVIRONMENT:
   HOUKI_EGOV_DB_PATH=/path/to.db    DB ファイルパスを上書き
                                      (default: \${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/laws.db)
-  HOUKI_EGOV_BULK_RETRY=3           bulk DL 失敗時のリトライ回数
+  HOUKI_EGOV_BULK_RETRY=3           bulk DL 失敗時に試す回数 (1 以上の整数。既定 3)
   HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS=90
                                     --sync が差分で追える最大日数 (超えたら全件取り込みを促す)
+                                    (1 以上の整数。既定 90)
+  HOUKI_EGOV_CONCURRENCY=4          e-Gov 法令 API への同時リクエスト数の上限 (1 以上の整数。既定 4)
+                                    数値の 3 つは、不正な値のとき CLI は終了コード 2、
+                                    MCP サーバーは警告を出して既定値を使います
   HOUKI_EGOV_FILES_DIR=/path        get_attachment / get_law_file の save: true の保存先
                                      (default: \${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/files)
 
