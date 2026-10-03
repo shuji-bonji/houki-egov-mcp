@@ -6,6 +6,7 @@
  *
  * 取る順（先に取れた文字範囲は後の規則の対象から外す）:
  *   ① 法令名（法令番号）+ 条項号        → external（法令番号で解決済みの名前を呼び出し側から受け取る）
+ *   ①' 附則第N条（法令名が前に付いてもよい） → suppl（どの附則の条か特定しない。v0.18.0）
  *   ② 同法 / 前項 / 次条 / 同条第四項 …  → relative（解決しない）
  *   ③ 既知の法令名 + 条項号              → external（辞書の正式名称、①で解決した名前、施行令の中の「法」）
  *   ④ 第N条 第N項 第N号（法令名なし）    → internal（同一法令内）
@@ -63,6 +64,11 @@ export interface ExtractContext {
   knownLaws: KnownLaw[];
   /** 施行令・施行規則の本文で「法」が指す親の法律。あれば ③ で「法第N条」を external にする */
   parentAct?: KnownLaw;
+  /**
+   * 施行規則の本文で「令」が指す兄弟の施行令。あれば ③ で「令第N条」を external にする
+   * （SPEC-EGOV-GET-ARTICLE-REFERENCES-048。呼び出し側は施行規則で、施行令が実在するときだけ渡す）
+   */
+  siblingOrder?: KnownLaw;
 }
 
 export interface ExternalReference extends ArticleLocator {
@@ -87,7 +93,22 @@ export interface RelativeReference {
   resolved: false;
 }
 
-export type ExtractedReference = ExternalReference | InternalReference | RelativeReference;
+/**
+ * 本文の「附則第N条」（SPEC-EGOV-GET-ARTICLE-REFERENCES-047）。どの附則（制定時か、どの改正法か）の条かは
+ * 特定しないので resolved: false。「<法令名>附則第N条」は law_name に法令名を入れる
+ */
+export interface SupplReference extends ArticleLocator {
+  kind: 'suppl';
+  raw: string;
+  law_name?: string;
+  resolved: false;
+}
+
+export type ExtractedReference =
+  | ExternalReference
+  | InternalReference
+  | RelativeReference
+  | SupplReference;
 
 export interface Delegation {
   kind: 'delegation';
@@ -193,6 +214,39 @@ export function extractReferences(text: string, ctx: ExtractContext): ExtractRes
     }
   }
 
+  // ①' 附則第N条（法令名が前に付いてもよい）。本則の条への internal にしない（SPEC-EGOV-GET-ARTICLE-REFERENCES-047）
+  {
+    const re = new RegExp(
+      `附則(第${KAN}+条(?:の${KAN}+)*)(第${KAN}+項)?(第${KAN}+号(?:の${KAN}+)*)?`,
+      'g'
+    );
+    for (const m of text.matchAll(re)) {
+      const start = m.index ?? 0;
+      const end = start + m[0].length;
+      if (spans.overlaps(start, end)) continue;
+      const loc = parseChain(m[1], m[2], m[3]);
+      if (!loc) continue;
+      // 直前の漢字の並びが「…法」「…令」「…規則」「…条例」なら、その法令の附則
+      const before = /([一-龥]+)$/.exec(text.slice(0, start));
+      const name = before?.[1];
+      const named = name !== undefined && /(?:法|令|規則|条例)$/.test(name);
+      const refStart = named ? start - name.length : start;
+      if (spans.overlaps(refStart, end)) continue;
+      spans.add(refStart, end);
+      found.push({
+        index: refStart,
+        end,
+        ref: {
+          kind: 'suppl',
+          raw: text.slice(refStart, end),
+          ...(named ? { law_name: name } : {}),
+          ...loc,
+          resolved: false,
+        },
+      });
+    }
+  }
+
   // ② 同法 / 前項 / 次条 / 同条第四項 / 前三項 …（解決しない）
   {
     const re = new RegExp(
@@ -215,6 +269,8 @@ export function extractReferences(text: string, ctx: ExtractContext): ExtractRes
   ];
   // 「法第N条」は施行令・施行規則の中の書き方。親の法律が分かっているときだけ external にする
   if (ctx.parentAct) byName.push({ law: ctx.parentAct, name: '法' });
+  // 「令第N条」は施行規則の中の書き方。兄弟の施行令が分かっているときだけ external にする（048）
+  if (ctx.siblingOrder) byName.push({ law: ctx.siblingOrder, name: '令' });
   byName.sort((a, b) => b.name.length - a.name.length);
   for (const { law, name } of byName) {
     // 条項号が続くものだけを参照とみなす（定義の「（以下「法」という。）」のような裸の名前は取らない）
@@ -325,6 +381,24 @@ function inheritArticles(text: string, found: Found[]): void {
     if (prev.ref.kind === 'relative' || prev.ref.article === undefined) continue;
     const gap = text.slice(prev.end, found[i].index);
     if (!CHAIN_CONNECTORS.test(gap)) continue;
+    if (prev.ref.kind === 'suppl') {
+      // 「附則第三条第一項及び第二項」の後半も附則の条。本則の条への internal に戻さない（047）
+      found[i].ref = {
+        kind: 'suppl',
+        raw: cur.raw,
+        ...(prev.ref.law_name ? { law_name: prev.ref.law_name } : {}),
+        article: prev.ref.article,
+        article_from: prev.ref.raw,
+        ...(cur.paragraph !== undefined
+          ? { paragraph: cur.paragraph }
+          : prev.ref.paragraph !== undefined && cur.item !== undefined
+            ? { paragraph: prev.ref.paragraph }
+            : {}),
+        ...(cur.item !== undefined ? { item: cur.item } : {}),
+        resolved: false,
+      };
+      continue;
+    }
     const base: ArticleLocator = { article: prev.ref.article, article_from: prev.ref.raw };
     // 「第六項第四号及び第五号」の後半は、項も引き継ぐ
     if (cur.paragraph === undefined && cur.item !== undefined && prev.ref.paragraph !== undefined) {

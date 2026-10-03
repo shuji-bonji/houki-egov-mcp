@@ -90,7 +90,10 @@ export async function handleGetLaw(args: GetLawArgs) {
     article: args.article,
     paragraph: args.paragraph,
     item: args.item,
-    format: (args.format as 'markdown' | 'json' | 'toc' | undefined) ?? 'markdown',
+    // 省いたときは markdown（article も省けば目次）。候補の呼び直しの例に渡さなかった引数を足さないため、
+    // ここでは既定値を入れない（SPEC-EGOV-COMMON-ERRORS-032）
+    format: args.format as 'markdown' | 'json' | 'toc' | undefined,
+    suppl_index: args.suppl_index,
     at: args.at,
   });
 }

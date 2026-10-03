@@ -32,6 +32,11 @@ export interface FormatArticleOptions {
   item?: LawNode;
   retrievedAt: string;
   at?: string;
+  /**
+   * 附則の中の条のとき（SPEC-EGOV-GET-LAW-043）。`index` は附則の番号、`label` は
+   * `formatSupplProvisionLabel()` の文（`附則(27) 平成八年六月一四日法律第八二号（抄）`）
+   */
+  suppl?: { index: number; label: string };
 }
 
 /**
@@ -39,9 +44,10 @@ export interface FormatArticleOptions {
  * paragraph / item 指定があればその範囲だけ出力。
  */
 export function formatArticleMarkdown(opts: FormatArticleOptions): string {
-  const { lawTitle, lawId, article, paragraph, item, retrievedAt, at } = opts;
+  const { lawTitle, lawId, article, paragraph, item, retrievedAt, at, suppl } = opts;
   const articleNum = article.attr?.Num ?? '';
-  const articleLabel = formatArticleLabel(articleNum);
+  // 附則の条は「附則(27) 第100条」の形にする（本則の条と見分けるため）
+  const articleLabel = `${suppl ? `附則(${suppl.index}) ` : ''}${formatArticleLabel(articleNum)}`;
   const caption = getArticleCaption(article);
 
   // 見出し
@@ -66,6 +72,7 @@ export function formatArticleMarkdown(opts: FormatArticleOptions): string {
 
   const url = EGOV_API.publicLawUrl(lawId);
   const lines = [header];
+  if (suppl) lines.push(suppl.label);
   if (caption) lines.push(caption);
   lines.push('', body, '', '---', '出典：e-Gov法令検索（デジタル庁）', `URL: ${url}`);
   if (at) lines.push(`時点: ${at}`);

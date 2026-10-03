@@ -90,6 +90,12 @@ export const getLawTool = {
           '出力形式。"markdown"=条文全文（デフォルト）, "toc"=目次のみ（トークン節約）, "json"=構造化',
         default: 'markdown',
       },
+      suppl_index: {
+        type: 'integer',
+        minimum: 1,
+        description:
+          '附則の番号（1 以上の整数）。get_toc の suppl_provisions[].index、get_law_range の suppl_index と同じ番号。渡すと article をその附則の中で探す。省くと本則の中だけを探す',
+      },
       at: {
         type: 'string',
         pattern: AT_PATTERN,
@@ -342,6 +348,12 @@ export const verifyCitationsTool = {
               type: ['number', 'string'],
               description:
                 '号番号。数値（8）か文字列（"8"・"8の2"・"八の二"）。項が複数ある条で項を書かずに号だけを指定すると ambiguous になる',
+            },
+            suppl_index: {
+              type: 'integer',
+              minimum: 1,
+              description:
+                '附則の番号（1 以上の整数。get_toc の suppl_provisions[].index と同じ）。渡すと article をその附則の中で確かめる。省くと本則の中だけで確かめる',
             },
             label: {
               type: 'string',

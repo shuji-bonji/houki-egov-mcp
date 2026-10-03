@@ -35,7 +35,8 @@ import {
   egovHttpErrorToLawError,
   fetchLawData,
   type LawServiceResult,
-  resolveLawId,
+  lawFetchErrorToLawError,
+  resolveLawForTool,
 } from './law-service.js';
 import { extractFigures, type FigureLocation } from './law-tree.js';
 
@@ -137,37 +138,35 @@ function fileNameOf(src: string): string {
   return parts[parts.length - 1] || src;
 }
 
-/** LAW_NOT_FOUND の共通形（law-service.ts の getLawArticle と同じ） */
-function lawNotFound(lawName: string): LawServiceError {
-  return makeError('LAW_NOT_FOUND', `法令が見つかりません: ${lawName}`, {
-    hint: '略称辞書 / e-Gov 法令検索で該当なし。表記を確認してください',
-    next_actions: [NEXT_ACTIONS.resolveAbbreviation(lawName), NEXT_ACTIONS.searchLaw(lawName)],
-  });
-}
-
 /**
  * 法令名 → law_id → /law_data。添付の一覧はここで作る。
  * 返り値の entries は、attached_files_info の並びを先に、本文にだけある Fig を後に置く。
  */
-async function loadAttachments(opts: {
-  law_name: string;
-  at?: string;
-}): Promise<LawServiceResult<{ meta: AttachmentMeta; entries: AttachmentEntry[] }>> {
+async function loadAttachments(
+  tool: 'list_attachments' | 'get_attachment',
+  opts: { law_name: string; at?: string } & Record<string, unknown>
+): Promise<LawServiceResult<{ meta: AttachmentMeta; entries: AttachmentEntry[] }>> {
   const scopeError = checkAbbreviationScope(opts.law_name);
   if (scopeError) return scopeError;
 
-  const resolved = await resolveLawId(opts.law_name);
-
-  // 法令名の検索が通信の失敗で終わったときは SOURCE_*（SPEC-EGOV-COMMON-ERRORS-029）
-
+  // 法令名の検索が通信の失敗で終わったときは SOURCE_*、完全一致が無ければ候補付きの LAW_NOT_FOUND
+  // （SPEC-EGOV-COMMON-ERRORS-029・032、SPEC-EGOV-LIST-ATTACHMENTS-024・SPEC-EGOV-GET-ATTACHMENT-030）
+  const resolved = await resolveLawForTool(tool, opts);
   if (isLawServiceError(resolved)) return resolved;
-  if (!resolved) return lawNotFound(opts.law_name);
 
   let lawData: Awaited<ReturnType<typeof fetchLawData>>;
   try {
     lawData = await fetchLawData(resolved.law_id, opts.at);
   } catch (err) {
-    return egovHttpErrorToLawError(err);
+    // 404・404004 は LAW_NOT_FOUND、時点の 400・400044 は INVALID_ARGUMENT
+    // （SPEC-EGOV-LIST-ATTACHMENTS-018・SPEC-EGOV-GET-ATTACHMENT-031）
+    return lawFetchErrorToLawError(err, {
+      tool,
+      law_id: resolved.law_id,
+      name: resolved.title,
+      law_name: opts.law_name,
+      at: opts.at,
+    });
   }
 
   const revisionId = lawData.revision_info?.law_revision_id;
@@ -262,7 +261,7 @@ export async function listAttachments(opts: {
   law_name: string;
   at?: string;
 }): Promise<LawServiceResult<ListAttachmentsResponse>> {
-  const loaded = await loadAttachments(opts);
+  const loaded = await loadAttachments('list_attachments', opts);
   if ('error' in loaded) return loaded;
   const { meta, entries } = loaded;
 
@@ -305,7 +304,7 @@ export async function getAttachment(opts: {
   at?: string;
   save?: boolean;
 }): Promise<LawServiceResult<GetAttachmentResponse>> {
-  const loaded = await loadAttachments(opts);
+  const loaded = await loadAttachments('get_attachment', opts);
   if ('error' in loaded) return loaded;
   const { meta, entries } = loaded;
 
@@ -444,10 +443,10 @@ export async function getLawFile(opts: {
 
   const scopeError = checkAbbreviationScope(opts.law_name);
   if (scopeError) return scopeError;
-  const resolved = await resolveLawId(opts.law_name);
-  // 法令名の検索が通信の失敗で終わったときは SOURCE_*（SPEC-EGOV-COMMON-ERRORS-029）
+  // 法令名の検索が通信の失敗で終わったときは SOURCE_*、完全一致が無ければ候補付きの LAW_NOT_FOUND
+  // （SPEC-EGOV-COMMON-ERRORS-029・032、SPEC-EGOV-GET-LAW-FILE-023）。save の値によらずファイルを取らない
+  const resolved = await resolveLawForTool('get_law_file', opts);
   if (isLawServiceError(resolved)) return resolved;
-  if (!resolved) return lawNotFound(opts.law_name);
 
   const url = EGOV_API.lawFile(fileType, resolved.law_id, opts.at);
   const meta: ArticleMeta = {
@@ -483,7 +482,14 @@ export async function getLawFile(opts: {
     });
   } catch (err) {
     if (err instanceof EgovFileTooLargeError) return fileTooLarge(err.bytes, url);
-    return egovHttpErrorToLawError(err);
+    // 404・404004 は LAW_NOT_FOUND、時点の 400・400044 は INVALID_ARGUMENT（SPEC-EGOV-GET-LAW-FILE-014）
+    return lawFetchErrorToLawError(err, {
+      tool: 'get_law_file',
+      law_id: resolved.law_id,
+      name: resolved.title,
+      law_name: opts.law_name,
+      at: opts.at,
+    });
   }
   const sizeError = checkSize(bin, url);
   if (sizeError) return sizeError;

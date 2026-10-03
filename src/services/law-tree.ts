@@ -71,6 +71,35 @@ export function findArticle(root: LawNode, articleNum: string): LawNode | null {
   return null;
 }
 
+/** 本則（`MainProvision`）の要素を返す。附則の中には降りない。無ければ null */
+export function findMainProvision(root: LawNode): LawNode | null {
+  if (root.tag === 'MainProvision') return root;
+  if (root.tag === 'SupplProvision') return null;
+  for (const c of root.children ?? []) {
+    if (typeof c === 'object') {
+      const r = findMainProvision(c);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
+/**
+ * 本則（`MainProvision`）の中だけで条を探す。附則（`SupplProvision`）の中には降りない
+ * （SPEC-EGOV-GET-LAW-008・042。附則の条は `suppl_index` で附則を指して `findArticle` で探す）。
+ */
+export function findMainArticle(root: LawNode, articleNum: string): LawNode | null {
+  if (root.tag === 'SupplProvision') return null;
+  if (root.tag === 'Article' && root.attr?.Num === articleNum) return root;
+  for (const c of root.children ?? []) {
+    if (typeof c === 'object') {
+      const r = findMainArticle(c, articleNum);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
 /**
  * Article の中から指定の項を取得。
  */
@@ -487,6 +516,20 @@ export function collectArticlesInRange(node: LawNode): LawNode[] {
 /**
  * 附則を並び順（1 始まり）で 1 本取り出す。番号は `extractSupplProvisions()` の `index` と同じ。
  */
+/**
+ * 同じ番号の条を持つ附則を、出現順に返す（本則に無い条番号の案内。SPEC-EGOV-GET-LAW-042）。
+ * 番号は `get_toc` の `suppl_provisions[].index` と同じ。
+ */
+export function findSupplProvisionsWithArticle(
+  root: LawNode,
+  articleNum: string
+): SupplProvisionToc[] {
+  const nodes: LawNode[] = [];
+  collectSupplProvisions(root, nodes);
+  const summaries = extractSupplProvisions(root);
+  return summaries.filter((_, i) => findArticle(nodes[i], articleNum) !== null);
+}
+
 export function findSupplProvisionByIndex(root: LawNode, index: number): LawNode | null {
   const nodes: LawNode[] = [];
   collectSupplProvisions(root, nodes);

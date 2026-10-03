@@ -130,10 +130,12 @@ export interface SearchLawsParams {
   law_title?: string;
   law_type?: string;
   law_num?: string;
-  /** 1〜500 */
+  /** 件数。2026-10-03 JST に e-Gov が limit=1000 を受け付けることを確かめた */
   limit?: number;
   /** 0始まり */
   offset?: number;
+  /** 時点（YYYY-MM-DD）。その時点の題名で照合する（SPEC-EGOV-COMMON-ERRORS-032） */
+  asof?: string;
 }
 
 export interface GetLawDataParams {
@@ -147,7 +149,7 @@ export class EgovHttpError extends Error {
     public readonly status: number,
     public readonly url: string,
     message: string,
-    /** 4xx の応答本文（e-Gov は JSON の {code, message} を返す）。retry した 5xx と JSON 経路では入らない */
+    /** 4xx の応答本文（e-Gov は JSON の {code, message} を返す）。時間切れでは入らない */
     public readonly body?: string
   ) {
     super(message);
@@ -156,10 +158,23 @@ export class EgovHttpError extends Error {
 
   /** e-Gov のエラー応答の code（例 "404003" = 添付ファイルが無い、"400039" = law_revision_id が誤り）。読めなければ null */
   egovErrorCode(): string | null {
+    const v = this.parsedBody()?.code;
+    return typeof v === 'string' ? v : null;
+  }
+
+  /** e-Gov のエラー応答の message（例 "法令の時点（asof）には2017-04-01以降を指定してください。"）。読めなければ null */
+  egovErrorMessage(): string | null {
+    const v = this.parsedBody()?.message;
+    return typeof v === 'string' ? v : null;
+  }
+
+  private parsedBody(): { code?: unknown; message?: unknown } | null {
     if (!this.body) return null;
     try {
-      const parsed = JSON.parse(this.body) as { code?: unknown };
-      return typeof parsed.code === 'string' ? parsed.code : null;
+      const parsed = JSON.parse(this.body) as unknown;
+      return typeof parsed === 'object' && parsed !== null
+        ? (parsed as { code?: unknown; message?: unknown })
+        : null;
     } catch {
       return null;
     }
@@ -405,7 +420,15 @@ async function fetchJsonWithRetry<T>(url: string, attempt = 0): Promise<T> {
       return fetchJsonWithRetry<T>(url, attempt + 1);
     }
 
-    throw new EgovHttpError(res.status, url, `e-Gov API returned ${res.status}`);
+    // 4xx の本文（e-Gov の {code, message}）は残し、呼び出し側が「法令が無い（404004）」「時点の誤り（400044）」を
+    // 見分けられるようにする（SPEC-EGOV-COMMON-ERRORS-033）
+    let body: string | undefined;
+    try {
+      body = await res.text();
+    } catch {
+      body = undefined;
+    }
+    throw new EgovHttpError(res.status, url, `e-Gov API returned ${res.status}`, body);
   } catch (err) {
     if (err instanceof EgovHttpError) throw err;
     if (err instanceof Error && err.name === 'AbortError') {
