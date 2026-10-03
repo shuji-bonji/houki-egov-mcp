@@ -141,7 +141,7 @@ erDiagram
 ```sql
 -- ===== Laws (1 行 = 1 revision) =====
 CREATE TABLE laws (
-  law_revision_id TEXT PRIMARY KEY,                  -- '346AC0000000034_20260507_508AC0000000015'
+  law_revision_id TEXT NOT NULL PRIMARY KEY,         -- '346AC0000000034_20260507_508AC0000000015'（NOT NULL は 0.19.0 から）
   law_id TEXT NOT NULL,                              -- '346AC0000000034'
   law_type TEXT NOT NULL,                            -- 'Act' | 'CabinetOrder' | 'Rule' | 'Regulation' | ...
   law_num TEXT NOT NULL,                             -- '昭和四十六年法律第三十四号'
@@ -150,7 +150,7 @@ CREATE TABLE laws (
   abbrev TEXT,
   category TEXT,                                     -- '金融・保険' (e-Gov 42 カテゴリ)
 
-  promulgation_date TEXT NOT NULL,                   -- '1971-04-01' (ISO date)
+  promulgation_date TEXT,                            -- '1971-04-01' (ISO date)。作れないときは NULL（0.19.0 から）
   amendment_promulgate_date TEXT,                    -- '2026-05-07'
   amendment_enforcement_date TEXT,                   -- '2026-05-07'
   amendment_scheduled_enforcement_date TEXT,         -- UnEnforced で予告日のあるもの
@@ -224,8 +224,8 @@ CREATE TABLE sync_state (
   last_sync_date TEXT NOT NULL,                       -- '2026-05-07' (ISO date)
   last_full_dl_at TEXT NOT NULL,                      -- '2026-05-01T00:00:00+09:00'
   total_laws INTEGER NOT NULL DEFAULT 0,
-  bulk_source TEXT NOT NULL DEFAULT 'all_xml',        -- 'all_xml' | 'incremental'
-  schema_version INTEGER NOT NULL DEFAULT 1
+  bulk_source TEXT NOT NULL DEFAULT 'all_xml'         -- 'all_xml' | 'incremental'
+  -- schema_version 列は 0.19.0（スキーマの版 3）で外した。スキーマの版は schema_meta だけが持つ
 );
 ```
 

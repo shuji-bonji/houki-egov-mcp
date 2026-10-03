@@ -189,7 +189,76 @@ npx @shuji-bonji/houki-egov-mcp --status
 
 `--sync` は、差分が無い日（土日など）を飛ばし、途中で失敗しても成功した日までを記録して終わります。最終同期から 90 日（`HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS`）を超えて空いているときは、e-Gov の日次差分の公開範囲を超えるので、何もせずに `--bulk-download-everything` を促します。1 日分は数百 KB〜30 MB、13 日分でおよそ 1〜2 分です。
 
-DB のデフォルト配置は `${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/laws.db`（`HOUKI_EGOV_DB_PATH` で変更可）。
+DB は既定で `~/.cache/houki-egov-mcp/laws.db` に作られます。場所を変えるときは、下の「DB の場所を変える（`HOUKI_EGOV_DB_PATH`）」を見てください。
+
+`--bulk-download-by-date YYYYMMDD` は 1 日分の差分だけを取り込む確認用のコマンドです。同期の状態（`last_sync_date`）は変えないので、最新化には `--sync` を使ってください。差分の無い日を指定したときは `差分なし` を出して終了コード 0 で終わります。
+
+引数を打ち間違えたとき（`houki-egov-mcp status` のような `-` の無い引数、`--sync --status` のようにフラグの後に続く引数）は、何もせずにエラーと使い方を出して終了コード 2 で終わります（0.19.0 から。それまでは MCP サーバーとして起動するか、最初のフラグだけを実行していました）。
+
+### 0.19.0 に上げたら DB を作り直してください
+
+0.19.0 で DB のスキーマの版を 2 から 3 に上げました。0.18.x 以前に作った DB は 0.19.0 では使えないので、次のコマンドで作り直してください。全件の zip（約 290 MB）を取得し直し、取り込み直します。
+
+```bash
+npx @shuji-bonji/houki-egov-mcp@0.19.0 --bulk-download-everything
+```
+
+- 作り直すまで、`search_fulltext` は条文本文を検索せずに `search_law`（法令名のタイトル一致）の結果を返し、`note` で作り直しを案内します。`--sync`・`--status`・`--bulk-download-by-date` は DB に触れずにエラー（終了コード 1）で終わります
+- 作り直すのは、zip の取得に成功した後です。取得に失敗したときは古い DB がそのまま残ります
+- 作り直した後に 0.18.x 以前の houki-egov-mcp でこの DB を開くと、版が違うため全テーブルが消えます（0.18.x 以前の動きで、0.19.0 からは直せません）。0.19.0 で作り直した後は 0.18.x に戻さないでください。plugin などで版を固定している場合は、CLI と同じ版にそろえてください
+- 0.18.x の plugin を使い続けたまま 0.19.0 を試すときは、0.19.0 の側だけ `HOUKI_EGOV_DB_PATH` で別のファイルを指定してください（下の「DB の場所を変える」）。2 つの版が別々の DB を使うので、どちらの DB も消えません
+
+### 環境変数
+
+| 環境変数 | 内容 | 既定 |
+|---|---|---|
+| `HOUKI_EGOV_DB_PATH` | DB ファイルのパス（フォルダーではなく、ファイル名まで書く）。CLI と MCP サーバーの両方に同じ値を設定します（下の「DB の場所を変える」） | `$XDG_CACHE_HOME/houki-egov-mcp/laws.db`（`XDG_CACHE_HOME` が無ければ `~/.cache/houki-egov-mcp/laws.db`） |
+| `HOUKI_EGOV_BULK_RETRY` | 一括ダウンロードの zip の取得に失敗したときに試す回数 | 3 |
+| `HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS` | `--sync` が差分で追える日数の上限。`--status` と `search_fulltext` の警告の日数にも使います | 90 |
+| `HOUKI_EGOV_CONCURRENCY` | e-Gov 法令 API への同時リクエスト数の上限 | 4 |
+| `HOUKI_EGOV_FILES_DIR` | `get_attachment` / `get_law_file` の `save: true` の保存先 | `${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/files` |
+
+数値の 3 つ（`HOUKI_EGOV_BULK_RETRY`・`HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS`・`HOUKI_EGOV_CONCURRENCY`）は 1 以上の整数で指定します。`0`・負の数・小数・数字以外を指定すると、CLI（取り込み・同期・状態の表示）は何もせずに終了コード 2 で終わり、MCP サーバーは警告を出して既定値で起動します（0.19.0 から。それまでは `0` や数字以外は黙って既定値になり、負の数はそのまま使っていました）。
+
+### DB の場所を変える（`HOUKI_EGOV_DB_PATH`）
+
+DB の場所は、次の順で決まります。
+
+1. 環境変数 `HOUKI_EGOV_DB_PATH` があれば、その値のファイル
+2. 無ければ、環境変数 `XDG_CACHE_HOME` の下の `houki-egov-mcp/laws.db`
+3. どちらも無ければ、`~/.cache/houki-egov-mcp/laws.db`
+
+`HOUKI_EGOV_DB_PATH` を使うのは、DB を別のディスクに置きたいとき、版の違う houki-egov-mcp を並べて使うとき（0.18.x の plugin と 0.19.0 など）、試しに別の DB を作りたいときです。設定するときは、次の 3 点に気を付けてください。
+
+- **CLI と MCP サーバーの両方に、同じ値を設定します。** DB を作る CLI（`--bulk-download-everything` など）と、DB を読む MCP サーバー（`search_fulltext`）は別々に起動するので、片方だけに設定すると、CLI が作った DB を MCP サーバーが見つけられません（`search_fulltext` が `bulk DL 未実行のため` で `search_law` に切り替わります）
+- **フォルダーではなく、ファイル名まで書きます。** 例: `/Users/you/data/houki-egov/laws.db`。途中のフォルダーが無ければ、`--bulk-download-everything` が作ります
+- **MCP の設定ファイル（JSON）では、`~` を使わずに絶対パスで書きます。** JSON の `env` の値はシェルを通らないので、`~/…` は展開されません。ターミナルで `export` するときは `~` が使えます
+
+CLI での指定（ターミナル）:
+
+```bash
+export HOUKI_EGOV_DB_PATH=~/data/houki-egov/laws.db
+npx @shuji-bonji/houki-egov-mcp --bulk-download-everything
+npx @shuji-bonji/houki-egov-mcp --status   # 2 行目の「DB:」に使っている場所が出ます
+```
+
+MCP サーバーでの指定（`claude_desktop_config.json` や `.mcp.json`）:
+
+```json
+{
+  "mcpServers": {
+    "houki-egov": {
+      "command": "npx",
+      "args": ["-y", "@shuji-bonji/houki-egov-mcp"],
+      "env": {
+        "HOUKI_EGOV_DB_PATH": "/Users/you/data/houki-egov/laws.db"
+      }
+    }
+  }
+}
+```
+
+設定を変えたら、MCP クライアント（Claude Desktop など）を起動し直してください。MCP サーバーが使っている場所は、`search_fulltext` の応答だけでは分からないので、同じ値を付けて CLI の `--status` を実行し、`DB:` の行と `laws:` の件数で確かめてください。
 
 ### SQLite と DB の置き場所（npx / plugin 経由で使う場合）
 
@@ -203,13 +272,24 @@ DB ファイルはパッケージの中ではなく、上記のユーザーの�
 | Claude Desktop / Claude Code plugin（`npx -y …`） | 同上（`@latest` 指定なら起動ごとにレジストリを確認） | 同上 |
 | ローカル開発（`node dist/index.js`） | リポジトリの `dist` | 同上 |
 
-このため、DB の構築は一度 CLI で行えば、plugin 経由の `search_fulltext` からもそのまま使えます。`--bulk-download-everything` のあとに MCP server を再起動する必要はありません（`search_fulltext` は呼び出しごとに DB を開いて閉じます）。書き込みは CLI だけが行い、MCP server は読むだけです（journal は WAL なので、取り込み中に検索しても壊れません）。
+このため、DB の構築は一度 CLI で行えば、plugin 経由の `search_fulltext` からもそのまま使えます。`--bulk-download-everything` のあとに MCP server を再起動する必要はありません（`search_fulltext` は呼び出しごとに DB を開いて閉じます）。書き込みは CLI だけが行い、MCP server は読むだけです（journal は WAL なので、取り込み中に検索しても壊れません）。DB を作るのは `--bulk-download-everything` だけで、`search_fulltext` と `--status` は DB が無くてもファイルやフォルダーを作りません（0.19.0 から）。
 
-DB が存在しない、または条が 1 件も入っていないときは、`search_fulltext` は `source: "api-fallback"` で `search_law` の結果を返し、`next_actions` に `--bulk-download-everything` の実行を案内します。パッケージを更新しても DB は消えません（バージョン間の互換は上の注記のとおり、必要なときだけ再構築を案内します）。
+DB が存在しない、または条が 1 件も入っていないときは、`search_fulltext` は `source: "api-fallback"` で `search_law` の結果を返し、`next_actions` に `--bulk-download-everything` の実行を案内します。パッケージを更新しても DB は消えません。版が古い DB は `--bulk-download-everything` を実行したときだけ作り直します。新しい版の DB は触りません。
+
+DB の版（DB に記録したスキーマの版）ごとの扱いは次のとおりです（0.19.0 から）。
+
+| DB の状態 | `--bulk-download-everything` | `--sync`・`--bulk-download-by-date` | `--status` | `search_fulltext` |
+|---|---|---|---|---|
+| ファイルが無い | 作って取り込む | 作らない。全件の取り込みを促して終了コード 1 | 作らない。DB が無いことを出して終了コード 0 | 作らない。`search_law` に切り替える |
+| 版が同じ（3） | 取り込む | 取り込む | 表示する | 検索する |
+| 版が古い（1・2） | 取得に成功してから作り直して取り込む | 書き込まずに終了コード 1 | 書き込まずに終了コード 1 | 使わずに `search_law` に切り替え、作り直しを案内する |
+| 版が新しい・版を読めない | 取得せずに終了コード 1 | 書き込まずに終了コード 1 | 書き込まずに終了コード 1 | 使わずに `search_law` に切り替える |
+
+全データを消すコマンドはありません。中身を消したいときは DB のファイルを消してください（場所は `--status` の `DB:` の行に出ます）。
 
 DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索します（v0.5.0〜）。略称は正式名称にも展開され（`労基法` → `労基法` または `労働基準法`）、通称（`インボイス` など）は元の語で条が当たらないときだけ正式名称で探し直します（v0.18.0）。「民法 不法行為」「労基法 時間外」のように法令名と語を並べるとその法令の条に絞って本文を検索します。各ヒットに条番号・snippet・score・DB の鮮度（`freshness`）が付きます。DB が未構築のときは従来どおり `search_law`（法令名のタイトル一致）にフォールバックし、`note` でその旨を返します。
 
-> **v0.5.0 以前に構築した DB について**: v0.5.0 で本文の正規化を投入時に行うようになり（スキーマバージョン 2、旧 DB は起動時に自動初期化）、v0.5.1 で編（Part）を持つ法令の本則が取り込まれていなかった不具合を直しました。いずれの場合も `--bulk-download-everything` を再実行してください（v0.5.1 では全件が再 ingest されます）。
+> **v0.5.0 以前に構築した DB について**: v0.5.0 で本文の正規化を投入時に行うようになり（スキーマバージョン 2）、v0.5.1 で編（Part）を持つ法令の本則が取り込まれていなかった不具合を直しました。0.19.0 からはスキーマの版 3 の DB だけを使うので、どの版で作った DB も `--bulk-download-everything` で作り直してください。
 >
 > **検索語の制約**: 索引が trigram のため、条文本文は 3 文字以上の語で索引から引きます。2 文字の語（「相殺」「時効」等）の扱いは v0.12.0 で変わりました（下記）。「第30条」のような条番号は本文検索には使わず、該当条を上位に寄せる加点にだけ使います（漢数字は未対応）。
 

@@ -6,7 +6,7 @@
  *
  *   --bulk-download-everything       file_section=1 で全件 DL + DB ingest
  *   --sync                            sync_state.last_sync_date から今日までの差分を日ごとに DL + ingest
- *   --bulk-download-by-date YYYYMMDD file_section=3 で 1 日分の差分 DL + ingest (デバッグ用)
+ *   --bulk-download-by-date YYYYMMDD file_section=3 で 1 日分の差分 DL + ingest (デバッグ用。同期の状態は変えない)
  *   --status                          sync_state + DB 件数 + freshness を表示
  *   --help / -h                       使い方
  *
@@ -528,19 +528,25 @@ function printHelp(): void {
 USAGE:
   houki-egov-mcp                                 MCP server を起動 (default)
   houki-egov-mcp --bulk-download-everything      全件 zip (約 290 MB) を DL + DB に ingest。初回と、
-                                                  最終同期から 90 日を超えたとき
+                                                  最終同期から HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS
+                                                  (既定 90) 日を超えたとき。DB を作る・版の古い DB を
+                                                  作り直すのはこのコマンドだけ
   houki-egov-mcp --sync                           最終同期日から今日までの日次差分を DL + ingest。
                                                   差分が無い日は飛ばし、途中で失敗しても
                                                   成功した日までを記録する
                                                   （--bulk-download-incremental も同じです）
-  houki-egov-mcp --bulk-download-by-date YYYYMMDD  単日差分を DL + ingest (デバッグ用)
+  houki-egov-mcp --bulk-download-by-date YYYYMMDD  単日差分を DL + ingest (デバッグ用)。
+                                                  同期の状態 (last_sync_date) は変えない
   houki-egov-mcp --status                         同期状態と DB 件数を表示
   houki-egov-mcp --version, -v                    バージョン表示
   houki-egov-mcp --help                           この使い方を表示
 
 ENVIRONMENT:
-  HOUKI_EGOV_DB_PATH=/path/to.db    DB ファイルパスを上書き
-                                     (default: \${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/laws.db)
+  HOUKI_EGOV_DB_PATH=/path/to/laws.db
+                                    DB ファイルのパス (フォルダーではなくファイル名まで)。
+                                    MCP サーバーの設定にも同じ値を入れる。JSON の env では
+                                    ~ が展開されないので絶対パスで書く
+                                    (default: \${XDG_CACHE_HOME:-~/.cache}/houki-egov-mcp/laws.db)
   HOUKI_EGOV_BULK_RETRY=3           bulk DL 失敗時に試す回数 (1 以上の整数。既定 3)
   HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS=90
                                     --sync が差分で追える最大日数 (超えたら全件取り込みを促す)
