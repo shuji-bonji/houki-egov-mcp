@@ -16,6 +16,19 @@ import {
 import { AT_PATTERN } from './input-validator.js';
 import { type ToolSpec, toMcpTool } from './tool-args.js';
 
+/**
+ * search_law / search_fulltext の law_type の選択肢。e-Gov 法令 API v2 の /laws の law_type と応答の law_type、
+ * ローカル DB の laws.law_type と同じ値（勅令は ImperialOrder。SPEC-EGOV-SEARCH-LAW-018・SPEC-EGOV-SEARCH-FULLTEXT-038）
+ */
+const LAW_TYPE_FILTERS = [
+  'Constitution',
+  'Act',
+  'CabinetOrder',
+  'ImperialOrder',
+  'MinisterialOrdinance',
+  'Rule',
+] as const;
+
 // ========================================
 // Phase 1: Core (e-Gov API v2)
 // ========================================
@@ -34,7 +47,7 @@ export const searchLawTool = {
       },
       law_type: {
         type: 'string',
-        enum: ['Act', 'CabinetOrder', 'ImperialOrdinance', 'MinisterialOrdinance', 'Rule'],
+        enum: [...LAW_TYPE_FILTERS],
         description: '法令種別で絞り込み',
       },
       limit: {
@@ -159,7 +172,7 @@ export const searchFulltextTool = {
       },
       law_type: {
         type: 'string',
-        enum: ['Act', 'CabinetOrder', 'ImperialOrdinance', 'MinisterialOrdinance', 'Rule'],
+        enum: [...LAW_TYPE_FILTERS],
         description: '法令種別で絞り込み',
       },
       limit: {

@@ -1806,7 +1806,7 @@ function buildReferenceNextActions(
   const out: NextAction[] = [];
   const seen = new Set<string>();
   const push = (a: NextAction): void => {
-    const key = JSON.stringify(a.example ?? a);
+    const key = JSON.stringify([a.action, a.example ?? a]);
     if (seen.has(key)) return;
     seen.add(key);
     out.push(a);
@@ -1815,6 +1815,16 @@ function buildReferenceNextActions(
     // relative と、どの附則か決まらない「附則第N条」（SPEC-EGOV-GET-ARTICLE-REFERENCES-047）からは作らない
     if (ref.kind === 'relative' || ref.kind === 'suppl') continue;
     if (ref.kind === 'external' && !ref.resolved) continue;
+    // 条を持たない external（「法令名（法令番号）」だけの参照）は、呼んだ条の番号を参照先の条に使わず、
+    // 参照先の法令の目次を案内する（SPEC-EGOV-GET-ARTICLE-REFERENCES-015・052、#98）
+    if (ref.kind === 'external' && ref.article === undefined) {
+      push({
+        action: 'get_toc',
+        reason: '引用先の法令の目次を見られます',
+        example: { law_name: ref.law_name },
+      });
+      continue;
+    }
     const lawName = ref.kind === 'external' ? ref.law_name : selfTitle;
     const article = ref.article ?? fromEgovArticleNum(articleNum);
     push({
