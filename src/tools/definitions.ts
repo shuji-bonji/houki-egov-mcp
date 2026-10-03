@@ -35,7 +35,7 @@ const LAW_TYPE_FILTERS = [
 export const searchLawTool = {
   name: 'search_law',
   description:
-    '日本の法令をキーワード・略称・分野で検索する。e-Gov法令API v2 を使用。略称辞書による正式名称への自動補完あり。',
+    '日本の法令を、法令の題名のキーワードや略称で検索します。e-Gov 法令 API v2 を使い、略称は略称辞書で正式名称に直してから探します。total_count は e-Gov で一致した法令の総数で、results の件数（limit 以下）とは限りません。一致が 0 件のときは、条文の本文を探す search_fulltext と略称を確かめる resolve_abbreviation を hint と next_actions で案内します。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -48,7 +48,8 @@ export const searchLawTool = {
       law_type: {
         type: 'string',
         enum: [...LAW_TYPE_FILTERS],
-        description: '法令種別で絞り込み',
+        description:
+          '法令種別で絞り込みます。e-Gov の law_type の値（Constitution=憲法、Act=法律、CabinetOrder=政令、ImperialOrder=勅令、MinisterialOrdinance=府省令、Rule=規則）',
       },
       limit: {
         type: 'integer',
@@ -66,7 +67,7 @@ export const searchLawTool = {
 export const getLawTool = {
   name: 'get_law',
   description:
-    '日本の法令から条文を取得する。略称（消法・所法・労基法 等）対応。条/項/号レベル指定可能。章・節をまとめて取るときは get_law_range を使う。',
+    '日本の法令から条文を取得します。略称（消法・所法・労基法 等）に対応し、条・項・号の単位で指定できます。法令名は題名の完全一致だけを使い、一致しなければ候補を付けた LAW_NOT_FOUND を返します。article の条は本則の中から探し、附則の条は suppl_index で附則を指して取ります。章・節をまとめて取るときは get_law_range を使います。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -78,7 +79,7 @@ export const getLawTool = {
       article: {
         type: 'string',
         description:
-          '条番号。例: "30", "30の2", "第30条の2"。漢数字（"第三十条", "三十の二"）と全角数字も可（v0.7.0）。format="toc" の場合は省略可',
+          '条番号。例: "30", "30の2", "第30条の2"。漢数字（"第三十条", "三十の二"）と全角数字も可（v0.7.0）。本則の条を探します。附則の条は suppl_index で附則を指してください。format="toc" の場合は省略可',
       },
       paragraph: {
         type: 'integer',
@@ -101,7 +102,7 @@ export const getLawTool = {
         type: 'integer',
         minimum: 1,
         description:
-          '附則の番号（1 以上の整数）。get_toc の suppl_provisions[].index、get_law_range の suppl_index と同じ番号。渡すと article をその附則の中で探す。省くと本則の中だけを探す',
+          '附則の番号（1 以上の整数）。get_toc の suppl_provisions[].index、get_law_range の suppl_index と同じ番号です。渡すと article をその附則の中で探します。省くと本則の中だけを探します',
       },
       at: {
         type: 'string',
@@ -160,7 +161,7 @@ export const getTocTool = {
 export const searchFulltextTool = {
   name: 'search_fulltext',
   description:
-    '法令の条文本文をキーワードで横断全文検索する（ローカル SQLite FTS5）。`houki-egov-mcp --bulk-download-everything` で構築した bulk DB を引き、略称は正式名称に OR 展開（例: "消法" → "消費税法"）。各ヒットに条番号・snippet・score・DB の鮮度 (freshness) を付けて返す。bulk DB 未構築時は search_law（法令名のタイトル一致）にフォールバックし、その旨を note で返す。2 文字の語（「相殺」「時効」）は本文の索引（trigram）に載らないため既定では本文を引かず、何をして結果を出したかを応答の short_tokens に返す。',
+    '法令の条文本文をキーワードで横断して全文検索します（ローカル SQLite FTS5）。`houki-egov-mcp --bulk-download-everything` で構築した bulk DB を引きます。略称は正式名称にも展開し（例: "労基法" → "労基法" または "労働基準法"）、通称（例: "インボイス"）は元の語で条が当たらないときだけ正式名称で探し直します。展開したときは expanded_keywords を返します。各ヒットに条番号・snippet・score・DB の鮮度（freshness）を付けて返します。bulk DB が無いときは search_law（法令名の題名の一致）に切り替え、その旨を note で返します。2 文字の語（「相殺」「時効」）は本文の索引（trigram）に載らないため既定では本文を引かず、何をして結果を出したかを応答の short_tokens に返します。keyword 全体が通達などの管轄外の略称（例: "消基通"）なら、DB も e-Gov も引かずに OUT_OF_SCOPE を返します。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -168,12 +169,13 @@ export const searchFulltextTool = {
         type: 'string',
         minLength: 1,
         description:
-          '検索キーワード。スペース区切りで AND 検索。法令名・略称を含めると（例: "民法 不法行為", "労基法 時間外"）その法令の条に絞って本文を検索する。「第30条」を含めると該当条番号のヒットを上位に寄せ、法令名 + 条番号だけ（例: "民法 第709条"）ならその条を直接返す（漢数字は未対応）。2 文字の語だけのとき（例: "相殺"）は索引を引けないため、既定では条本文を引かず法令名の照合だけを返す。法令名か 3 文字以上の語を添えると索引で本文を引ける',
+          '検索キーワード。スペース区切りで AND 検索します。法令名・略称を含めると（例: "民法 不法行為", "労基法 時間外"）その法令の条に絞って本文を検索します。「第30条」を含めると該当条番号のヒットを上位に寄せ、法令名 + 条番号だけ（例: "民法 第709条"）ならその条を直接返します（漢数字は未対応）。keyword 全体が略称なら正式名称にも展開し、通称なら元の語で条が当たらないときだけ正式名称で探し直します。keyword 全体が管轄外の略称なら OUT_OF_SCOPE を返します。2 文字の語だけのとき（例: "相殺"）は索引を引けないため、既定では条本文を引かず法令名の照合だけを返します。法令名か 3 文字以上の語を添えると索引で本文を引けます',
       },
       law_type: {
         type: 'string',
         enum: [...LAW_TYPE_FILTERS],
-        description: '法令種別で絞り込み',
+        description:
+          '法令種別で絞り込みます。e-Gov の law_type の値（Constitution=憲法、Act=法律、CabinetOrder=政令、ImperialOrder=勅令、MinisterialOrdinance=府省令、Rule=規則）',
       },
       limit: {
         type: 'integer',
@@ -245,7 +247,7 @@ export const explainLawTypeTool = {
         type: 'string',
         minLength: 1,
         description:
-          '法令種別の名前。例: "法律", "政令", "省令", "規則", "条例", "告示", "通達", "訓令", "憲法"。aliases も解決可（例: "施行令" → 政令、"施行規則" → 省令、"Act" → 法律）',
+          '法令種別の名前。例: "法律", "政令", "省令", "規則", "条例", "告示", "通達", "訓令", "憲法"。aliases と e-Gov の法令種別コードも解決します（例: "施行令" → 政令、"施行規則" → 省令、"Act" → 法律、"Constitution" → 憲法、"Rule" → 規則）',
       },
     },
     required: ['name'],
@@ -259,7 +261,7 @@ export const explainLawTypeTool = {
 export const getRelatedLawsTool = {
   name: 'get_related_laws',
   description:
-    '法令名の規則で関連する法令を引く。法律なら施行令・施行規則、施行令・施行規則なら親の法律と兄弟を、e-Gov に実在するものだけ返す（law_id 付き）。名前の末尾に「施行令」「施行規則」を付けた（落とした）候補だけを試すので、別の名前の下位法令や告示は返らない。網羅性は主張しない。',
+    '法令名の規則で関連する法令を引きます。法律なら施行令・施行規則、施行令・施行規則なら親の法律と兄弟を、e-Gov に実在するものだけ返します（law_id 付き）。名前の末尾に「施行令」「施行規則」を付けた（落とした）候補だけを試すので、別の名前の下位法令や告示は返りません。法律でも施行令・施行規則でもない法令（省令・政令・規則など）からは候補を作らず、related を空にして note に理由を書きます。網羅性は主張しません。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -277,7 +279,7 @@ export const getRelatedLawsTool = {
 export const getArticleReferencesTool = {
   name: 'get_article_references',
   description:
-    '条文本文が引用している参照を取り出す。他法令の条（法令名と法令番号から law_id を解決）、同一法令内の条・項・号、「政令で定める」「財務省令で定める」の委任（施行令・施行規則を法令単位で付ける）を返し、各参照に get_law の引数を next_actions で付ける。「前項」「同法」は解決しない。正規表現で取れた範囲だけを返し、網羅性は主張しない。',
+    '条文本文が引用している参照を取り出します。対象は本則の条だけです（附則の条の本文は get_law の suppl_index で読めます）。他法令の条（法令名と法令番号から law_id を解決）、同一法令内の条・項・号、本文の「附則第N条」（kind: "suppl"。どの附則の条かは特定しません）、「政令で定める」「財務省令で定める」の委任を返し、解決できた参照に get_law（条の無い他法令の参照には get_toc）の引数を next_actions で付けます。委任先は法令単位で、政令は施行令、省令・府令は施行規則を定めた命令の名前が委任の文言と合うときだけ付け、確かでないときは target_law: null にします。「前項」「同法」は解決しません。正規表現で取れた範囲だけを返し、網羅性は主張しません。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -314,7 +316,7 @@ export const getArticleReferencesTool = {
 export const verifyCitationsTool = {
   name: 'verify_citations',
   description:
-    'LLM が組み立てた法令の引用リストを、1 回の呼び出しでまとめて実在確認する。件ごとに found / not_found / ambiguous を返し、リストの中に存在しない引用が混ざっていてもツール全体はエラーにしない。found の件には正式名称・法令番号・条見出し・law_id・URL を付ける。確かめるのは「その条（指定があれば項・号）が e-Gov の法令にあるか」だけで、引用が主張を支えるかどうかは判定しない。略称は略称辞書で正式名称に直してから照合する。',
+    'LLM が組み立てた法令の引用リストを、1 回の呼び出しでまとめて実在確認します。件ごとに found / not_found / ambiguous を返し、リストの中に存在しない引用が混ざっていてもツール全体はエラーにしません。found の件には正式名称・法令番号・条見出し・law_id・URL を付けます。確かめるのは「その条（指定があれば項・号）が e-Gov の法令にあるか」だけで、引用が主張を支えるかどうかは判定しません。略称は略称辞書で正式名称に直してから照合し、法令名は完全一致だけを採ります。条は本則の中で確かめ、附則の条は suppl_index で附則を指してください。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -354,7 +356,7 @@ export const verifyCitationsTool = {
               type: 'integer',
               minimum: 1,
               description:
-                '附則の番号（1 以上の整数。get_toc の suppl_provisions[].index と同じ）。渡すと article をその附則の中で確かめる。省くと本則の中だけで確かめる',
+                '附則の番号（1 以上の整数。get_toc の suppl_provisions[].index と同じ）。渡すと article をその附則の中で確かめます。省くと本則の中だけで確かめます',
             },
             label: {
               type: 'string',

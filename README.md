@@ -61,18 +61,18 @@
 
 | Tool | 用途 |
 |---|---|
-| `search_law` | 法令タイトルでキーワード検索（略称→正式名解決済み） |
-| `get_law` | 条/項/号レベルで本文取得（Markdown / JSON / TOC） |
+| `search_law` | 法令タイトルでキーワード検索（略称→正式名解決済み）。`total_count` は e-Gov で一致した総数で、0 件のときは `search_fulltext` と `resolve_abbreviation` を案内する（v0.18.0） |
+| `get_law` | 条/項/号レベルで本文取得（Markdown / JSON / TOC）。条は本則から探し、附則の条は `suppl_index` で附則を指して取る（v0.18.0） |
 | `get_toc` | 目次のみ取得（トークン節約）。本則と附則を分け、附則は改正法ごとにまとめる（v0.13.0） |
 | `get_law_range` | 編・章・節・款・目のいずれか、または附則 1 本を範囲にして条を本文ごと取得。上限を超える範囲は条の単位で打ち切り、続きの条番号を返す（v0.14.0） |
 | `get_law_revisions` | 改正履歴を取得（公布日・施行日・状態） |
-| `search_fulltext` | 条文本文の横断全文検索（ローカル SQLite FTS5。bulk DB 未構築時は `search_law` にフォールバック） |
+| `search_fulltext` | 条文本文の横断全文検索（ローカル SQLite FTS5。bulk DB 未構築時は `search_law` にフォールバック）。通達などの管轄外の略称だけを渡すと `OUT_OF_SCOPE`（v0.18.0） |
 | `resolve_abbreviation` | 略称→正式名解決の診断。全角英数字・全角空白は揃えて照合し、辞書のエントリはどの管轄でも返して `in_scope` と `hint` で管轄を示す（v0.16.0） |
-| `explain_law_type` | 法令種別（憲法・法律・政令・省令・通達 等）の解説 |
-| `get_related_laws` | 法令名の規則で施行令・施行規則（施行令からは親の法律）を引き、e-Gov に実在するものだけを `law_id` 付きで返す（v0.10.0） |
-| `get_article_references` | 条文本文が引用している他法令の条（`law_id` 付き）・同一法令内の条項号・「政令で定める」の委任先を取り出し、`get_law` の引数を `next_actions` で付ける（v0.10.0） |
-| `verify_citations` | 引用のリストをまとめて実在確認し、件ごとに `found` / `not_found` / `ambiguous` を返す（v0.11.0） |
-| `list_attachments` | 法令に付いた添付ファイル（別表・様式・別記の図。jpg / pdf）の一覧。各ファイルに認証なしで開ける URL と、法令の中の置き場所（「別表第一（第一条関係）」など）を付ける（v0.15.0） |
+| `explain_law_type` | 法令種別（憲法・法律・政令・省令・通達 等）の解説。e-Gov の法令種別コード（`Act`・`Constitution`・`Rule` など）でも引ける |
+| `get_related_laws` | 法令名の規則で施行令・施行規則（施行令からは親の法律）を引き、e-Gov に実在するものだけを `law_id` 付きで返す（v0.10.0）。法律でも施行令・施行規則でもない法令からは候補を作らない（v0.18.0） |
+| `get_article_references` | 本則の条の本文が引用している他法令の条（`law_id` 付き）・同一法令内の条項号・「附則第N条」・「政令で定める」の委任先を取り出し、`get_law`（条の無い他法令の参照は `get_toc`）の引数を `next_actions` で付ける（v0.10.0。附則と委任先の扱いは v0.18.0） |
+| `verify_citations` | 引用のリストをまとめて実在確認し、件ごとに `found` / `not_found` / `ambiguous` を返す（v0.11.0）。条は本則で確かめ、附則の条は `suppl_index` で指す（v0.18.0） |
+| `list_attachments` | 法令に付いた添付ファイル（別表・様式・別記の図。jpg / pdf）の一覧。各ファイルに認証なしで開ける URL と、法令の中の置き場所（「別表第一（第一条関係）」など。附則の別表・様式は v0.18.0 から）を付ける（v0.15.0） |
 | `get_attachment` | 添付ファイル 1 件（または zip）。既定は URL とメタ情報だけ、`save: true` でサーバー側の保存先に書いて絶対パスを返す（v0.15.0） |
 | `get_law_file` | 法令本文を xml / json / html / rtf / docx のファイルで。既定は URL だけ、`save: true` で保存（v0.15.0） |
 
@@ -92,6 +92,7 @@
 
 - `get_related_laws({ law_name: "所得税法" })` → `related[]` に所得税法施行令（`340CO0000000096`）と所得税法施行規則（`340M50000040011`）。名前の末尾に「施行令」「施行規則」を付けた候補を e-Gov に問い合わせ、`law_title` が完全一致した 1 件だけを採用します。無かった候補は `not_found[]` に残します
 - `get_article_references({ law_name: "所得税法", article: "57の2", paragraph: 2 })` → `references[]` に「雇用保険法（昭和四十九年法律第百十六号）第十条第五項第一号」が `law_id` と条・項・号付きで入り、`delegations[]` に「政令で定める」×N と委任先（所得税法施行令）が入ります。「前項」「同法」は `kind: "relative"` で解決しません
+- 確かでないときは推定しません（v0.18.0）。`get_article_references` は本則の条だけを対象にし、本文の「附則第N条」は `kind: "suppl"`・`resolved: false` で返します。省令・府令の委任先は、施行規則を定めた命令の名前（法令番号の `大蔵省令` など。省の改称は同じ省として扱います）が委任の文言と合うときだけ付け、合わないときと `主務省令` は `target_law: null` にします。施行規則の本文の「令第N条」は、兄弟の施行令が実在すれば `external` に解決します。`get_related_laws` は、法律でも施行令・施行規則でもない法令（省令・政令・規則など）からは候補を作らず、`related` を空にして `note` に理由を書きます
 - どちらの応答にも `note` / `coverage.note` が付き、抽出できた範囲だけを返していること、網羅性を保証しないことを書いています。委任の趣旨の解釈や意味的に近い条の推薦は行いません（houki-hub#8 の法令グラフの担当）
 
 ## インストール
@@ -206,7 +207,7 @@ DB ファイルはパッケージの中ではなく、上記のユーザーの�
 
 DB が存在しない、または条が 1 件も入っていないときは、`search_fulltext` は `source: "api-fallback"` で `search_law` の結果を返し、`next_actions` に `--bulk-download-everything` の実行を案内します。パッケージを更新しても DB は消えません（バージョン間の互換は上の注記のとおり、必要なときだけ再構築を案内します）。
 
-DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索します（v0.5.0〜）。略称は正式名称に OR 展開され（`消法` → `消費税法`）、「民法 不法行為」「労基法 時間外」のように法令名と語を並べるとその法令の条に絞って本文を検索します。各ヒットに条番号・snippet・score・DB の鮮度（`freshness`）が付きます。DB が未構築のときは従来どおり `search_law`（法令名のタイトル一致）にフォールバックし、`note` でその旨を返します。
+DB を構築すると `search_fulltext` が条文本文を SQLite FTS5 で検索します（v0.5.0〜）。略称は正式名称にも展開され（`労基法` → `労基法` または `労働基準法`）、通称（`インボイス` など）は元の語で条が当たらないときだけ正式名称で探し直します（v0.18.0）。「民法 不法行為」「労基法 時間外」のように法令名と語を並べるとその法令の条に絞って本文を検索します。各ヒットに条番号・snippet・score・DB の鮮度（`freshness`）が付きます。DB が未構築のときは従来どおり `search_law`（法令名のタイトル一致）にフォールバックし、`note` でその旨を返します。
 
 > **v0.5.0 以前に構築した DB について**: v0.5.0 で本文の正規化を投入時に行うようになり（スキーマバージョン 2、旧 DB は起動時に自動初期化）、v0.5.1 で編（Part）を持つ法令の本則が取り込まれていなかった不具合を直しました。いずれの場合も `--bulk-download-everything` を再実行してください（v0.5.1 では全件が再 ingest されます）。
 >
@@ -332,7 +333,7 @@ v0.13.0 からは、本則を `toc`、附則を `suppl_provisions` に分けて�
 
 そのため `not_searched` の `next_actions` は 2 つの道を示します。
 
-1. `{ keyword: "民法 相殺" }` — 法令名を添えると、その法令の条に絞って索引で引けます（速く、並び順も関連度順）
+1. 「`<法令名> 相殺`」の形（例: `民法 相殺`）— 法令名を添えると、その法令の条に絞って索引で引けます（速く、並び順も関連度順）。語から法令名は決まらないので、この案内には `example` を付けず、`reason` に形を書きます（v0.18.0）
 2. `{ keyword: "相殺", scan_body: true }` — 法令名が分からないときの最後の手段です。5〜20 秒かかり、並び順は関連度順になりません。上限（150 件）で打ち切ったときは `truncated: true` になります
 
 3 文字以上の語を含むクエリでは索引を引くので、`scan_body` は効きません。
@@ -355,6 +356,7 @@ v0.13.0 からは、本則を `toc`、附則を `suppl_provisions` に分けて�
 - `summary` に件数の内訳と `all_found` が入るので、「全部実在した」と書いてよいかを 1 つの値で判断できます
 - 法令名が e-Gov の法令名と完全一致しなければ `ambiguous` にし、部分一致の候補を `candidates[]` に最大 5 件返します（例: 「所得税法施行」→ 所得税法施行令・所得税法施行規則）。項が複数ある条で項を書かずに号だけを指定した件も `ambiguous` です
 - 通達など houki-egov の管轄外の引用は `OUT_OF_SCOPE` にし、`next_actions` で `houki-nta` を指します
+- 条は本則の中で確かめます。本則に無く附則にだけある条番号は `ARTICLE_NOT_FOUND` にし、附則の番号を案内します。附則の条は `suppl_index`（`get_toc` の `suppl_provisions[].index`）で附則を指して確かめます（v0.18.0）
 - 確かめるのは条文が実在するかどうかだけです。引用した条文が主張を支えるかどうかは判定しません
 - e-Gov に問い合わせられなかったときは、件ごとの判定を返さずツール全体を `SOURCE_*` エラーにします。「聞けなかった」を「存在しない」と書かないためです
 
@@ -432,14 +434,14 @@ houki-egov-mcp の [`src/errors.ts`](src/errors.ts) は family 全体の **リ�
 
 | code | 用途 | retryable |
 |---|---|---|
-| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・範囲・形式・inputSchema に無い引数。`detail.issues[]` に違反 1 件ごとの引数名と日本語の文、`tool` に呼んだツール名）、必須の文字列が空白だけ、`at` が暦に無い日付、`get_law` で項が複数ある条に `paragraph` なしで `item` を指定した、`get_law_range` で範囲の指定が無い・2 通り同時・複数の章に当たった 等 | `false` |
+| `INVALID_ARGUMENT` | 引数が `tools/list` の `inputSchema` に合わない（型・必須・enum・範囲・形式・inputSchema に無い引数。`detail.issues[]` に違反 1 件ごとの引数名と日本語の文、`tool` に呼んだツール名）、必須の文字列が空白だけ、`at` が暦に無い日付、`get_law` で項が複数ある条に `paragraph` なしで `item` を指定した、`get_law_range` で範囲の指定が無い・2 通り同時・複数の章に当たった、e-Gov が時点 `at` を受け付けないと答えた（2017-04-01 より前。`detail.issues[0].path: "at"`、`hint` に e-Gov の文。v0.18.0） 等 | `false` |
 | `INVALID_ARTICLE_NUM` | 条番号・号番号のフォーマットが不正 (例: "30-2"、位ごとに並べた "三〇") | `false` |
-| `OUT_OF_SCOPE` | 通達名で `get_law` を呼んだ等、別 MCP の管轄リソースが要求された | `false` |
-| `LAW_NOT_FOUND` | 略称辞書に無く、e-Gov の法令名の検索が成功して 0 件だった（検索が通信の失敗で終わったときは `SOURCE_*`。v0.16.0） | `false` |
-| `ARTICLE_NOT_FOUND` | 指定された条/項/号が見つからない（`get_law_range` の `from_article` がその範囲に無い場合を含む） | `false` |
+| `OUT_OF_SCOPE` | 通達名で `get_law` を呼んだ、`search_fulltext` に通達の略称だけを渡した（v0.18.0）等、別 MCP の管轄リソースが要求された | `false` |
+| `LAW_NOT_FOUND` | 略称辞書に無く、e-Gov の法令名の検索で題名の完全一致が無かった（0 件、または部分一致だけ。部分一致のときは候補を `hint` と `next_actions` に入れる。v0.18.0）。law_id を決めた後に e-Gov が「その法令が無い」と答えたときも（404・`404004` / 改正履歴は `404001`。v0.18.0）。検索が通信の失敗で終わったときは `SOURCE_*`（v0.16.0） | `false` |
+| `ARTICLE_NOT_FOUND` | 指定された条/項/号が見つからない（`get_law_range` の `from_article` がその範囲に無い場合を含む）。本則に無く附則にだけある条番号も含み、そのときは附則の番号を案内する（v0.18.0） | `false` |
 | `RANGE_NOT_FOUND` | `get_law_range` で指定された編・章・節（または附則の番号）が見つからない | `false` |
 | `ATTACHMENT_NOT_FOUND` | `get_attachment` で指定された `src` がその法令履歴の添付に無い、添付が 1 件も無い、または e-Gov の `/attachment` が「存在しない」（code 404003）を返した | `false` |
-| `SOURCE_API_ERROR` | e-Gov API がエラー応答（5xx は再試行できる、429 以外の 4xx は再試行できない）。法令名の検索の失敗も含む | 状況による |
+| `SOURCE_API_ERROR` | e-Gov API がエラー応答（5xx は再試行できる、429 以外の 4xx は再試行できない。`LAW_NOT_FOUND`・`INVALID_ARGUMENT` にする 404・400 を除く）。法令名の検索の失敗も含む | 状況による |
 | `SOURCE_TIMEOUT` | e-Gov API がタイムアウト | `true` |
 | `SOURCE_RATE_LIMITED` | e-Gov API がレート制限 (HTTP 429) | `true` |
 | `SOURCE_UNAVAILABLE` | e-Gov に接続できない（`ENOTFOUND` / `EAI_AGAIN` / `ECONNREFUSED` / `ECONNRESET` / `ETIMEDOUT`。`detail.cause` にその code。v0.16.0 から `fetch failed` の `cause.code` も見る） | `true` |
@@ -451,7 +453,7 @@ houki-egov-mcp の [`src/errors.ts`](src/errors.ts) は family 全体の **リ�
 
 `verify_citations` は、存在しない引用が混ざっていてもツール全体を `isError` にしません。上の表の `code` は `results[]` の 1 件ごとに付き、`LAW_NOT_FOUND` / `ARTICLE_NOT_FOUND` / `INVALID_ARTICLE_NUM` / `OUT_OF_SCOPE` / `INVALID_ARGUMENT` のいずれかです。法令名が完全一致せず候補が複数あった件は `status: "ambiguous"` と `candidates[]` だけを返し、`code` は付きません。
 
-ツール全体がエラーになるのは、引数の形が壊れているとき（`INVALID_ARGUMENT`）と、e-Gov に問い合わせられなかったとき（`SOURCE_*`）と、e-Gov との通信と関係の無い処理中の例外（`INTERNAL_ERROR`。v0.16.0）だけです。e-Gov に問い合わせられなかったときに件ごとの判定を返さないのは、「聞けなかった」を「存在しない」と書かないためです。
+ツール全体がエラーになるのは、引数の形が壊れているとき（`INVALID_ARGUMENT`）と、e-Gov が時点 `at` を受け付けないとき（`INVALID_ARGUMENT`。`at` は全件に共通のため。v0.18.0）と、e-Gov に問い合わせられなかったとき（`SOURCE_*`）と、e-Gov との通信と関係の無い処理中の例外（`INTERNAL_ERROR`。v0.16.0）だけです。e-Gov に問い合わせられなかったときに件ごとの判定を返さないのは、「聞けなかった」を「存在しない」と書かないためです。
 
 ### Migration (v0.2.x → v0.3.0)
 
