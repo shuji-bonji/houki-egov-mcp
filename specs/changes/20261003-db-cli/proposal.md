@@ -260,4 +260,6 @@ houki-research-skill と houki-hub の呼び出し例で直すもの: 2026-10-03
 ## この差分の外で見つけたこと（Issue の候補）
 
 1. **段落だけの附則の行の `article_num` が `Suppl<n>_intro` で、`search_fulltext` は `附則(<n>) intro` と返す。** `xml-parser.ts` は附則に条が無く段落だけのとき `Suppl<n>_intro` の 1 行を作る（SPEC-EGOV-CLI-BULK-DOWNLOAD-012 にも SPEC-EGOV-SEARCH-FULLTEXT-004 にも書かれていない）。`formatArticleNumForDisplay()` は `_` を `の` にしないで `附則(<n>) intro` を返す（コードを読んだだけで、実データの応答では確かめていない）。表示を `附則(<n>)` にするか、仕様に書くかを決める必要がある。0.19.0 は再取り込みがあるので、DB の値を変えるなら同じ版に入れられる
+   → houki-egov-mcp #101（差分 `20261003-db-cli-followup` で 0.19.0 に入れる）
 2. **`HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS` と `HOUKI_EGOV_BULK_RETRY` の値を検査しない。** `src/config.ts` は `Number.parseInt(…) || <既定>` なので、`0` と `abc` は既定値になり、`-5` は `-5` のまま使う（`--sync` は毎回「上限を超えた」になる）。`1.5` は `1`。nta #106 の「不正な日数」と同じ種類なので、表 1 の「値の形が違う」と揃えるかを決める必要がある
+   → houki-egov-mcp #102（差分 `20261003-db-cli-followup` で 0.19.0 に入れる）
