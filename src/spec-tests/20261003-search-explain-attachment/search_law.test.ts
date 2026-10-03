@@ -130,6 +130,28 @@ describe('search_law（20261003-search-explain-attachment）', () => {
     expect(withLimit.body.next_actions[2].example).toEqual({ abbr: '存在しない' });
   });
 
+  it('SPEC-EGOV-SEARCH-LAW-017 一致が 0 件かどうかは e-Gov の total_count で決める（total_count が 1 以上なら results が空でも hint: null・next_actions: []）', async () => {
+    h.setRoute((url) =>
+      url.pathname.endsWith('/laws') ? json({ total_count: 3, count: 0, laws: [] }) : null
+    );
+    const some = await h.call('search_law', { keyword: '架空の題名' });
+    expect(some.isError).toBe(false);
+    expect(some.body.total_count).toBe(3);
+    expect(some.body.results).toEqual([]);
+    expect(some.body.hint).toBeNull();
+    expect(some.body.next_actions).toEqual([]);
+    h.setRoute((url) =>
+      url.pathname.endsWith('/laws') ? json({ total_count: 0, count: 0, laws: [] }) : null
+    );
+    const none = await h.call('search_law', { keyword: '架空の題名2' });
+    expect(none.body.total_count).toBe(0);
+    expect(typeof none.body.hint).toBe('string');
+    expect(none.body.next_actions.map((a: AnyObj) => a.action)).toEqual([
+      'search_fulltext',
+      'resolve_abbreviation',
+    ]);
+  });
+
   it('SPEC-EGOV-SEARCH-LAW-017 hint の名前は e-Gov に渡した law_title（略称なら正式名称）', async () => {
     h.setRoute((url) =>
       url.pathname.endsWith('/laws') ? json({ total_count: 0, count: 0, laws: [] }) : null
