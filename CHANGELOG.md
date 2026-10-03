@@ -15,6 +15,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.19.0] - 2026-10-04
+
+✨ **minor リリース** — 段階 5 のうちローカル DB と CLI（houki-hub `docs/notes/2026-09-29-plan-spec-issues.md`）。仕様 PR [#100](https://github.com/shuji-bonji/houki-egov-mcp/pull/100)（`20261003-db-cli`）/ [#103](https://github.com/shuji-bonji/houki-egov-mcp/pull/103)（`20261003-db-cli-followup`）で承認した差分を実装し、`specs/current/` に取り込んだ。閉じる Issue: #58 #59 #60 #61 #71 #101 #102。
+
+> ⚠️ **DB のスキーマの版を 3 に上げました。0.18.x 以前に作った DB は使えないので、`houki-egov-mcp --bulk-download-everything`（全件の zip 約 290 MB）で作り直してください。**
+>
+> - 作り直すまで、`search_fulltext` は条文本文を検索せずに `search_law` に切り替え、`note` で作り直しを案内します。`--sync`・`--status`・`--bulk-download-by-date` は DB に触れずに終了コード 1 で終わります
+> - 作り直すのは zip の取得に成功した後です。取得に失敗したときは古い DB がそのまま残ります
+> - **0.19.0 で作り直した DB（版 3）を 0.18.x 以前で開くと、版が違うため全テーブルが消えます**（0.18.x 以前の動きで、0.19.0 では直せません）。作り直した後は 0.18.x に戻さないでください。plugin などで版を固定している場合は CLI と同じ版にそろえてください
+> - CLI の引数の誤り（`-` で始まらない引数、フラグの後の余分な引数、数値の環境変数の不正な値）は **終了コード 2** で、何もせずに終わります。スクリプトから呼んでいる場合は終了コードの扱いを確かめてください
+
+### 互換性
+
+応答の `code`（MCP のエラー）は変えない（T2 の互換の扱いは要らない）。応答のフィールドを消す・名前を付け替える変更は無い（T4）。`search_fulltext` の `api-fallback` の応答の `note`・`next_actions` の値が DB の状態で変わり、段落だけの本則・附則のヒットの `article_num`・`caption` が変わる。
+
+**DB の版・作る入口・同期の記録・CLI の引数（`20261003-db-cli`）**
+
+| 場面 | 0.18.x | 0.19.0 | Issue・仕様 ID |
+| --- | --- | --- | --- |
+| 0.18.x 以前に作った DB（版 2）を使う | そのまま使う | `search_fulltext` は `search_law` に切り替え（`note` に作り直しの案内）。`--sync`・`--status`・`--bulk-download-by-date` は終了コード 1。`--bulk-download-everything` で版 3 に作り直す | #60。SPEC-EGOV-DB-SCHEMA-016・025、SPEC-EGOV-SEARCH-FULLTEXT-036・040、SPEC-EGOV-CLI-SYNC-019、SPEC-EGOV-CLI-STATUS-011、SPEC-EGOV-CLI-BULK-DOWNLOAD-029・030 |
+| 0.19.0 で作った DB（版 3）を 0.18.x 以前で開く | — | 0.18.x 以前は版が違うので全テーブルを消す（0.18.x 以前の動き。0.19.0 では直せない）。0.19.0 で作り直した後は 0.18.x に戻さない | #60 |
+| 版が新しい・版を読めない DB | どの入口でも全テーブルを消して作り直す（読めない版は `UNIQUE constraint failed` の例外） | どの入口も書き換えない。CLI は終了コード 1、`search_fulltext` は `search_law` に切り替え | #60・#71。SPEC-EGOV-DB-SCHEMA-025・026 |
+| DB の無い場所で `search_fulltext` / `--status` / `--sync` | フォルダーと空の DB を作る | 作らない。`--status` は `(DB がまだありません — …)` で終了コード 0 | #60。SPEC-EGOV-DB-SCHEMA-015・025、SPEC-EGOV-SEARCH-FULLTEXT-039、SPEC-EGOV-CLI-STATUS-010、SPEC-EGOV-CLI-SYNC-009 |
+| `--bulk-download-by-date` で DB が無い | DB を作って取り込む | `[ERROR] DB がまだありません。…`、終了コード 1 | #60。SPEC-EGOV-CLI-BULK-DOWNLOAD-030 |
+| `--status` の `laws:` | `  laws:     <版の数>` | `  laws:     <法令の数> (版: <版の数>)` | #61。SPEC-EGOV-CLI-STATUS-005・008 |
+| `--status` / `freshness.warning` の日数 | 90 | `HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS` の値（既定 90） | #61。SPEC-EGOV-CLI-STATUS-004、SPEC-EGOV-SEARCH-FULLTEXT-023 |
+| `houki-egov-mcp status` などフラグでない引数 | MCP サーバーとして起動 | `ERROR: 未知の引数: …`、終了コード 2 | #61。SPEC-EGOV-CLI-ENTRY-008 |
+| `--sync --status` などフラグの後の引数 | 最初のフラグだけ実行 | `ERROR: 余分な引数: …`、終了コード 2 | #61。SPEC-EGOV-CLI-ENTRY-009 |
+| `--bulk-download-by-date` の後の `last_sync_date` | 実行した日（UTC） | 変わらない（同期の状態を作らず、書き換えない） | #58。SPEC-EGOV-CLI-BULK-DOWNLOAD-018 |
+| `--bulk-download-by-date` で差分の無い日 | 取り直した後に `[ERROR] HTTP 500 …`、終了コード 1 | `  差分なし (HTTP 500)`、終了コード 0（先に e-Gov に届くかを HEAD で確かめる） | #58。SPEC-EGOV-CLI-BULK-DOWNLOAD-028 |
+| `--bulk-download-everything` の `last_sync_date` | 取り込みを始めた時刻の UTC の日付 | 取得を始めた時刻の日本時間の日付（`last_full_dl_at` も取得を始めた時刻） | #58。SPEC-EGOV-CLI-BULK-DOWNLOAD-017 |
+| `--sync` で差分の無い日 | 1 日 3 回取得 | 1 日 1 回 | #58。SPEC-EGOV-CLI-SYNC-005 |
+| 本則が段落だけの法令（改暦ノ布告など） | 本文の行が無い | `article_num: "MainProvision"`（`search_fulltext` の表示は `本則`）の 1 行 | #59。SPEC-EGOV-CLI-BULK-DOWNLOAD-027、SPEC-EGOV-SEARCH-FULLTEXT-004 |
+| 公布日を作れない法令の `promulgation_date` | `0001-01-01` | `NULL` | #59。SPEC-EGOV-CLI-BULK-DOWNLOAD-011、SPEC-EGOV-DB-SCHEMA-027 |
+
+**段落だけの附則と数値の環境変数（`20261003-db-cli-followup`）**
+
+| 場面 | 0.18.x | 0.19.0 | Issue・仕様 ID |
+| --- | --- | --- | --- |
+| `search_fulltext` の段落だけの附則のヒット | `article_num: "附則(<n>) intro"`、`caption: "附　則"` | `article_num: "附則(<n>)"`、`caption: null` | #101。SPEC-EGOV-CLI-BULK-DOWNLOAD-012、SPEC-EGOV-SEARCH-FULLTEXT-041 |
+| CLI で数値の環境変数が `0`・`abc` | 既定値で動く | `ERROR: <変数名> は 1 以上の整数で指定してください: <値>`、終了コード 2 | #102。SPEC-EGOV-CLI-ENTRY-010 |
+| CLI で数値の環境変数が負の数・小数 | その値（小数は整数部）で動く | 同上、終了コード 2 | #102。SPEC-EGOV-CLI-ENTRY-010 |
+| MCP サーバーで数値の環境変数が不正 | `0`・`abc` は既定値。負の `HOUKI_EGOV_CONCURRENCY` は起動に失敗 | 既定値に置き換え、`[server] 警告: …` を出して起動 | #102。SPEC-EGOV-CLI-ENTRY-011 |
+
+### Added
+
+- **DB の状態ごとの扱い**（SPEC-EGOV-DB-SCHEMA-025）: DB を作る・作り直すのは `--bulk-download-everything` だけ。古い版は取得に成功した後でだけ作り直し、取得の前に `  DB の版 (<版>) が古いため、取得の後で作り直します（取り込んだ中身は消えます）` を出す（#60）
+- **`--bulk-download-by-date` の e-Gov に届くかの確認**と「差分なし」（#58）
+- **CLI の引数の検査**: 未知の引数・余分な引数（#61）、数値の環境変数（#102）
+- **`--help` の `HOUKI_EGOV_CONCURRENCY`**（#102）
+- **受入テスト**: `src/spec-tests/20261003-db-cli/`・`20261003-db-cli-followup/`
+
+### Changed
+
+- **スキーマの版 3**: `laws.law_revision_id` に `NOT NULL`（#71）、`laws.promulgation_date` の `NOT NULL` を外す（#59）、`sync_state.schema_version` 列を外す（#60）
+- 「互換性」の節のとおり。仕様 ID では ADDED 17 件（db-cli 14、db-cli-followup 3）、MODIFIED 22 件（db-cli 20、db-cli-followup 2）、REMOVED 1 件（SPEC-EGOV-DB-SCHEMA-024）
+- README: CLI の節に 0.19.0 の作り直しの案内・環境変数の表・引数の誤り、DB の節に版ごとの扱いの表を足した。tools/list の `search_fulltext` の description、`--help` の使い方、`docs/PHASE2-DESIGN.md` §3 を直した
+
+### Removed
+
+- テストにだけあった全データを消す関数 `clearAllData`。DB の中身を消したいときは DB のファイルを消す（場所は `--status` の `DB:` の行。#60）
+
 ## [0.18.0] - 2026-10-04
 
 ✨ **minor リリース** — 段階 5 のうち法令の引き当て・検索と解説と添付（houki-hub `docs/notes/2026-09-29-plan-spec-issues.md`）。仕様 PR [#95](https://github.com/shuji-bonji/houki-egov-mcp/pull/95)（`20261003-law-resolution`）/ [#96](https://github.com/shuji-bonji/houki-egov-mcp/pull/96)（`20261003-search-explain-attachment`）/ [#99](https://github.com/shuji-bonji/houki-egov-mcp/pull/99)（`20261003-law-type-and-reference-actions`）で承認した差分を実装し、`specs/current/` に取り込んだ。閉じる Issue: #45 #51 #63 #87 #55 #67 #88 #62 #72 #97 #98。
