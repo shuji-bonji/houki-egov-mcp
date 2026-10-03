@@ -3,7 +3,7 @@
 - 対象: `cli_bulk_download` / `search_fulltext` / `cli_entry` の `specs/current/<dir>/spec.md`
 - 実装の変更: 要（下の「実装の変更」）
 - 承認日: 2026-10-03（PR #103）
-- 状態: 草案
+- 状態: 取り込み済み（v0.19.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #101（段落だけの附則が `附則(n) intro` と返る）、#102（`HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS`・`HOUKI_EGOV_BULK_RETRY` の値を検査しない）

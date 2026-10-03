@@ -3,7 +3,7 @@
 - 機能 ID: EGOV
 - 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）。差分 `20261003-search-explain-attachment` は 2026-10-03（PR #96）。差分 `20261003-law-type-and-reference-actions` は 2026-10-03（PR #99）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）。差分 `20261003-search-explain-attachment` は 2026-10-03（PR #96）。差分 `20261003-law-type-and-reference-actions` は 2026-10-03（PR #99）。差分 `20261003-db-cli` は 2026-10-03（PR #100）。差分 `20261003-db-cli-followup` は 2026-10-03（PR #103）
 - 起こした元: v0.15.1 の `src/tools/handlers.ts`（`handleSearchFulltext`）、`src/tools/definitions.ts`、`src/services/law-search.ts`、`src/services/relevance-scoring.ts`、`src/services/freshness.ts`、`src/constants.ts`、`src/tools/handlers.test.ts`、`src/services/law-search.test.ts`、`src/services/relevance-scoring.test.ts`、`src/services/freshness.test.ts`、`src/test-helpers/law-db-fixture.ts`
 - 関連する Issue: houki-egov-mcp #23（2 文字の語の扱いと `scan_body`）
 
@@ -30,7 +30,10 @@
 flowchart TD
   A["呼び出し（keyword・law_type・limit・scan_body）"] --> O{"keyword 全体が houki-egov 以外の管轄の略称か（037）"}
   O -- はい --> E0["OUT_OF_SCOPE を返す。DB も e-Gov も引かない（037）"]
-  O -- いいえ --> B{"ローカル DB に条が 1 件以上あるか"}
+  O -- いいえ --> V{"DB の状態（039・040）"}
+  V -- "ファイルが無い・版の記録が無い" --> FB
+  V -- "版が古い・新しい・読めない" --> FB2["DB を使わずに search_law に切り替え、版に合った note・next_actions を返す（040）"]
+  V -- "版が同じ" --> B{"ローカル DB に条が 1 件以上あるか"}
   B -- 無い --> FB["search_law に切り替え、source: api-fallback と note・next_actions を返す（002）"]
   B -- ある --> C["keyword の全角・大文字を揃え、空白で語に分ける。記号と 1 文字の語は捨てる（005・006）"]
   C --> D{"法令名・略称の語と、それ以外の語が両方あるか。または法令名 + 条番号か"}
@@ -102,8 +105,12 @@ flowchart TD
 `hits[].article_num` は次の形で返す。
 
 - 本則: `30`、枝番号は `30の2`
+- 条を持たず段落だけの本則（SPEC-EGOV-CLI-BULK-DOWNLOAD-027 の `MainProvision` の行）: `本則`
 - 附則: `附則(<法令の中での附則の通し番号>) <条番号>`。例: `附則(3) 1`、`附則(137) 51の2`
+- 条を持たず段落だけの附則: `附則(<n>)`（SPEC-EGOV-SEARCH-FULLTEXT-041）
 - 別表: `別表(<番号>)`。例: `別表(2)`
+
+例: 改暦ノ布告の本則の行に当たったヒットは `article_num: "本則"`、`caption: null`、`chapter_path: null`。
 
 ### SPEC-EGOV-SEARCH-FULLTEXT-005 空白で区切った語は AND で探し、記号と 1 文字の語は捨てる
 
@@ -244,17 +251,17 @@ tools/list の `search_fulltext` の inputSchema は `domain` を持たない（
 
 `source: "bulk"` の応答の `freshness` に、DB を最後に同期した日からの鮮度を入れる。DB に同期の記録が無いときは `null`。
 
-| フィールド        | 内容                                                                                                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `last_sync_date`  | 最後に同期を終えた日（`YYYY-MM-DD`）                                                                                                                                     |
-| `last_full_dl_at` | 最後に全件を取り込んだ日時                                                                                                                                               |
-| `days_since_sync` | `last_sync_date` からの経過日数                                                                                                                                          |
-| `staleness`       | 経過日数が 7 日未満なら `fresh`、30 日未満なら `stale`、30 日以上なら `outdated`                                                                                         |
-| `warning`         | `outdated` のときだけ付く。`bulk DB が <日数> 日前のデータです` と、`houki-egov-mcp --sync`（最終同期から 90 日を超えていれば `--bulk-download-everything`）の実行の案内 |
+| フィールド        | 内容                                                                                                                                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `last_sync_date`  | 最後に同期を終えた日（`YYYY-MM-DD`）                                                                                                                                                                                                       |
+| `last_full_dl_at` | 最後に全件を取り込んだ日時                                                                                                                                                                                                                 |
+| `days_since_sync` | `last_sync_date` からの経過日数                                                                                                                                                                                                            |
+| `staleness`       | 経過日数が 7 日未満なら `fresh`、30 日未満なら `stale`、30 日以上なら `outdated`                                                                                                                                                           |
+| `warning`         | `outdated` のときだけ付く。`bulk DB が <日数> 日前のデータです` と、`houki-egov-mcp --sync`（最終同期から `<上限>` 日を超えていれば `--bulk-download-everything`）の実行の案内。`<上限>` は `HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS` の値（既定 90） |
 
 鮮度が `outdated` でも DB を引いた結果を返す。
 
-例: 最終同期が 1 日前なら `staleness: "fresh"`、`days_since_sync: 1`、`warning` なし。ちょうど 7 日前なら `stale`。38 日前なら `outdated` で、`warning` に `日前` と `bulk-download` を含む。
+例: 最終同期が 1 日前なら `staleness: "fresh"`、`days_since_sync: 1`、`warning` なし。ちょうど 7 日前なら `stale`。38 日前なら `outdated` で、`warning` に `日前` と `bulk-download` を含む。MCP サーバーを `HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS=60` で起動したときは、`warning` に `最終同期から 60 日を超えていれば` を含む（v0.18.x では 90 のまま。CLI の SPEC-EGOV-CLI-STATUS-004 と揃える。#61）。
 
 ### SPEC-EGOV-SEARCH-FULLTEXT-024 limit を省くと 10 件で打ち切る
 
@@ -318,11 +325,13 @@ tools/list の inputSchema の `limit` は `type: "integer"`、`minimum: 1`、`m
 
 例: `sync_state.last_sync_date` を `2026/05/08` に書き換えた DB で `{ keyword: "軽減税率" }` を渡すと、`code: "INTERNAL_ERROR"`、`retryable: false`、`error` に `2026/05/08` を含む。`last_sync_date` が `2026-05-08` の DB では、今までどおり `hits` と `freshness` を返す。
 
-### SPEC-EGOV-SEARCH-FULLTEXT-036 検索語のダッシュ類は `-` に揃えて探し、DB の本文は取り込んだときの版の揃え方のまま
+### SPEC-EGOV-SEARCH-FULLTEXT-036 検索語のダッシュ類は `-` に揃えて探し、版 3 の DB の本文も同じ揃え方で入っている
 
-`keyword` のダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` は `-` に揃えてから探す（houki-abbreviations 0.7.0 の `normalizeJpText`。SPEC-ABBR-NORMALIZE-JP-TEXT-012）。取り込み（`--bulk-download-everything` / `--sync`）が `articles.body` と `laws_fts` に入れる文字列も同じ関数で揃えるので、0.16.0 以降に取り込んだ本文はダッシュ類が `-` で入る。0.16.0 より前に取り込んだ本文は `―` などのままで、0.16.0 では入れ直さない（SPEC-EGOV-DB-SCHEMA-024）。その行は、ダッシュ類を含む検索語では当たらない（`hits: []`。誤った条が当たるのではない）。全件を揃え直すのは、スキーマの版を上げる 0.19.0 の取り込みで行う。
+`keyword` のダッシュ類 `－` `‐` `‑` `–` `—` `―` `−` は `-` に揃えてから探す（houki-abbreviations 0.7.0 の `normalizeJpText`。SPEC-ABBR-NORMALIZE-JP-TEXT-012）。取り込み（`--bulk-download-everything` / `--sync`）が `articles.body` と `laws_fts` に入れる文字列も同じ関数で揃える。
 
-例: 0.16.0 で取り込んだ DB で、本文に `１８３―２` とある条は、`keyword: "183-2"` でも `keyword: "１８３―２"` でも当たる。0.15.4 で取り込んだ DB では、その条の `body` は `183―2` のままなので、`keyword: "183-2"` は `183-2` を探して当たらない。
+0.19.0 はスキーマの版 3 の DB だけを引く（SPEC-EGOV-SEARCH-FULLTEXT-040）。版 3 の DB は 0.19.0 以降の `--bulk-download-everything` で作るので、どの行もダッシュ類が `-` で入っている。0.16.0 より前に取り込んだ `―` などの残る本文（版 2 の DB）は、0.19.0 では引かず、`--bulk-download-everything` で版 3 に作り直したときに揃え直す。
+
+例: 版 3 の DB で、本文に `１８３―２` とある条は、`keyword: "183-2"` でも `keyword: "１８３―２"` でも当たる。0.15.4 で取り込んだ版 2 の DB では、0.19.0 の `search_fulltext` は DB を引かずに SPEC-EGOV-SEARCH-FULLTEXT-040 の `search_law` への切り替えを返す（v0.16.0〜v0.18.x では版 2 の DB を引き、その条は `183-2` で当たらなかった）。
 
 ### SPEC-EGOV-SEARCH-FULLTEXT-037 `keyword` 全体が houki-egov 以外の管轄の略称のときは、DB も e-Gov も引かずに `OUT_OF_SCOPE` を返す
 
@@ -338,10 +347,36 @@ tools/list の `search_fulltext` の inputSchema の `law_type` は、`enum: ["C
 
 例（2026-10-03 10:25 JST に houki-egov-dev 0.17.0 と手元の DB（`last_sync_date: "2026-09-19"`）で確かめた値を元にした）: `{ keyword: "健康保険法施行令", law_type: "ImperialOrder" }` は、`law_type: "ImperialOrder"` の健康保険法施行令（`215IO0000000243`）の条を返す（`law_type` を付けない同じ検索で 3 件当たり、3 件とも `law_type: "ImperialOrder"` だった）。`{ keyword: "健康保険法施行令", law_type: "ImperialOrdinance" }` は `code: "INVALID_ARGUMENT"`（v0.17.0 では `count: 0`・`hits: []` の成功で、勅令で絞れないことが分からなかった）。DB の日本国憲法の `law_type` は `Constitution`（`日本国憲法 第9条` の検索で確かめた）なので、`law_type: "Constitution"` で日本国憲法の条に絞れる。
 
+### SPEC-EGOV-SEARCH-FULLTEXT-039 DB のファイルを作らず、DB に書き込まない
+
+`search_fulltext` は、ローカル DB のファイル・置き場所のフォルダー・テーブル・`schema_meta` を作らず、書き換えない（SPEC-EGOV-DB-SCHEMA-025）。DB のファイルが無いとき（置き場所のフォルダーも無いときを含む）と、ファイルはあるが版の記録が無いときは、SPEC-EGOV-SEARCH-FULLTEXT-002 と同じ形（`note` の先頭は `bulk DL 未実行のため`）で `search_law` に切り替えて返す。パスの途中が普通のファイルで開けないときは、今までどおり SPEC-EGOV-SEARCH-FULLTEXT-027。
+
+例: `HOUKI_EGOV_DB_PATH=<空のフォルダー>/a/laws.db` で `{ keyword: "消費税法" }` を呼ぶと、`source: "api-fallback"`、`note` は `bulk DL 未実行のため` で始まり、`next_actions[0].action: "bulk_download_everything"`。呼んだ後も `<空のフォルダー>/a` は無い（v0.18.x ではフォルダーと空の DB を作り、スキーマを書いた。README の「書き込みは CLI だけが行い、MCP server は読むだけ」と違っていた。#60）。
+
+### SPEC-EGOV-SEARCH-FULLTEXT-040 版が同じでない DB は使わずに search_law に切り替える
+
+DB の版（`schema_meta` の `schema_version`）が 3 でないときは、DB を引かず、作り直さず、SPEC-EGOV-SEARCH-FULLTEXT-002 と同じ形で `search_law` に切り替えて返す。`note` と `next_actions` は DB の状態で変える。
+
+| DB の状態 | `note` の先頭 | `note` の続き | `next_actions` |
+| --- | --- | --- | --- |
+| 版が古い（1・2） | `bulk DB の版 (<DB の版>) がこの houki-egov-mcp (3) より古いため` | SPEC-EGOV-SEARCH-FULLTEXT-002 と同じく、`houki-egov-mcp --bulk-download-everything` で DB を作り直すと本文を検索できること | SPEC-EGOV-SEARCH-FULLTEXT-002 と同じ（1 件目 `bulk_download_everything`、2 件目 `search_law`） |
+| 版が新しい（4 以上の整数） | `bulk DB の版 (<DB の版>) がこの houki-egov-mcp (3) より新しいため` | houki-egov-mcp を新しい版に更新すると本文を検索できること。`--bulk-download-everything` は案内しない | `search_law` の 1 件だけ |
+| 版を読めない | `bulk DB の版を読めないため (schema_version: <値>)` | DB ファイルを消してから `houki-egov-mcp --bulk-download-everything` を実行すると本文を検索できること | `search_law` の 1 件だけ |
+
+どの場合も `fallback` は切り替えた検索の応答そのもので、`source` は `api-fallback`。
+
+例: `schema_version` が `2` の DB（0.18.x 以前で作った DB）で `{ keyword: "適格請求書" }` を呼ぶと、`source: "api-fallback"`、`note` は `bulk DB の版 (2) がこの houki-egov-mcp (3) より古いため、` で始まり `--bulk-download-everything` を含む、`next_actions[0].action: "bulk_download_everything"`。`schema_version` は `2` のまま（v0.18.x の「版が違えば作り直す」を 0.19.0 に残すと、MCP サーバーが全テーブルを消すことになる）。`schema_version` が `4` の DB では `note` が `bulk DB の版 (4) がこの houki-egov-mcp (3) より新しいため、` で始まり、`next_actions` は `[{ action: "search_law", … }]` の 1 件。
+
+### SPEC-EGOV-SEARCH-FULLTEXT-041 段落だけの附則のヒットは `附則(<n>)` と返し、`caption` は `null`
+
+条を持たず段落だけの附則の行（SPEC-EGOV-CLI-BULK-DOWNLOAD-012 の `Suppl<n>_intro`）に当たったヒットは、`article_num` を `附則(<法令の中での附則の通し番号>)`（条番号を付けない）、`caption` を `null`、`chapter_path` を附則の見出し（例: `附　則`）で返す。段落だけの本則の `本則`（SPEC-EGOV-SEARCH-FULLTEXT-004）と同じく、条番号の無い行には条番号を付けない。
+
+例: `{ keyword: "獣医師法施行規則 昭和二十八年九月一日から施行する" }` は `article_num: "附則(2)"`、`caption: null`、`chapter_path: "附　則"` のヒットを返す。同じ法令の条のある附則は今までどおり `附則(7) 1`。v0.18.x では同じ呼び出しが `article_num: "附則(2) intro"`、`caption: "附　則"` を返した（2026-10-03 12:57 JST に houki-egov-dev 0.17.0 の手元の DB で確かめた。#101）。
+
 ## できないこと
 
 - 条文の本文を丸ごと返すこと（`snippet` だけ。本文は `get_law` / `get_law_range`）
-- ローカル DB を作ること・更新すること（CLI の `--bulk-download-everything` / `--sync`）
+- ローカル DB を作ること・作り直すこと・更新すること（CLI の `--bulk-download-everything` / `--sync`。DB のファイルが無くても作らない。SPEC-EGOV-SEARCH-FULLTEXT-039）
 - 分野で絞ること（`domain` の引数は無い。SPEC-EGOV-SEARCH-FULLTEXT-022）
 - 漢数字の「第三十条」を条番号として扱うこと（本文の語として探す）
 - 1 文字の語で探すこと

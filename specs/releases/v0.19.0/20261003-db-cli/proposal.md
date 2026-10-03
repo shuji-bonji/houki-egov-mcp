@@ -3,7 +3,7 @@
 - 対象: `db_schema` / `cli_entry` / `cli_bulk_download` / `cli_sync` / `cli_status` / `search_fulltext` の `specs/current/<dir>/spec.md`
 - 実装の変更: 要（下の「実装の変更」）
 - 承認日: 2026-10-03（PR #100）
-- 状態: 草案
+- 状態: 取り込み済み（v0.19.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #58（`last_sync_date` の決め方と差分の無い日）、#59（段落だけの本則と公布日）、#60（DB を作る・作り直す・消す場面）、#61（CLI の引数の検査と `--status` の表示）、#71（`laws.law_revision_id` の `NOT NULL` と版を読めない DB）

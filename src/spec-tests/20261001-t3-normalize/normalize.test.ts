@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSchemaVersion, initSchema } from '../../db/schema.js';
+import { initSchema } from '../../db/schema.js';
 import { ingestZip } from '../../services/bulk/ingester.js';
 import { createMemoryZip } from '../../services/bulk/zip-reader.js';
 import {
@@ -364,21 +364,6 @@ describe('search_fulltext と db_schema のダッシュ類 (20261001-t3-normaliz
       );
     } finally {
       vi.unstubAllGlobals();
-    }
-  });
-
-  it('SPEC-EGOV-DB-SCHEMA-024 版 2 の DB を 0.16.0 で開いても schema_version は 2 のままで、既存の行の本文は書き換えない', async () => {
-    const db = new Database(legacy);
-    try {
-      expect(getSchemaVersion(db)).toBe(2);
-      const row = db
-        .prepare('SELECT body FROM articles WHERE law_revision_id = ?')
-        .get(DASH_REV) as {
-        body: string;
-      };
-      expect(row.body).toContain('183―2');
-    } finally {
-      db.close();
     }
   });
 });
