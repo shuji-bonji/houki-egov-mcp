@@ -199,4 +199,6 @@ houki-research-skill で直すもの: `skills/houki-research/workflows/feasibili
 ## この差分の外で見つけたこと（Issue の候補）
 
 1. **`search_law` / `search_fulltext` の `law_type` の enum の `ImperialOrdinance` を e-Gov が受け付けない。** e-Gov の値は `ImperialOrder`（`/laws?law_type=ImperialOrdinance` は 400・`400001`）。houki-egov-dev 0.17.0 で `search_law { keyword: "健康保険法", law_type: "ImperialOrdinance" }` を呼ぶと `SOURCE_API_ERROR`（`retryable: false`）になった（2026-10-03 10:19 JST）。応答の `results[].law_type` には `ImperialOrder` が入る。取り込み（`src/services/bulk/ingester.ts`）も `勅令: 'ImperialOrder'` を使っている。enum を `ImperialOrder` に直すか、両方を受けて e-Gov には `ImperialOrder` を渡すかを決める必要がある
+   https://github.com/shuji-bonji/houki-egov-mcp/issues/97
 2. **`get_article_references` で、条番号の付かない他法令の参照の `next_actions` が、呼んだ条の番号を参照先の法令の条として案内する。** `{ law_name: "所得税法施行規則", article: "3" }` の参照 `日本国との平和条約に基づき日本の国籍を離脱した者等の出入国管理に関する特例法（平成三年法律第七十一号）`（`article` 無し）から、`{ action: "get_law", example: { law_name: "日本国との平和条約…特例法", article: "3" } }` が作られた（2026-10-03 10:14 JST、houki-egov-dev 0.17.0）。SPEC-EGOV-GET-ARTICLE-REFERENCES-015 の「条を持たない internal は、指定した条」の規則が external にも当たっている
+   https://github.com/shuji-bonji/houki-egov-mcp/issues/98
