@@ -49,10 +49,12 @@ vi.mock('./egov-client.js', async (importOriginal) => {
     getLawData: async (lawId: string) => {
       const title = Object.keys(LAWS).find((k) => LAWS[k].law_id === lawId);
       if (!title) {
+        // e-Gov は「その法令が無い」を 404 と本文の code 404004 で返す（SPEC-EGOV-VERIFY-CITATIONS-015）
         throw new mod.EgovHttpError(
           404,
           `https://laws.e-gov.go.jp/api/2/law_data/${lawId}`,
-          'Not Found'
+          'Not Found',
+          '{"code":"404004","message":"指定のパラメータで取得できる法令本文ファイルは存在しません。"}'
         );
       }
       return {
@@ -187,6 +189,7 @@ describe('verifyCitations', () => {
       num: '57_2',
       label: '第57条の2',
       caption: '（給与所得者の特定支出の控除の特例）',
+      suppl_index: null,
     });
     expect(full.paragraph).toBe(2);
     expect(full.item).toBe('1');

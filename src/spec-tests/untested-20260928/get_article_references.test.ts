@@ -375,10 +375,16 @@ describe('get_article_references（差分 20260928-untested-behaviors）', () =>
     expect(r.coverage).toEqual(base.coverage);
   });
 
-  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-031 委任先の法令が e-Gov に無ければ target_law を付けず、search_fulltext を作らない', async () => {
+  it('SPEC-EGOV-GET-ARTICLE-REFERENCES-031 委任先の法令が e-Gov に無ければ target_law: null（キーは消さない）で、search_fulltext を作らない', async () => {
     const r = await ok({ law_name: '民法', article: '1' });
     expect(r.delegations).toEqual([
-      { kind: 'delegation', raw: '政令で定める', count: 1, target: 'enforcement_order' },
+      {
+        kind: 'delegation',
+        raw: '政令で定める',
+        count: 1,
+        target: 'enforcement_order',
+        target_law: null,
+      },
     ]);
     expect(r.next_actions).toEqual([]);
   });

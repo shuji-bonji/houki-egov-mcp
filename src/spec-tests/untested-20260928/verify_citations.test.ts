@@ -164,7 +164,13 @@ function defaultResponse(url: URL): Response {
   const m = path.match(/\/law_data\/([^/]+)$/);
   if (m) {
     const law = LAWS.find((l) => l.law_id === decodeURIComponent(m[1]));
-    if (!law) return json({ code: '404001', message: 'Not Found' }, 404);
+    // e-Gov は law_id の無い法令本文を 404・404004 で返す（2026-10-03 JST に確かめた値。SPEC-EGOV-VERIFY-CITATIONS-015）
+    if (!law) {
+      return json(
+        { code: '404004', message: '指定のパラメータで取得できる法令本文ファイルは存在しません。' },
+        404
+      );
+    }
     const asof = url.searchParams.get('asof');
     const tree = asof && law.treeAt?.[asof] ? law.treeAt[asof] : law.tree;
     return json({
@@ -371,7 +377,7 @@ describe('found 以外の件の next_actions', () => {
     ]);
   });
 
-  it('SPEC-EGOV-VERIFY-CITATIONS-027 部分一致の候補がある件と e-Gov が知らない law_id の件は search_law の 1 件', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-027 SPEC-EGOV-VERIFY-CITATIONS-015 部分一致の候補がある件と e-Gov が知らない law_id の件は search_law の 1 件', async () => {
     const res = await ok({
       citations: [
         { law_name: '所得税法施行', article: '1' },
@@ -390,7 +396,7 @@ describe('found 以外の件の next_actions', () => {
     ]);
   });
 
-  it('SPEC-EGOV-VERIFY-CITATIONS-027 e-Gov が知らない law_id の件に law_name があれば search_law の keyword は law_name', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-027 SPEC-EGOV-VERIFY-CITATIONS-015 e-Gov が知らない law_id の件に law_name があれば search_law の keyword は law_name', async () => {
     const res = await ok({
       citations: [{ law_name: '所得税法', law_id: '999AC0000000999', article: '1' }],
     });
@@ -402,7 +408,7 @@ describe('found 以外の件の next_actions', () => {
     ]);
   });
 
-  it('SPEC-EGOV-VERIFY-CITATIONS-027 同じ未知の law_id が law_name の有無で並んでも、keyword は件ごとに決まる', async () => {
+  it('SPEC-EGOV-VERIFY-CITATIONS-027 SPEC-EGOV-VERIFY-CITATIONS-015 同じ未知の law_id が law_name の有無で並んでも、keyword は件ごとに決まる', async () => {
     const res = await ok({
       citations: [
         { law_id: '999AC0000000999', article: '1' },

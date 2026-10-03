@@ -89,14 +89,16 @@ describe('get_law の json の paragraph_num と item_num（20261003-t4-response
     expect(s.data.node.attr.Num).toBe('2');
   });
 
-  it('SPEC-EGOV-GET-LAW-024 paragraph・item を渡さないと paragraph_num・item_num は null（キーはある）', async () => {
+  it('SPEC-EGOV-GET-LAW-024 SPEC-EGOV-GET-LAW-043 paragraph・item を渡さないと paragraph_num・item_num は null（キーはある。本則の条の suppl_index も null）', async () => {
     const r = await json({ article: '2' });
     expect(Object.keys(r.data).sort()).toEqual([
       'article_num',
       'item_num',
       'node',
       'paragraph_num',
+      'suppl_index',
     ]);
+    expect(r.data.suppl_index).toBeNull();
     expect(r.data.paragraph_num).toBeNull();
     expect(r.data.item_num).toBeNull();
     const p = await json({ article: '2', paragraph: 2 });
