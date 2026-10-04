@@ -7,14 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Documentation
-
-- README: ローカル DB の節に、起動のしかた（plugin・MCP の設定ファイルに書いたサーバー・ターミナルの CLI）ごとに開く DB の表を足した。plugin は `env` を持たないので既定の `laws.db` を開き、`HOUKI_EGOV_DB_PATH` を付けずに実行した CLI は plugin と同じ `laws.db` を作る・更新する
-- README: CLI の例を、どのフォルダーからでも動く `npx -y @shuji-bonji/houki-egov-mcp@latest <フラグ>` に直した（`houki-egov-mcp <フラグ>` はグローバルにインストールしたときだけ、`npx houki-egov-mcp` は 404）。MCP の設定ファイルの例も `@latest` にした
-- README: 「日々の更新と作り直し」（`--sync` と `--bulk-download-everything` の使い分け）、「`search_fulltext` が `api-fallback` になるとき」（`note` の先頭ごとの原因と確かめ方）、「別のファイルで作った DB を `laws.db` に移す」（`PRAGMA wal_checkpoint(TRUNCATE)` の後に名前を変える。取り込み直しは不要）を足した
-- CONTRIBUTING.md: 「ローカル DB を使う開発」を足した。古いコミットや DB の版を上げる変更を試すときは `HOUKI_EGOV_DB_PATH` を別のファイル（例: `laws.dev.db`）に向ける
-- `--help`: どのフォルダーからでも動く `npx -y @shuji-bonji/houki-egov-mcp@latest <フラグ>` の形と、`HOUKI_EGOV_DB_PATH` を付けない CLI が plugin と同じ `laws.db` を扱うことを書いた。`--sync` の行に「ふだんの更新はこのコマンド」を足した
-
 ### In progress (Phase 2 — 残作業)
 
 - Phase 2-13: API enrichment（`category` / `revisions_meta` / PreviousEnforced・Repeal の精緻化）
@@ -22,6 +14,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Planned (Phase 1 磨き込み — 痛点ログ駆動 / Phase 2 着手前から残置)
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
+
+## [0.19.1] - 2026-10-04
+
+🐛 **patch リリース** — 段階 6 の段階 1（houki-hub `docs/notes/2026-10-04-plan-stage6-and-followups.md`）。仕様 PR [#112](https://github.com/shuji-bonji/houki-egov-mcp/pull/112)（`20261004-ingest-redistributed-revisions`）で承認した差分を実装し、`specs/current/` に取り込みました。閉じる Issue: #107。
+
+> ⚠️ **0.19.0 で 2026-10-04 以降に `--sync` した DB は、0.19.1 に上げた後に `houki-egov-mcp --bulk-download-everything` を 1 回実行してください。** 施行日を過ぎても未施行のまま残った版の状態を直します（条の本文は入れ直しません。全件の zip 約 290 MB を取得します）。0.19.1 の `--sync` や `--status` が `[WARN] 施行日が last_sync_date …` を出したときも同じです。
+>
+> - DB のスキーマの版（3）と `INGEST_VERSION`（2）は変えていません。0.19.0 の DB をそのまま使えます。全件の入れ直しは起きません
+> - このコマンドが要る DB の正確な範囲（`--sync` だけで直る場合）は [docs/NOTES.md](docs/NOTES.md) にあります
+
+### 互換性
+
+MCP のツールの応答（フィールド・`code`・`note`・`next_actions`）は変えていません。`search_fulltext` が返す版が、施行日を過ぎた法令で正しい現行の版になるだけです。CLI の既存の行の形と終了コードも変えず、新しい行は条件を満たすときだけ出します。
+
+| 場面 | 0.19.0 | 0.19.1 | 仕様 ID |
+| --- | --- | --- | --- |
+| 施行日の当日の差分で、同じ XML の版が未施行の欄を空にして届く | `unchanged`。`UnEnforced` のまま、古い版が `CurrentEnforced` のまま | `unchanged` に数えたまま、状態だけを `CurrentEnforced` にし、古い版を `PreviousEnforced` にします | SPEC-EGOV-CLI-BULK-DOWNLOAD-014・016・031、SPEC-EGOV-CLI-SYNC-006 |
+| 0.19.0 で状態が残った DB に `--bulk-download-everything` | 直りません（XML が同じなので全件 `unchanged`） | 直ります（031・033）。条の本文は入れ直しません | SPEC-EGOV-CLI-BULK-DOWNLOAD-031・033 |
+| 取り込みの表示 | — | `status_changed` が 1 以上のとき `  状態の更新: <n> 件 (…)` の行が増えます | SPEC-EGOV-CLI-BULK-DOWNLOAD-032、SPEC-EGOV-CLI-SYNC-020 |
+| `--sync`・`--status` で、施行日が `last_sync_date` より前の `UnEnforced` の版がある | 何も出しません | `[WARN] 施行日が last_sync_date (…) より前なのに未施行 (UnEnforced) のままの版が <n> 件あります。…` の行を出します。終了コードは変わりません | SPEC-EGOV-CLI-SYNC-021、SPEC-EGOV-CLI-STATUS-012 |
+
+0.19.0 の DB に 0.19.1 の `--bulk-download-everything` を実行したときの取り込みの件数の出力の例です。
+
+<!-- 仮の値。publish の前の確認の 3（shuji の Mac の DB のコピー）の実測の値に置き換える -->
+```
+  ingest 完了: 0 件 upsert, 10414 件 unchanged (2m10s)
+  状態の更新: 5 件 (条の本文はそのまま、未施行 (UnEnforced) だった版の状態だけを書き換え)
+```
+
+### Fixed
+
+- **施行日の当日に配り直される版の状態**（#107）: e-Gov は施行日の当日の差分に、公布の日に未施行として配った版を、同じ版の ID・同じ XML のまま未施行の欄を空にしてもう一度入れます。0.19.0 はこの版を `unchanged` として飛ばしていたので、施行日を過ぎても版が `UnEnforced` のまま、同じ法令の古い版が `CurrentEnforced` のまま残り、`search_fulltext` が改正前の条文を返し続けていました。0.19.1 は状態だけを `CurrentEnforced` にし、同じ法令の現行の版を 1 つにそろえます（SPEC-EGOV-CLI-BULK-DOWNLOAD-031・016）
+- **全件の取り込みで、置き換わった未施行の版を前の版にする**（#107）: `--bulk-download-everything` は、全件の CSV に無い `UnEnforced` の版のうち、同じ法令の現行の版の施行日以前のものを `PreviousEnforced` にします（SPEC-EGOV-CLI-BULK-DOWNLOAD-033）。`--bulk-download-by-date` と `--sync` はこの処理をしません
+
+### Added
+
+- **状態の更新の行**: `--bulk-download-everything`・`--bulk-download-by-date`・`--sync` で状態だけを書き換えた版があれば、`  状態の更新: <n> 件 (条の本文はそのまま、未施行 (UnEnforced) だった版の状態だけを書き換え)` を出します（SPEC-EGOV-CLI-BULK-DOWNLOAD-032・SPEC-EGOV-CLI-SYNC-020）
+- **施行日を過ぎた未施行の版の `[WARN]`**: `--sync`（終わったとき）と `--status` で、施行日が `last_sync_date` より前（同じ日を含まない）の `UnEnforced` の版を数え、1 件以上なら `--bulk-download-everything` を案内します（SPEC-EGOV-CLI-SYNC-021・SPEC-EGOV-CLI-STATUS-012）
+- `IngestResult.status_changed`（状態だけを書き換えた版の数）と `IngestZipOptions.fullSnapshot`（全件の取り込みであることを示します。`--bulk-download-everything` だけが `true` を渡します）
+- **受入テスト**: `src/spec-tests/20261004-ingest-redistributed-revisions/`（医師法施行規則の 4 版の fixture）
+
+### Changed
+
+- 仕様 ID では ADDED 6 件（SPEC-EGOV-CLI-BULK-DOWNLOAD-031・032・033、SPEC-EGOV-CLI-SYNC-020・021、SPEC-EGOV-CLI-STATUS-012）、MODIFIED 4 件（SPEC-EGOV-CLI-BULK-DOWNLOAD-011・014・016、SPEC-EGOV-CLI-SYNC-006）です。施行日の前日の差分に未施行の欄が空で届く版は、今までどおり e-Gov の CSV に従って現行にします（011 に明記しました）
+
+### Documentation
+
+- README: 「0.19.0 で 2026-10-04 以降に `--sync` した DB は、0.19.1 で 1 回取り込み直してください」の節と、「日々の更新と作り直し」の表に `[WARN]` の行を足した。正確な範囲は新しい `docs/NOTES.md` に書いた
+- README: ローカル DB の節に、起動のしかた（plugin・MCP の設定ファイルに書いたサーバー・ターミナルの CLI）ごとに開く DB の表を足した。plugin は `env` を持たないので既定の `laws.db` を開き、`HOUKI_EGOV_DB_PATH` を付けずに実行した CLI は plugin と同じ `laws.db` を作る・更新する
+- README: CLI の例を、どのフォルダーからでも動く `npx -y @shuji-bonji/houki-egov-mcp@latest <フラグ>` に直した（`houki-egov-mcp <フラグ>` はグローバルにインストールしたときだけ、`npx houki-egov-mcp` は 404）。MCP の設定ファイルの例も `@latest` にした
+- README: 「日々の更新と作り直し」（`--sync` と `--bulk-download-everything` の使い分け）、「`search_fulltext` が `api-fallback` になるとき」（`note` の先頭ごとの原因と確かめ方）、「別のファイルで作った DB を `laws.db` に移す」（`PRAGMA wal_checkpoint(TRUNCATE)` の後に名前を変える。取り込み直しは不要）を足した
+- CONTRIBUTING.md: 「ローカル DB を使う開発」を足した。古いコミットや DB の版を上げる変更を試すときは `HOUKI_EGOV_DB_PATH` を別のファイル（例: `laws.dev.db`）に向ける
+- `--help`: どのフォルダーからでも動く `npx -y @shuji-bonji/houki-egov-mcp@latest <フラグ>` の形と、`HOUKI_EGOV_DB_PATH` を付けない CLI が plugin と同じ `laws.db` を扱うことを書いた。`--sync` の行に「ふだんの更新はこのコマンド」を足した
 
 ## [0.19.0] - 2026-10-04
 
