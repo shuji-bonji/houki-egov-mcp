@@ -15,12 +15,11 @@
  */
 
 import { existsSync, mkdirSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
 import type DatabaseT from 'better-sqlite3';
 import Database from 'better-sqlite3';
 
-import { BULK_CONFIG } from '../config.js';
+import { type DbLocation, guideCommand, resolveDbLocation } from './location.js';
 import { initSchema, readSchemaVersion, recreateSchema, SCHEMA_VERSION } from './schema.js';
 
 /**
@@ -30,12 +29,12 @@ import { initSchema, readSchemaVersion, recreateSchema, SCHEMA_VERSION } from '.
  *  1. `HOUKI_EGOV_DB_PATH` (BULK_CONFIG.dbPath)
  *  2. `XDG_CACHE_HOME/houki-egov-mcp/laws.db`
  *  3. `~/.cache/houki-egov-mcp/laws.db`
+ *
+ * `HOUKI_EGOV_DB_PATH` の値はそのまま返す（CLI の `  DB: ` の行と同じ）。
+ * 設定の名前と絶対パスは `resolveDbLocation()`（SPEC-EGOV-DB-SCHEMA-028）
  */
 export function defaultDbPath(): string {
-  if (BULK_CONFIG.dbPath) return BULK_CONFIG.dbPath;
-  const xdg = process.env.XDG_CACHE_HOME;
-  const cacheRoot = xdg && xdg.length > 0 ? xdg : resolve(homedir(), '.cache');
-  return resolve(cacheRoot, 'houki-egov-mcp', 'laws.db');
+  return resolveDbLocation().path;
 }
 
 /** DB の状態（SPEC-EGOV-DB-SCHEMA-025 の表の行） */
@@ -183,16 +182,22 @@ export function openDbForFullIngest(dbPath?: string): DatabaseT.Database {
 
 /**
  * 版が今の版でない DB の CLI のエラーの文（SPEC-EGOV-DB-SCHEMA-025 の表）。
- * 古い版・新しい版・読めない版以外の状態では null
+ * 古い版・新しい版・読めない版以外の状態では null。
+ * コマンドは案内のコマンドの形（SPEC-EGOV-DB-SCHEMA-029）、`dbPath` は `  DB: ` の行と同じ値
  */
-export function dbStateErrorMessage(state: DbState, dbPath: string): string | null {
+export function dbStateErrorMessage(
+  state: DbState,
+  dbPath: string,
+  location: DbLocation = resolveDbLocation()
+): string | null {
+  const command = guideCommand('--bulk-download-everything', location);
   switch (state.kind) {
     case 'old':
-      return `[ERROR] DB の版 (${state.version}) が古いため使えません。houki-egov-mcp --bulk-download-everything で作り直してください（取り込んだ中身は消え、全件の zip 約 290 MB を取り直します）`;
+      return `[ERROR] DB の版 (${state.version}) が古いため使えません。${command} で作り直してください（取り込んだ中身は消え、全件の zip 約 290 MB を取り直します）`;
     case 'new':
       return `[ERROR] DB の版 (${state.version}) がこの houki-egov-mcp の版 (${SCHEMA_VERSION}) より新しいため、DB を変更しません。houki-egov-mcp を新しい版に更新するか、HOUKI_EGOV_DB_PATH で別のファイルを指定してください`;
     case 'unreadable':
-      return `[ERROR] DB の版を読めないため (schema_version: ${state.value})、DB を変更しません。DB ファイル (${dbPath}) を消してから houki-egov-mcp --bulk-download-everything を実行してください`;
+      return `[ERROR] DB の版を読めないため (schema_version: ${state.value})、DB を変更しません。DB ファイル (${dbPath}) を消してから ${command} を実行してください`;
     default:
       return null;
   }
@@ -205,6 +210,15 @@ export function closeDb(db: DatabaseT.Database): void {
   }
 }
 
+export {
+  type DbLocation,
+  type DbLocationSetting,
+  dbLocationForPath,
+  displayDbPath,
+  guideCommand,
+  resolveDbLocation,
+  shellPath,
+} from './location.js';
 export {
   getSchemaVersion,
   initSchema,

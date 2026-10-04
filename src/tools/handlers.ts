@@ -8,7 +8,16 @@
 
 import { resolveAbbreviation } from '@shuji-bonji/houki-abbreviations';
 import { LIMITS } from '../constants.js';
-import { closeDb, type DbState, defaultDbPath, openUsableDb, SCHEMA_VERSION } from '../db/index.js';
+import {
+  closeDb,
+  type DbLocation,
+  type DbState,
+  dbLocationForPath,
+  guideCommand,
+  openUsableDb,
+  resolveDbLocation,
+  SCHEMA_VERSION,
+} from '../db/index.js';
 import { type LawServiceError, makeError, NEXT_ACTIONS } from '../errors.js';
 import { findLawHierarchy, listLawHierarchyNames } from '../knowledge/law-hierarchy.js';
 import { type FreshnessInfo, SyncDateError, summarizeFreshness } from '../services/freshness.js';
@@ -181,7 +190,7 @@ const DOMAIN_NOT_APPLIED_NOTE =
  * 3. `searchLawsInDb` (articles_fts + laws_fts → JOIN laws → scoring → limit)
  * 4. freshness を付与 (outdated でも DB 結果を返す。API に倒さない)
  *
- * `deps.dbPath` はテスト用の注入口。
+ * `deps.dbPath` はテスト用の注入口。`HOUKI_EGOV_DB_PATH` にそのパスを指定したときと同じに扱う。
  */
 export async function handleSearchFulltext(
   args: SearchFulltextArgs,
@@ -198,7 +207,8 @@ export async function handleSearchFulltext(
 
   // DB のファイル・フォルダー・テーブル・版の記録を作らず、読むだけで開く（SPEC-EGOV-SEARCH-FULLTEXT-039）。
   // 版が今の版でない DB は引かず、作り直さない（SPEC-EGOV-SEARCH-FULLTEXT-040）
-  const dbPath = deps.dbPath ?? defaultDbPath();
+  const location = deps.dbPath !== undefined ? dbLocationForPath(deps.dbPath) : resolveDbLocation();
+  const dbPath = location.path;
   const { state, db } = openUsableDb(dbPath, { readonly: true });
   if (!db) {
     if (state.kind === 'error') {
@@ -227,7 +237,7 @@ export async function handleSearchFulltext(
     try {
       freshness = summarizeFreshness(db);
     } catch (err) {
-      if (err instanceof SyncDateError) return syncDateError(err);
+      if (err instanceof SyncDateError) return syncDateError(err, location);
       throw err;
     }
 
@@ -253,11 +263,12 @@ export async function handleSearchFulltext(
 
 /**
  * 同期の記録の日付を解釈できないとき（SPEC-EGOV-COMMON-ERRORS-031・SPEC-EGOV-SEARCH-FULLTEXT-035）。
- * 時間をおいても DB の値は変わらないので retryable: false。CLI を案内する action の名前が無いので next_actions は付けない
+ * 時間をおいても DB の値は変わらないので retryable: false。CLI を案内する action の名前が無いので next_actions は付けない。
+ * hint のコマンドは案内のコマンドの形（SPEC-EGOV-DB-SCHEMA-029）
  */
-function syncDateError(err: SyncDateError): LawServiceError {
+function syncDateError(err: SyncDateError, location: DbLocation): LawServiceError {
   return makeError('INTERNAL_ERROR', `同期の記録の日付を読めません: ${err.value}`, {
-    hint: '`houki-egov-mcp --bulk-download-everything` で全件を取り込み直し、同期の記録を作り直してください',
+    hint: `\`${guideCommand('--bulk-download-everything', location)}\` で全件を取り込み直し、同期の記録を作り直してください`,
     retryable: false,
     detail: { cause: err.message },
   });

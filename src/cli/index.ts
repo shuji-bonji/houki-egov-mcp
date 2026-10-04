@@ -28,6 +28,7 @@ import {
   type DbState,
   dbStateErrorMessage,
   defaultDbPath,
+  guideCommand,
   inspectDb,
   openDbForFullIngest,
   openUsableDb,
@@ -531,7 +532,7 @@ async function runStatus(): Promise<CliResult> {
       // 同期の記録の日付を解釈できないときは例外のまま終わらない（SPEC-EGOV-CLI-STATUS-009）
       if (!(err instanceof SyncDateError)) throw err;
       console.error(
-        `[ERROR] 同期の記録を読めません: ${err.value}（houki-egov-mcp --bulk-download-everything で作り直してください）`
+        `[ERROR] 同期の記録を読めません: ${err.value}（${guideCommand('--bulk-download-everything')} で作り直してください）`
       );
       return { exitCode: 1, command: 'status' };
     }
