@@ -21,8 +21,10 @@ e-Gov は、改正が公布された日の差分に、施行日ごとの版を�
 0.19.0 のまま、施行日の翌日以降まで `--sync` を進めた DB は、その施行日の差分をもう取り込まないので、0.19.1 の `--sync` では直りません。この DB では、0.19.1 の `--sync` と `--status` が次の行を出します。
 
 ```
-[WARN] 施行日が last_sync_date (<last_sync_date>) より前なのに未施行 (UnEnforced) のままの版が <件数> 件あります。houki-egov-mcp --bulk-download-everything を 1 回実行すると直ります（全件の zip 約 290 MB を取得します。条の本文は入れ直しません）
+[WARN] 施行日が last_sync_date (<last_sync_date>) より前なのに未施行 (UnEnforced) のままの版が <件数> 件あります。<コマンド> を 1 回実行すると直ります（全件の zip 約 290 MB を取得します。条の本文は入れ直しません）
 ```
+
+`<コマンド>` は、0.20.0 から `npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything` の形です。`HOUKI_EGOV_DB_PATH` か `XDG_CACHE_HOME` で DB の場所を決めて実行したときは、同じ変数を前に付けた形になります（0.19.1 では `houki-egov-mcp --bulk-download-everything`）。
 
 `--bulk-download-everything` は、全件の zip の CSV で未施行の欄が空の版を現行にし、全件の zip に入っていない未施行の版（施行されて次の版に置き換わった版）のうち、同じ法令の現行の版の施行日以前のものを前の版（`PreviousEnforced`）にします。条の本文と全文検索の索引は入れ直しません。
 

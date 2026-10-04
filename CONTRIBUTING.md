@@ -111,7 +111,7 @@ Skill の書き方は本プロジェクトのスコープ外ですが、作っ�
 ```bash
 export HOUKI_EGOV_DB_PATH=~/.cache/houki-egov-mcp/laws.dev.db
 node dist/index.js --bulk-download-everything
-node dist/index.js --status   # 2 行目の「DB:」が laws.dev.db であることを確かめる
+node dist/index.js --status   # 2 行目の「DB:」が laws.dev.db、3 行目の「DB の場所の設定:」が HOUKI_EGOV_DB_PATH であることを確かめる
 ```
 
 ```json
