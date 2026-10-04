@@ -335,8 +335,7 @@ describe('DB の状態と入口ごとの扱い', () => {
     process.env.HOUKI_EGOV_DB_PATH = dbPath;
     seedVersionedDb(dbPath, '2');
     const egov = stubEgov({ head: 200, days: {} });
-    const OLD =
-      '[ERROR] DB の版 (2) が古いため使えません。houki-egov-mcp --bulk-download-everything で作り直してください（取り込んだ中身は消え、全件の zip 約 290 MB を取り直します）';
+    const OLD = `[ERROR] DB の版 (2) が古いため使えません。HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything で作り直してください（取り込んだ中身は消え、全件の zip 約 290 MB を取り直します）`;
     for (const args of [['--sync'], ['--bulk-download-by-date', '20260917'], ['--status']]) {
       out.stderr.length = 0;
       expect((await runCliWith(args)).exitCode, args.join(' ')).toBe(1);
@@ -356,7 +355,7 @@ describe('DB の状態と入口ごとの扱い', () => {
     expect(lines(out.stdout)).toHaveLength(2);
     expect(lines(out.stdout)[1]).toBe(`  DB: ${dbPath}`);
     expect(lines(out.stderr)).toEqual([
-      `[ERROR] DB の版を読めないため (schema_version: abc)、DB を変更しません。DB ファイル (${dbPath}) を消してから houki-egov-mcp --bulk-download-everything を実行してください`,
+      `[ERROR] DB の版を読めないため (schema_version: abc)、DB を変更しません。DB ファイル (${dbPath}) を消してから HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything を実行してください`,
     ]);
     expect(snapshot(dbPath).schemaVersion).toBe('abc');
   });

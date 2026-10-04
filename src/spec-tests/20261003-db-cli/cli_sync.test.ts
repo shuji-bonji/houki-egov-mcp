@@ -117,7 +117,7 @@ describe('cli_sync（差分 20261003-db-cli）', () => {
     expect(egov.fn).not.toHaveBeenCalled();
   });
 
-  it('SPEC-EGOV-CLI-SYNC-019 版 2 の DB では 2 行の後に古い版のエラーを出して exit 1、DB は変わらない', async () => {
+  it('SPEC-EGOV-CLI-SYNC-019 版 2 の DB では 2 行の後に古い版のエラー（SPEC-EGOV-DB-SCHEMA-025 の文）を出して exit 1、DB は変わらない', async () => {
     mkdirSync(join(env.root, 'db'));
     seedVersionedDb(dbPath, '2');
     const egov = stubEgov({ head: 200, days: {} });
@@ -125,7 +125,7 @@ describe('cli_sync（差分 20261003-db-cli）', () => {
     expect(lines(out.stderr)).toEqual([
       '[sync] 差分同期',
       `  DB: ${dbPath}`,
-      '[ERROR] DB の版 (2) が古いため使えません。houki-egov-mcp --bulk-download-everything で作り直してください（取り込んだ中身は消え、全件の zip 約 290 MB を取り直します）',
+      `[ERROR] DB の版 (2) が古いため使えません。HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything で作り直してください（取り込んだ中身は消え、全件の zip 約 290 MB を取り直します）`,
     ]);
     expect(egov.fn).not.toHaveBeenCalled();
     const s = snapshot(dbPath);

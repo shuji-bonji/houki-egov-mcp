@@ -24,7 +24,8 @@ import {
 } from '../../test-helpers/mcp-harness.js';
 import { handleSearchFulltext } from '../../tools/handlers.js';
 
-const BULK_HINT_COMMAND = 'houki-egov-mcp --bulk-download-everything';
+/** 案内のコマンド（SPEC-EGOV-DB-SCHEMA-029）。HOUKI_EGOV_DB_PATH で決めたときは、この前に変数が付く */
+const BULK_HINT_COMMAND = 'npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything';
 
 /** 取り込み済みの DB を作り、sync_state.last_sync_date を書き換える */
 async function seedWithSyncDate(path: string, lastSyncDate: string): Promise<void> {
@@ -119,7 +120,7 @@ describe('同期の記録の日付を解釈できない (20261001-t2-error-codes
     }
   }
 
-  it('SPEC-EGOV-CLI-STATUS-009 解釈できない last_sync_date では 1〜4 行目を出した後 [ERROR] を出して exit 1', async () => {
+  it('SPEC-EGOV-CLI-STATUS-009 解釈できない last_sync_date では 1〜4 行目を出した後 [ERROR] を出して exit 1（コマンドは SPEC-EGOV-DB-SCHEMA-029 の形）', async () => {
     const path = join(root, 'status-bad.db');
     await seedWithSyncDate(path, '2026/05/08');
     const { result, out, err } = await runStatus(path);
@@ -129,9 +130,14 @@ describe('同期の記録の日付を解釈できない (20261001-t2-error-codes
     expect(out[2]).toMatch(/^ {2}laws: /);
     expect(out[3]).toMatch(/^ {2}articles: /);
     expect(out.some((l) => l.includes('sync:'))).toBe(false);
-    expect(err).toContain(
-      `[ERROR] 同期の記録を読めません: 2026/05/08（${BULK_HINT_COMMAND} で作り直してください）`
-    );
+    // HOUKI_EGOV_DB_PATH で DB を決めているので、コマンドの前に同じ変数が付く
+    expect(
+      err.some(
+        (l) =>
+          l.startsWith('[ERROR] 同期の記録を読めません: 2026/05/08（HOUKI_EGOV_DB_PATH=') &&
+          l.endsWith(` ${BULK_HINT_COMMAND} で作り直してください）`)
+      )
+    ).toBe(true);
   });
 
   it('SPEC-EGOV-CLI-STATUS-009 last_sync_date が 2026-05-08 なら今までどおり同期の欄を出して exit 0', async () => {

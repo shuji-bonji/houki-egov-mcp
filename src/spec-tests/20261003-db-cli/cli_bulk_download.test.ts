@@ -352,7 +352,7 @@ describe('--bulk-download-by-date は版が同じ DB にだけ取り込む', () 
     expect(withDb(dbPath, (db) => db.prepare('SELECT name FROM sqlite_master').all())).toEqual([]);
   });
 
-  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-030 経過の 1・2 行目の後に DB を確かめ、版を読めない DB は読めない版のエラーで exit 1', async () => {
+  it('SPEC-EGOV-CLI-BULK-DOWNLOAD-030 経過の 1・2 行目の後に DB を確かめ、版を読めない DB は読めない版のエラー（SPEC-EGOV-DB-SCHEMA-025 の文）で exit 1', async () => {
     mkdirSync(join(env.root, 'db'));
     seedVersionedDb(dbPath, 'x1');
     const egov = stubEgov({ head: 200, days: { '20260917': ZIP_YOKIN } });
@@ -360,7 +360,7 @@ describe('--bulk-download-by-date は版が同じ DB にだけ取り込む', () 
     const err = lines(out.stderr);
     expect(err[0]).toBe('[bulk-download-by-date] update_date=20260917 の差分 zip を取得します');
     expect(err.at(-1)).toBe(
-      `[ERROR] DB の版を読めないため (schema_version: x1)、DB を変更しません。DB ファイル (${dbPath}) を消してから houki-egov-mcp --bulk-download-everything を実行してください`
+      `[ERROR] DB の版を読めないため (schema_version: x1)、DB を変更しません。DB ファイル (${dbPath}) を消してから HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything を実行してください`
     );
     expect(egov.fn).not.toHaveBeenCalled();
   });

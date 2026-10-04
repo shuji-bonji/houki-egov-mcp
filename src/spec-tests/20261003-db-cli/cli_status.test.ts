@@ -221,13 +221,13 @@ describe('cli_status（差分 20261003-db-cli）', () => {
     }
   });
 
-  it('SPEC-EGOV-CLI-STATUS-011 版 2 の DB では 1・2 行目の後に古い版のエラーを出して exit 1、件数は出さず DB も変わらない', async () => {
+  it('SPEC-EGOV-CLI-STATUS-011 版 2 の DB では 1・2 行目の後に古い版のエラー（SPEC-EGOV-DB-SCHEMA-025 の文）を出して exit 1、件数は出さず DB も変わらない', async () => {
     const dbPath = join(env.root, 'laws.db');
     seedVersionedDb(dbPath, '2');
     expect(await status(dbPath)).toBe(1);
     expect(lines(out.stdout)).toEqual([`[status] ${pkg.name} v${pkg.version}`, `  DB: ${dbPath}`]);
     expect(lines(out.stderr)).toEqual([
-      '[ERROR] DB の版 (2) が古いため使えません。houki-egov-mcp --bulk-download-everything で作り直してください（取り込んだ中身は消え、全件の zip 約 290 MB を取り直します）',
+      `[ERROR] DB の版 (2) が古いため使えません。HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything で作り直してください（取り込んだ中身は消え、全件の zip 約 290 MB を取り直します）`,
     ]);
     const s = snapshot(dbPath);
     expect(s.schemaVersion).toBe('2');
