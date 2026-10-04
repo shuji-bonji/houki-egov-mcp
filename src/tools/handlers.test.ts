@@ -240,14 +240,15 @@ describe('handleSearchFulltext (Phase 2-7)', () => {
     });
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-002 bulk DL 未実行 (articles 0 件) なら search_law フォールバック + 誘導 note', async () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-002 DB のファイルが無ければ search_law フォールバック + ファイルが無いための note（SPEC-EGOV-SEARCH-FULLTEXT-044。deps.dbPath は HOUKI_EGOV_DB_PATH と同じ扱い）', async () => {
     // 空 keyword で search_law を呼ばせ、ネットワークに出ずに INVALID_ARGUMENT を返させる
     const r = await handleSearchFulltext({ keyword: '' }, { dbPath: emptyDbPath });
     expect(r.source).toBe('api-fallback');
     if (r.source !== 'api-fallback') return;
-    expect(r.note).toContain('bulk DL 未実行');
+    expect(r.note).toMatch(/^HOUKI_EGOV_DB_PATH が指すファイル \(.+\/empty\.db\) が無いため、/);
     expect(r.note).toContain('--bulk-download-everything');
     expect(r.next_actions[0].action).toBe('bulk_download_everything');
+    expect(r.freshness.db_path).toBeNull();
     expect((r.fallback as { code?: string }).code).toBe('INVALID_ARGUMENT');
   });
 });

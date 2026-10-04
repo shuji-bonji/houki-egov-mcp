@@ -134,7 +134,7 @@ describe('search_fulltext — limit の既定と丸め', () => {
 });
 
 describe('search_fulltext — search_law への切り替え', () => {
-  it('SPEC-EGOV-SEARCH-FULLTEXT-027 DB のパスの途中が普通のファイルなら search_law に切り替える', async () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-027 DB のパスの途中が普通のファイルなら search_law に切り替え、DB を作るコマンドは案内しない', async () => {
     const afile = join(TMP, 'afile');
     writeFileSync(afile, 'not a directory');
     const r = (await handleSearchFulltext(
@@ -143,24 +143,23 @@ describe('search_fulltext — search_law への切り替え', () => {
     )) as AnyObj;
     expect(r.source).toBe('api-fallback');
     expect(
-      r.note.startsWith(
-        'bulk DB を開けなかったため、search_law (法令名のタイトル一致) にフォールバックしています。'
+      /^ローカル DB \(.+\/afile\/x\.db\) を開けなかったため、search_law \(法令名のタイトル一致\) にフォールバックしています。/.test(
+        r.note
       )
     ).toBe(true);
-    expect(r.note).not.toContain('bulk DL 未実行のため');
-    expect(r.note).toContain('--bulk-download-everything');
-    expect(r.next_actions[0].action).toBe('bulk_download_everything');
+    expect(r.note).not.toContain('--bulk-download-everything');
+    expect(r.next_actions.map((a: AnyObj) => a.action)).toEqual(['search_law']);
     expect(r.fallback.code).toBe('INVALID_ARGUMENT');
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-027 DB のパスが既存のディレクトリでも同じ形で切り替える', async () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-027 DB のパスが既存のディレクトリでも同じ形で切り替え、DB を作るコマンドは案内しない', async () => {
     const dir = join(TMP, 'adir');
     mkdirSync(dir, { recursive: true });
     const r = (await handleSearchFulltext({ keyword: '' }, { dbPath: dir })) as AnyObj;
     expect(r.source).toBe('api-fallback');
-    expect(r.note.startsWith('bulk DB を開けなかったため')).toBe(true);
-    expect(r.note).toContain('--bulk-download-everything');
-    expect(r.next_actions[0].action).toBe('bulk_download_everything');
+    expect(r.note).toMatch(/^ローカル DB \(.+\/adir\) を開けなかったため/);
+    expect(r.note).not.toContain('--bulk-download-everything');
+    expect(r.next_actions.map((a: AnyObj) => a.action)).toEqual(['search_law']);
     expect(r.fallback.code).toBe('INVALID_ARGUMENT');
   });
 

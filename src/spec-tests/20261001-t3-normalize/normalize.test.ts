@@ -350,7 +350,7 @@ describe('search_fulltext と db_schema のダッシュ類 (20261001-t3-normaliz
     }
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-036 0.15.4 以前に取り込んだ本文（183―2 のまま、版 2 の DB）は引かずに search_law に切り替える', async () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-036 0.15.4 以前に取り込んだ本文（183―2 のまま、版 2 の DB）は引かずに search_law に切り替える（note の先頭は SPEC-EGOV-SEARCH-FULLTEXT-044 の形）', async () => {
     // v0.16.0〜v0.18.x では版 2 の DB を引き、hits: [] だった
     vi.stubGlobal(
       'fetch',
@@ -359,8 +359,8 @@ describe('search_fulltext と db_schema のダッシュ類 (20261001-t3-normaliz
     try {
       const r = (await handleSearchFulltext({ keyword: '183-2' }, { dbPath: legacy })) as AnyObj;
       expect(r.source).toBe('api-fallback');
-      expect(r.note.startsWith('bulk DB の版 (2) がこの houki-egov-mcp (3) より古いため、')).toBe(
-        true
+      expect(r.note).toMatch(
+        /^ローカル DB \(.+\) の版 \(2\) がこの houki-egov-mcp \(3\) より古いため、/
       );
     } finally {
       vi.unstubAllGlobals();

@@ -152,22 +152,24 @@ describe('search_fulltext（差分 20261003-db-cli）', () => {
     }
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-036 版 2 の DB は引かずに search_law への切り替え（040）を返す', async () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-036 版 2 の DB は引かずに search_law への切り替え（040。note の先頭は SPEC-EGOV-SEARCH-FULLTEXT-044 の形）を返す', async () => {
     const dbPath = join(env.root, 'laws.db');
     seedVersionedDb(dbPath, '2');
     const r = await search({ keyword: '183-2' }, dbPath);
     expect(r.source).toBe('api-fallback');
-    expect(r.note.startsWith('bulk DB の版 (2) がこの houki-egov-mcp (3) より古いため、')).toBe(
-      true
-    );
+    expect(
+      r.note.startsWith(`ローカル DB (${dbPath}) の版 (2) がこの houki-egov-mcp (3) より古いため、`)
+    ).toBe(true);
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-039 フォルダーの無い場所では作らずに bulk DL 未実行のための切り替えを返す', async () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-039 フォルダーの無い場所では作らずに、HOUKI_EGOV_DB_PATH が指すファイルが無いための切り替えを返す', async () => {
     mkdirSync(join(env.root, 'empty'));
     const dbPath = join(env.root, 'empty', 'a', 'laws.db');
     const r = await search({ keyword: '消費税法' }, dbPath);
     expect(r.source).toBe('api-fallback');
-    expect(r.note.startsWith('bulk DL 未実行のため')).toBe(true);
+    expect(r.note.startsWith(`HOUKI_EGOV_DB_PATH が指すファイル (${dbPath}) が無いため`)).toBe(
+      true
+    );
     expect(r.next_actions[0].action).toBe('bulk_download_everything');
     expect(existsSync(join(env.root, 'empty', 'a'))).toBe(false);
   });
@@ -176,15 +178,21 @@ describe('search_fulltext（差分 20261003-db-cli）', () => {
     mkdirSync(join(env.root, 'empty'));
     process.env.HOUKI_EGOV_DB_PATH = join(env.root, 'empty', 'a', 'laws.db');
     const r = await search({ keyword: '消費税法' });
-    expect(r.note.startsWith('bulk DL 未実行のため')).toBe(true);
+    expect(
+      r.note.startsWith(
+        `HOUKI_EGOV_DB_PATH が指すファイル (${process.env.HOUKI_EGOV_DB_PATH}) が無いため`
+      )
+    ).toBe(true);
     expect(existsSync(join(env.root, 'empty', 'a'))).toBe(false);
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-039 版の記録が無い DB（テーブルの無い SQLite）は、書き込まずに bulk DL 未実行のための切り替え', async () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-039 版の記録が無い DB（テーブルの無い SQLite）は、書き込まずに、まだ法令が取り込まれていないための切り替え', async () => {
     const dbPath = join(env.root, 'laws.db');
     new Database(dbPath).close();
     const r = await search({ keyword: '消費税法' }, dbPath);
-    expect(r.note.startsWith('bulk DL 未実行のため')).toBe(true);
+    expect(r.note.startsWith(`ローカル DB (${dbPath}) にまだ法令が取り込まれていないため`)).toBe(
+      true
+    );
     const db = new Database(dbPath, { readonly: true });
     try {
       expect(db.prepare('SELECT name FROM sqlite_master').all()).toEqual([]);
@@ -198,9 +206,9 @@ describe('search_fulltext（差分 20261003-db-cli）', () => {
     seedVersionedDb(dbPath, '2');
     const r = await search({ keyword: '適格請求書' }, dbPath);
     expect(r.source).toBe('api-fallback');
-    expect(r.note.startsWith('bulk DB の版 (2) がこの houki-egov-mcp (3) より古いため、')).toBe(
-      true
-    );
+    expect(
+      r.note.startsWith(`ローカル DB (${dbPath}) の版 (2) がこの houki-egov-mcp (3) より古いため、`)
+    ).toBe(true);
     expect(r.note).toContain('--bulk-download-everything');
     expect(r.next_actions.map((a: AnyObj) => a.action)).toEqual([
       'bulk_download_everything',
@@ -217,9 +225,11 @@ describe('search_fulltext（差分 20261003-db-cli）', () => {
     seedVersionedDb(dbPath, '4');
     const r = await search({ keyword: '適格請求書' }, dbPath);
     expect(r.source).toBe('api-fallback');
-    expect(r.note.startsWith('bulk DB の版 (4) がこの houki-egov-mcp (3) より新しいため、')).toBe(
-      true
-    );
+    expect(
+      r.note.startsWith(
+        `ローカル DB (${dbPath}) の版 (4) がこの houki-egov-mcp (3) より新しいため、`
+      )
+    ).toBe(true);
     expect(r.note).toContain('新しい版に更新');
     expect(r.note).not.toContain('--bulk-download-everything');
     expect(r.next_actions).toHaveLength(1);
@@ -232,7 +242,9 @@ describe('search_fulltext（差分 20261003-db-cli）', () => {
     seedVersionedDb(dbPath, 'abc');
     const r = await search({ keyword: '適格請求書' }, dbPath);
     expect(r.source).toBe('api-fallback');
-    expect(r.note.startsWith('bulk DB の版を読めないため (schema_version: abc)、')).toBe(true);
+    expect(
+      r.note.startsWith(`ローカル DB (${dbPath}) の版を読めないため (schema_version: abc)、`)
+    ).toBe(true);
     expect(r.note).toContain('消して');
     expect(r.note).toContain('--bulk-download-everything');
     expect(r.next_actions).toHaveLength(1);

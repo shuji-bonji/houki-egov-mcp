@@ -85,7 +85,7 @@ describe('同期の記録の日付を解釈できない (20261001-t2-error-codes
     expect(ok.freshness.last_sync_date).toBe('2026-05-08');
   });
 
-  it('SPEC-EGOV-SEARCH-FULLTEXT-035 sync_state に行が無いときは今までどおり freshness: null でエラーにしない', async () => {
+  it('SPEC-EGOV-SEARCH-FULLTEXT-035 sync_state に行が無いときはエラーにせず、鮮度の 4 つが null の freshness を返す（SPEC-EGOV-SEARCH-FULLTEXT-043）', async () => {
     const path = join(root, 'nosync.db');
     const db = new Database(path);
     initSchema(db);
@@ -94,7 +94,13 @@ describe('同期の記録の日付を解釈できない (20261001-t2-error-codes
     db.close();
     const r = (await handleSearchFulltext({ keyword: '軽減税率' }, { dbPath: path })) as AnyObj;
     expect(r.source).toBe('bulk');
-    expect(r.freshness).toBeNull();
+    expect(r.freshness).toMatchObject({
+      last_sync_date: null,
+      last_full_dl_at: null,
+      staleness: null,
+      days_since_sync: null,
+    });
+    expect(typeof r.freshness.db_path).toBe('string');
   });
 
   async function runStatus(dbPath: string) {
