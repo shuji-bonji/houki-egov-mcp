@@ -3,9 +3,9 @@
 - 機能 ID: EGOV
 - 種類: CLI
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20260930-bugfix-batch` は 2026-09-30（PR #81）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261003-db-cli` は 2026-10-03（PR #100）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20260930-bugfix-batch` は 2026-09-30（PR #81）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261003-db-cli` は 2026-10-03（PR #100）。差分 `20261004-ingest-redistributed-revisions` は 2026-10-04（PR #112）
 - 起こした元: v0.15.1 の `src/cli/index.ts`、`src/services/freshness.ts`、`src/config.ts`、`src/services/freshness.test.ts`
-- 関連する Issue: houki-egov-mcp #21（`--status` の案内を `--sync` に変えた）、houki-egov-mcp #60・#61（0.19.0）
+- 関連する Issue: houki-egov-mcp #21（`--status` の案内を `--sync` に変えた）、houki-egov-mcp #60・#61（0.19.0）、houki-egov-mcp #107（0.19.1）
 
 この文書は「このコマンドは何をするか」を書きます。どう実装しているか（関数名・テーブル名）は書きません。
 
@@ -39,8 +39,9 @@ flowchart TD
   D --> E["last_sync_date からの日数と古さ（fresh / stale / outdated）を出す（003）"]
   E --> F{"outdated か"}
   F -- はい --> W["最新化の案内の警告を出す（004）"]
-  F -- いいえ --> Z["終わる"]
-  W --> Z
+  F -- いいえ --> X["施行日を過ぎた未施行の版を数え、1 件以上なら [WARN] を出す（012）"]
+  W --> X
+  X --> Z["終わる"]
 ```
 
 ## できること
@@ -143,6 +144,18 @@ DB のファイルが無いとき（置き場所のフォルダーも無いと�
 古い版・新しい版・読めない版の DB のときは、1・2 行目を標準出力に出した後、SPEC-EGOV-DB-SCHEMA-025 のエラーの文を標準エラー出力に出し、件数と同期の欄を出さずに終了コード 1 で終わる。DB を作り直さず、書き換えない。
 
 例: `schema_version` が `2` の DB で `--status` を実行すると、`[ERROR] DB の版 (2) が古いため使えません。houki-egov-mcp --bulk-download-everything で作り直してください（…）` を出して終了コード 1 で、`schema_version` は `2` のまま、`laws` の行も残る（0.19.0 に上げた直後の利用者の DB はこの状態になる。v0.18.x の「版が違えば作り直す」をそのまま使うと、`--status` を実行しただけで取り込んだ中身が消える）。
+
+### SPEC-EGOV-CLI-STATUS-012 施行日を過ぎても未施行のままの版があれば `[WARN]` で全件の取り込みを案内する
+
+同期の状態があり、同期の欄（SPEC-EGOV-CLI-STATUS-002・003）を出せたときは、DB の `laws` のうち、`current_revision_status` が `UnEnforced` で、`amendment_enforcement_date` が `last_sync_date` より前（同じ日を含まない）の版を数える。1 件以上なら、同期の欄と、その後の警告（SPEC-EGOV-CLI-STATUS-004）または `--sync` の案内（007）の行の後に、標準出力に次の 1 行を出す。0 件なら出さない。終了コードは 0 のまま変えない。標準エラー出力には出さない。
+
+```
+[WARN] 施行日が last_sync_date (<last_sync_date>) より前なのに未施行 (UnEnforced) のままの版が <件数> 件あります。houki-egov-mcp --bulk-download-everything を 1 回実行すると直ります（全件の zip 約 290 MB を取得します。条の本文は入れ直しません）
+```
+
+文は SPEC-EGOV-CLI-SYNC-021 と同じ。数える条件も同じで、比べる日は今日ではなく `last_sync_date`（同期していない日の配り直しは `--sync` で取り込めるので、`--bulk-download-everything` を案内しない）。`amendment_enforcement_date` が `NULL` の版は数えない。同期の状態が無いとき（001）、DB が無いとき（010）、版が合わないとき（011）、DB を開けないとき（006）、同期の記録を読めないとき（009）は数えず、出さない。ネットワークには出ない。
+
+例: `last_sync_date` が `2026-10-06` で、施行日 `2026-10-05` の `UnEnforced` の版が 5 つある DB に、2026-10-07（日本時間）に `--status` を実行すると、同期の欄（`days_since_sync: 1`、`staleness: fresh`）と `  差分を取り込むには --sync を実行してください` の後に、`[WARN] 施行日が last_sync_date (2026-10-06) より前なのに未施行 (UnEnforced) のままの版が 5 件あります。…` を出して終了コード 0。`last_sync_date` が `2026-10-05` なら、施行日 `2026-10-05` の版は数えない（同じ日を含まない）ので出さない。
 
 ## できないこと
 

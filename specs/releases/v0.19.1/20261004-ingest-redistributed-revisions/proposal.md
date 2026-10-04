@@ -3,7 +3,7 @@
 - 対象: `cli_bulk_download` / `cli_sync` / `cli_status` の `specs/current/<dir>/spec.md`
 - 実装の変更: 要（下の「実装の変更」）
 - 承認日: 2026-10-04（PR #112）
-- 状態: 承認待ち
+- 状態: 取り込み済み（v0.19.1）
 - 起こした日: 2026-10-04（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #107（施行日の当日に配り直される版を unchanged として飛ばし、施行後も未施行のまま・旧版が現行のまま残る）
