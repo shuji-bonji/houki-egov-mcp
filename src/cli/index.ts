@@ -13,9 +13,10 @@
  * 設計詳細: docs/PHASE2-DESIGN.md §4
  */
 
+import { readdirSync, statSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   BULK_CONFIG,
   EGOV_BULK,
@@ -25,13 +26,15 @@ import {
 } from '../config.js';
 import {
   closeDb,
+  type DbLocation,
+  type DbLocationSetting,
   type DbState,
   dbStateErrorMessage,
-  defaultDbPath,
   guideCommand,
   inspectDb,
   openDbForFullIngest,
   openUsableDb,
+  resolveDbLocation,
 } from '../db/index.js';
 import { countOverdueUnenforced, type IngestResult, ingestZip } from '../services/bulk/ingester.js';
 import {
@@ -50,7 +53,7 @@ import {
   downloadIncrementalZip,
 } from '../services/bulk/zip-fetcher.js';
 import { openZipFile } from '../services/bulk/zip-reader.js';
-import { SyncDateError, summarizeFreshness } from '../services/freshness.js';
+import { SyncDateError, summarizeFreshness, syncCommandHint } from '../services/freshness.js';
 import { logger } from '../utils/logger.js';
 
 /** CLI ハンドラの戻り値 */
@@ -176,12 +179,12 @@ export function shouldFallbackToMcp(result: CliResult): boolean {
  * DB を作らない入口（--sync・--bulk-download-by-date）で、版が今の版でない・開けない DB のエラーを出す。
  * 出したら true（呼び出し側は exit 1）。ファイルが無い・版の記録が無いときは出さずに false
  */
-function reportUnusableDb(state: DbState, dbPath: string): boolean {
+function reportUnusableDb(state: DbState, location: DbLocation): boolean {
   if (state.kind === 'error') {
     console.error(`[ERROR] DB を開けません: ${state.message}`);
     return true;
   }
-  const msg = dbStateErrorMessage(state, dbPath);
+  const msg = dbStateErrorMessage(state, location.path, location);
   if (msg) {
     console.error(msg);
     return true;
@@ -207,7 +210,8 @@ async function runBulkDownloadEverything(): Promise<CliResult> {
   const command = 'bulk-download-everything';
   const tmpDir = await mkdtemp(join(tmpdir(), 'houki-egov-bulk-'));
   const zipPath = join(tmpDir, 'all_xml.zip');
-  const dbPath = defaultDbPath();
+  const location = resolveDbLocation();
+  const dbPath = location.path;
   const startedAt = Date.now();
 
   console.error(`[bulk-download-everything] 全件 zip を取得します`);
@@ -223,7 +227,7 @@ async function runBulkDownloadEverything(): Promise<CliResult> {
       return { exitCode: 1, command };
     }
     if (state.kind === 'new' || state.kind === 'unreadable') {
-      console.error(dbStateErrorMessage(state, dbPath));
+      console.error(dbStateErrorMessage(state, dbPath, location));
       return { exitCode: 1, command };
     }
     if (state.kind === 'old') {
@@ -284,7 +288,8 @@ async function runBulkDownloadByDate(yyyymmdd: string): Promise<CliResult> {
   const command = 'bulk-download-by-date';
   const tmpDir = await mkdtemp(join(tmpdir(), 'houki-egov-diff-'));
   const zipPath = join(tmpDir, `R${yyyymmdd.slice(2)}.zip`);
-  const dbPath = defaultDbPath();
+  const location = resolveDbLocation();
+  const dbPath = location.path;
 
   console.error(`[bulk-download-by-date] update_date=${yyyymmdd} の差分 zip を取得します`);
   console.error(`  保存先 zip: ${zipPath}`);
@@ -294,9 +299,9 @@ async function runBulkDownloadByDate(yyyymmdd: string): Promise<CliResult> {
     // 版が今の版の DB にだけ取り込む。DB を作らず、作り直さない（SPEC-EGOV-CLI-BULK-DOWNLOAD-030）
     const { state, db } = openUsableDb(dbPath);
     if (!db) {
-      if (!reportUnusableDb(state, dbPath)) {
+      if (!reportUnusableDb(state, location)) {
         console.error(
-          '[ERROR] DB がまだありません。先に houki-egov-mcp --bulk-download-everything を実行してください'
+          `[ERROR] DB がまだありません。先に ${guideCommand('--bulk-download-everything', location)} を実行してください`
         );
       }
       return { exitCode: 1, command };
@@ -353,7 +358,8 @@ async function runBulkDownloadByDate(yyyymmdd: string): Promise<CliResult> {
  */
 async function runSyncCommand(): Promise<CliResult> {
   const command = 'sync';
-  const dbPath = defaultDbPath();
+  const location = resolveDbLocation();
+  const dbPath = location.path;
 
   console.error(`[sync] 差分同期`);
   console.error(`  DB: ${dbPath}`);
@@ -361,7 +367,7 @@ async function runSyncCommand(): Promise<CliResult> {
   // 版が今の版の DB にだけ書き込む。DB を作らない（SPEC-EGOV-CLI-SYNC-009・019）
   const { state, db } = openUsableDb(dbPath);
   if (!db) {
-    if (!reportUnusableDb(state, dbPath)) printSyncResult(NO_STATE_RESULT);
+    if (!reportUnusableDb(state, location)) printSyncResult(NO_STATE_RESULT, location);
     return { exitCode: 1, command };
   }
 
@@ -390,7 +396,7 @@ async function runSyncCommand(): Promise<CliResult> {
       onDay: (r, i, total) => console.error(`  [${i + 1}/${total}] ${formatSyncDay(r)}`),
     });
     return {
-      exitCode: printSyncResult(result, (date) => countOverdueUnenforced(db, date)),
+      exitCode: printSyncResult(result, location, (date) => countOverdueUnenforced(db, date)),
       command,
     };
   } catch (err) {
@@ -413,9 +419,13 @@ const NO_STATE_RESULT: SyncResult = {
 /**
  * 同期結果を表示し、exit code を返します。
  * countOverdue があれば、すべての日を確認済みにして終わったときに、施行日を過ぎた未施行の版を数えて
- * `[WARN]` を出します（SPEC-EGOV-CLI-SYNC-021）
+ * `[WARN]` を出します（SPEC-EGOV-CLI-SYNC-021）。`[WARN]` のコマンドは location で組み立てます
  */
-function printSyncResult(r: SyncResult, countOverdue?: (lastSyncDate: string) => number): number {
+function printSyncResult(
+  r: SyncResult,
+  location: DbLocation,
+  countOverdue?: (lastSyncDate: string) => number
+): number {
   const { plan } = r;
   if (plan.kind === 'no-state') {
     console.error(
@@ -464,7 +474,7 @@ function printSyncResult(r: SyncResult, countOverdue?: (lastSyncDate: string) =>
   printStatusChanged(statusChanged);
   if (countOverdue && r.lastSyncDate) {
     const overdue = countOverdue(r.lastSyncDate);
-    if (overdue > 0) console.error(overdueWarning(r.lastSyncDate, overdue));
+    if (overdue > 0) console.error(overdueWarning(r.lastSyncDate, overdue, location));
   }
   return 0;
 }
@@ -481,9 +491,55 @@ function printStatusChanged(n: number): void {
   }
 }
 
-/** 施行日を過ぎても未施行のままの版の警告の文（SPEC-EGOV-CLI-SYNC-021・SPEC-EGOV-CLI-STATUS-012） */
-function overdueWarning(lastSyncDate: string, n: number): string {
-  return `[WARN] 施行日が last_sync_date (${lastSyncDate}) より前なのに未施行 (UnEnforced) のままの版が ${n} 件あります。houki-egov-mcp --bulk-download-everything を 1 回実行すると直ります（全件の zip 約 290 MB を取得します。条の本文は入れ直しません）`;
+/**
+ * 施行日を過ぎても未施行のままの版の警告の文（SPEC-EGOV-CLI-SYNC-021・SPEC-EGOV-CLI-STATUS-012）。
+ * コマンドは案内のコマンドの形（SPEC-EGOV-DB-SCHEMA-029）
+ */
+function overdueWarning(lastSyncDate: string, n: number, location: DbLocation): string {
+  return `[WARN] 施行日が last_sync_date (${lastSyncDate}) より前なのに未施行 (UnEnforced) のままの版が ${n} 件あります。${guideCommand('--bulk-download-everything', location)} を 1 回実行すると直ります（全件の zip 約 290 MB を取得します。条の本文は入れ直しません）`;
+}
+
+/** `--status` の 3 行目の値（SPEC-EGOV-CLI-STATUS-013） */
+function settingLabel(setting: DbLocationSetting): string {
+  if (setting === '既定') return setting;
+  return `${setting}（MCP クライアントから起動したサーバーは、シェルの環境変数を受け継がないことがあります）`;
+}
+
+/** 実行した環境の時刻の YYYY-MM-DD HH:MM */
+function formatLocalMinute(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/**
+ * DB と同じフォルダーにある、名前が laws で始まり .db で終わる普通のファイル（DB のファイルそのものを除く）の
+ * [WARN] の行（SPEC-EGOV-CLI-STATUS-014）。無ければ null。
+ * 見つけたファイルは開かない。フォルダーが無い・読めないときは null
+ */
+function otherDbFilesWarning(dbAbsolutePath: string): string | null {
+  const dir = dirname(dbAbsolutePath);
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return null;
+  }
+  const found: string[] = [];
+  for (const name of names.sort()) {
+    if (!name.startsWith('laws') || !name.endsWith('.db')) continue;
+    const path = join(dir, name);
+    if (path === dbAbsolutePath) continue;
+    let st: ReturnType<typeof statSync>;
+    try {
+      st = statSync(path);
+    } catch {
+      continue;
+    }
+    if (!st.isFile()) continue;
+    found.push(`${name} (${formatBytes(st.size)}, ${formatLocalMinute(st.mtime)})`);
+  }
+  if (found.length === 0) return null;
+  return `[WARN] 同じフォルダーに、この DB のほかに laws*.db のファイルがあります: ${found.join(', ')}。MCP サーバーと CLI が別のファイルを開いていないか確かめてください`;
 }
 
 function formatSyncDay(d: SyncDayResult): string {
@@ -494,21 +550,28 @@ function formatSyncDay(d: SyncDayResult): string {
 
 /** sync_state + 件数 + freshness をターミナルに表示 */
 async function runStatus(): Promise<CliResult> {
-  const dbPath = defaultDbPath();
+  const location = resolveDbLocation();
+  const dbPath = location.path;
   console.log(`[status] ${PACKAGE_INFO.name} v${PACKAGE_INFO.version}`);
   console.log(`  DB: ${dbPath}`);
+  // DB の場所の設定と、同じフォルダーの別の DB は、DB の状態によらず出す（SPEC-EGOV-CLI-STATUS-013・014）
+  console.log(`  DB の場所の設定: ${settingLabel(location.setting)}`);
+  const others = otherDbFilesWarning(location.absolutePath);
+  if (others) console.log(others);
 
   // 読むだけで開く。DB を作らず、作り直さない（SPEC-EGOV-CLI-STATUS-010・011）
   const { state, db } = openUsableDb(dbPath, { readonly: true });
   if (!db) {
     if (state.kind === 'missing' || state.kind === 'no-version') {
-      console.log(`  (DB がまだありません — houki-egov-mcp --bulk-download-everything で作ります)`);
+      console.log(
+        `  (DB がまだありません — ${guideCommand('--bulk-download-everything', location)} で作ります)`
+      );
       return { exitCode: 0, command: 'status' };
     }
     if (state.kind === 'error') {
       console.error(`[ERROR] DB を開けません: ${state.message}`);
     } else {
-      console.error(dbStateErrorMessage(state, dbPath));
+      console.error(dbStateErrorMessage(state, dbPath, location));
     }
     return { exitCode: 1, command: 'status' };
   }
@@ -527,12 +590,12 @@ async function runStatus(): Promise<CliResult> {
 
     let fresh: ReturnType<typeof summarizeFreshness>;
     try {
-      fresh = summarizeFreshness(db);
+      fresh = summarizeFreshness(db, syncCommandHint(location));
     } catch (err) {
       // 同期の記録の日付を解釈できないときは例外のまま終わらない（SPEC-EGOV-CLI-STATUS-009）
       if (!(err instanceof SyncDateError)) throw err;
       console.error(
-        `[ERROR] 同期の記録を読めません: ${err.value}（${guideCommand('--bulk-download-everything')} で作り直してください）`
+        `[ERROR] 同期の記録を読めません: ${err.value}（${guideCommand('--bulk-download-everything', location)} で作り直してください）`
       );
       return { exitCode: 1, command: 'status' };
     }
@@ -551,7 +614,7 @@ async function runStatus(): Promise<CliResult> {
       }
       // 施行日を過ぎても未施行のままの版（SPEC-EGOV-CLI-STATUS-012）。標準出力に出す
       const overdue = countOverdueUnenforced(db, fresh.last_sync_date);
-      if (overdue > 0) console.log(overdueWarning(fresh.last_sync_date, overdue));
+      if (overdue > 0) console.log(overdueWarning(fresh.last_sync_date, overdue, location));
     }
     return { exitCode: 0, command: 'status' };
   } finally {

@@ -26,7 +26,7 @@ import {
 } from '@shuji-bonji/houki-abbreviations';
 import type DatabaseT from 'better-sqlite3';
 import { BULK_CONFIG } from '../config.js';
-import { type DbLocation, guideCommand } from '../db/location.js';
+import { type DbLocation, guideCommand, resolveDbLocation } from '../db/location.js';
 
 // houki-abbreviations から re-export して既存利用者の互換性を保つ
 export type { StalenessLevel };
@@ -110,12 +110,13 @@ export function syncCommandHint(location: DbLocation): string {
  * 警告メッセージ文言は MCP 固有 (CLI コマンド名) のため houki-egov-mcp に残す。
  * 案内の日数は `HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS`（既定 90。`--sync` が差分で追える上限）。
  * CLI の `--status` と `search_fulltext` の `freshness.warning` はどちらもこの関数で作る
- * （SPEC-EGOV-CLI-STATUS-004・SPEC-EGOV-SEARCH-FULLTEXT-023）
+ * （SPEC-EGOV-CLI-STATUS-004・SPEC-EGOV-SEARCH-FULLTEXT-023）。
+ * 既定のコマンドは今の DB の場所の設定で組み立てた案内のコマンド（SPEC-EGOV-DB-SCHEMA-029）
  */
 export function buildWarning(
   staleness: StalenessLevel,
   daysSince: number,
-  bulkDownloadHint = `\`houki-egov-mcp --sync\` (最終同期から ${BULK_CONFIG.incrementalLimitDays} 日を超えていれば \`--bulk-download-everything\`)`
+  bulkDownloadHint = syncCommandHint(resolveDbLocation())
 ): string | undefined {
   if (staleness !== 'outdated') return undefined;
   return `bulk DB が ${daysSince} 日前のデータです。最新化するには ${bulkDownloadHint} を実行してください`;
