@@ -15,6 +15,7 @@
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { runCli, shouldFallbackToMcp } from './cli/index.js';
 import { PACKAGE_INFO } from './config.js';
+import { resolveDbLocation } from './db/location.js';
 import { createServer } from './server.js';
 import { logger } from './utils/logger.js';
 
@@ -36,6 +37,10 @@ async function main() {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
   logger.info('server', `${PACKAGE_INFO.name} v${PACKAGE_INFO.version} started`);
+  // どのファイルを開くかをログで確かめられるようにする。DB は開かない（search_fulltext が呼び出しごとに開く）。
+  // 絶対パスのまま出す（利用者の端末にしか出ないため。SPEC-EGOV-CLI-ENTRY-012）
+  const db = resolveDbLocation();
+  logger.info('server', `DB: ${db.absolutePath}（DB の場所の設定: ${db.setting}）`);
 }
 
 main().catch((error) => {
