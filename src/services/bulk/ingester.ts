@@ -80,8 +80,13 @@ export interface IngestResult {
   csvRows: number;
   /** XML を読み込めた件数 */
   xmlSeen: number;
-  /** content_hash 一致で no-op skip した件数 */
+  /** content_hash 一致で no-op skip した件数（状態だけを書き換えた版も含む） */
   unchanged: number;
+  /**
+   * 状態（current_revision_status）だけを書き換えた版の数。
+   * 同じ XML で未施行の欄が空になって届いた未施行の版（SPEC-EGOV-CLI-BULK-DOWNLOAD-031。`unchanged` の内数）
+   */
+  status_changed: number;
   /** INSERT or UPDATE した件数 */
   upserted: number;
   /** XML パース失敗で skip した件数 (`onXmlError='skip'` 時) */
@@ -215,7 +220,17 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     INSERT INTO laws_fts (law_revision_id, law_title, law_title_kana, abbrev, law_num, category)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
-  const selectExistingHash = db.prepare('SELECT content_hash FROM laws WHERE law_revision_id = ?');
+  const selectExisting = db.prepare(
+    'SELECT content_hash, current_revision_status FROM laws WHERE law_revision_id = ?'
+  );
+  // 状態だけの更新（SPEC-EGOV-CLI-BULK-DOWNLOAD-031）。content_hash・fetched_at・updated、
+  // 条の本文と索引は触らない
+  const markCurrent = db.prepare(
+    `UPDATE laws SET current_revision_status = 'CurrentEnforced' WHERE law_revision_id = ?`
+  );
+  const selectRevisionKey = db.prepare(
+    'SELECT law_id, amendment_enforcement_date FROM laws WHERE law_revision_id = ?'
+  );
   // 同じ法令の現行の版は、施行日が最も新しい 1 つだけにする。
   // 差分 zip で新しい版 (別の law_revision_id) が現行として届いたら、施行日がそれより前の版を
   // PreviousEnforced に落とす。落とさないと search_fulltext の revision 重複対策
@@ -237,22 +252,33 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     )
   `);
 
-  // 5) batch transaction
+  /** 現行になった版について、同じ法令の現行の版を 1 つにそろえる（SPEC-EGOV-CLI-BULK-DOWNLOAD-016） */
+  const keepOneCurrent = (
+    lawId: string,
+    lawRevisionId: string,
+    enforcementDate: string | null
+  ): void => {
+    if (!enforcementDate) return;
+    demoteOlderRevisions.run(lawId, lawRevisionId, enforcementDate);
+    demoteIfNewerExists.run(lawRevisionId, lawId, lawRevisionId, enforcementDate);
+  };
+
+  // 5) batch transaction。CSV の順を保つため、状態だけの更新も同じバッチで順に処理する
   const ingestBatch = db.transaction((items: PreparedItem[]) => {
     for (const item of items) {
+      if (item.kind === 'status') {
+        markCurrent.run(item.lawRevisionId);
+        // 施行日は DB の値を使う（版の ID が同じなので CSV の施行日と同じ）
+        const key = selectRevisionKey.get(item.lawRevisionId) as
+          | { law_id: string; amendment_enforcement_date: string | null }
+          | undefined;
+        if (key) keepOneCurrent(key.law_id, item.lawRevisionId, key.amendment_enforcement_date);
+        continue;
+      }
       upsertLaw.run(item.lawRow);
-      if (
-        item.lawRow.current_revision_status === 'CurrentEnforced' &&
-        item.lawRow.amendment_enforcement_date
-      ) {
+      if (item.lawRow.current_revision_status === 'CurrentEnforced') {
         const { law_id, law_revision_id, amendment_enforcement_date } = item.lawRow;
-        demoteOlderRevisions.run(law_id, law_revision_id, amendment_enforcement_date);
-        demoteIfNewerExists.run(
-          law_revision_id,
-          law_id,
-          law_revision_id,
-          amendment_enforcement_date
-        );
+        keepOneCurrent(law_id, law_revision_id, amendment_enforcement_date);
       }
       // articles 全置換
       deleteArticles.run(item.lawRow.law_revision_id);
@@ -284,6 +310,7 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
   // 6) ループ本体
   let xmlSeen = 0;
   let unchanged = 0;
+  let statusChanged = 0;
   let upserted = 0;
   let failed = 0;
   let lastRevisionId: string | undefined;
@@ -313,22 +340,31 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     xmlSeen++;
     const contentHash = contentHashOf(xmlContent);
 
-    // content_hash 比較で no-op 判定
-    const existing = selectExistingHash.get(revisionId) as { content_hash: string } | undefined;
+    // content_hash 比較で no-op 判定（SPEC-EGOV-CLI-BULK-DOWNLOAD-014）
+    const existing = selectExisting.get(revisionId) as
+      | { content_hash: string; current_revision_status: string }
+      | undefined;
     if (existing && existing.content_hash === contentHash) {
       unchanged++;
-      continue;
+      // 同じ XML でも、未施行の版が未施行の欄を空にして届いたら状態だけを現行にする
+      // （SPEC-EGOV-CLI-BULK-DOWNLOAD-031。e-Gov は施行日の当日の差分に同じ版を配り直す）。
+      // 欄が ○ で届いても、現行・前の版を未施行に戻さない
+      if (existing.current_revision_status === 'UnEnforced' && !csvRow.unenforced) {
+        statusChanged++;
+        batch.push({ kind: 'status', lawRevisionId: revisionId });
+        lastRevisionId = revisionId;
+      }
+    } else {
+      const lawRow = buildLawRow({
+        csvRow,
+        parsed,
+        contentHash,
+        nowIso,
+      });
+      batch.push({ kind: 'upsert', lawRow, parsed });
+      upserted++;
+      lastRevisionId = revisionId;
     }
-
-    const lawRow = buildLawRow({
-      csvRow,
-      parsed,
-      contentHash,
-      nowIso,
-    });
-    batch.push({ lawRow, parsed });
-    upserted++;
-    lastRevisionId = revisionId;
 
     if (batch.length >= batchSize) {
       ingestBatch(batch);
@@ -366,6 +402,7 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     csvRows: csvRows.length,
     xmlSeen,
     unchanged,
+    status_changed: statusChanged,
     upserted,
     failed,
     durationMs: Date.now() - start,
@@ -383,11 +420,13 @@ export class IngestError extends Error {
   }
 }
 
-/** 内部: 1 法令 ingest に必要な前処理済データ */
-interface PreparedItem {
-  lawRow: LawRow;
-  parsed: ParsedLaw;
-}
+/**
+ * 内部: バッチの 1 項目。
+ * `upsert` は 1 法令 ingest に必要な前処理済データ、`status` は状態だけの更新（SPEC-EGOV-CLI-BULK-DOWNLOAD-031）
+ */
+type PreparedItem =
+  | { kind: 'upsert'; lawRow: LawRow; parsed: ParsedLaw }
+  | { kind: 'status'; lawRevisionId: string };
 
 /** laws テーブル 1 行分。INSERT 用に named parameter として使う */
 interface LawRow {

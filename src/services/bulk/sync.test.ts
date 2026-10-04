@@ -45,6 +45,7 @@ function ingestResult(upserted: number, unchanged = 0): IngestResult {
     csvRows: upserted + unchanged,
     xmlSeen: upserted + unchanged,
     unchanged,
+    status_changed: 0,
     upserted,
     failed: 0,
     durationMs: 1,
