@@ -3,9 +3,9 @@
 - 機能 ID: EGOV
 - 種類: 共通
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）。差分 `20261003-t5-docs-mismatch` は 2026-10-03（PR #92）。差分 `20261003-law-resolution` は 2026-10-03（PR #95）。差分 `20261003-law-type-and-reference-actions` は 2026-10-03（PR #99）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）。差分 `20261003-t5-docs-mismatch` は 2026-10-03（PR #92）。差分 `20261003-law-resolution` は 2026-10-03（PR #95）。差分 `20261003-law-type-and-reference-actions` は 2026-10-03（PR #99）。差分 `20261004-db-location` は 2026-10-04（PR #114）
 - 起こした元: v0.15.1 の `src/server.ts`、`src/errors.ts`、`src/tools/tool-args.ts`、`src/tools/handlers.ts`（ツールの登録の表）、`src/tools/definitions.ts`（tools/list の一覧）、`src/server.test.ts`、`src/errors.test.ts`、`src/tools/handlers.test.ts`
-- 関連する Issue: なし
+- 関連する Issue: houki-egov-mcp #108（0.20.0）
 
 この文書は、複数のツールに共通する、tools/call のエラー応答の形と引数の検査、tools/list に出すツールの一覧を書きます。どう実装しているか（関数名・テーブル名）は書きません。
 
@@ -381,12 +381,12 @@ e-Gov への要求で、HTTP の応答を受け取る前に接続の失敗で例
 
 - `retryable`: `false`（時間をおいても DB の値は変わらない）
 - `error`: `同期の記録の日付を読めません: <last_sync_date の値>`
-- `hint`: `houki-egov-mcp --bulk-download-everything` で同期の記録を作り直す案内（`next_actions` は付けない。CLI を案内する `action` の名前が houki-egov-mcp には無いため）
+- `hint`: `--bulk-download-everything` を付けた案内のコマンド（SPEC-EGOV-DB-SCHEMA-029）で同期の記録を作り直す案内（`next_actions` は付けない。CLI を案内する `action` の名前が houki-egov-mcp には無いため）
 - `detail.cause`: 元の例外の文（houki-abbreviations の `computeDaysSince` が投げる `RangeError` の文）
 
 当てはまるのは `search_fulltext`（SPEC-EGOV-SEARCH-FULLTEXT-035）と CLI の `--status`（SPEC-EGOV-CLI-STATUS-009。CLI なので JSON ではなく標準エラー出力）である。取り込みが書く `last_sync_date` は `YYYY-MM-DD` なので、取り込みを通した DB ではこのエラーは起きない。
 
-例: `sync_state.last_sync_date` を `2026/05/08` に書き換えた DB で `search_fulltext` に `{ keyword: "軽減税率" }` を渡すと、`code: "INTERNAL_ERROR"`、`retryable: false`、`error` に `2026/05/08` を含み、`hits` は返さない。
+例: `sync_state.last_sync_date` を `2026/05/08` に書き換えた DB で、環境変数を付けずに起動した MCP サーバーの `search_fulltext` に `{ keyword: "軽減税率" }` を渡すと、`code: "INTERNAL_ERROR"`、`retryable: false`、`error` に `2026/05/08` を含み、`hint` に `npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything` を含み（v0.19.x では `houki-egov-mcp --bulk-download-everything`）、`hits` は返さない。
 
 ### SPEC-EGOV-COMMON-ERRORS-032 法令名から law_id を決めるときは題名の完全一致だけを使い、完全一致が無ければ候補を付けた `LAW_NOT_FOUND` を返して法令を取らない
 

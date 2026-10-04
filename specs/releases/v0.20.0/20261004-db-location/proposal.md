@@ -3,7 +3,7 @@
 - 対象: `search_fulltext` / `db_schema` / `cli_status` / `cli_sync` / `cli_bulk_download` / `cli_entry` / `common_errors` の `specs/current/<dir>/spec.md`
 - 実装の変更: 要（下の「実装の変更」）
 - 承認日: 2026-10-04（PR #114）
-- 状態: 草案
+- 状態: 取り込み済み（v0.20.0）
 - 起こした日: 2026-10-04（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #108（`api-fallback` の `note` と案内のコマンドが、DB が無い・別のファイルを開いているを区別せず、そのままでは動かないことがある。2026-10-04 の追記: 応答と起動時のログにも DB のパスを出す）、#110（開いている DB の場所と、同じフォルダーに残っている別の版の DB を確かめる手段が `--status` の 1 行しかない）

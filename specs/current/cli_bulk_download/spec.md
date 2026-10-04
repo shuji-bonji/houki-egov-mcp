@@ -3,9 +3,9 @@
 - 機能 ID: EGOV
 - 種類: CLI
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261003-db-cli` は 2026-10-03（PR #100）。差分 `20261003-db-cli-followup` は 2026-10-03（PR #103）。差分 `20261004-ingest-redistributed-revisions` は 2026-10-04（PR #112）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261003-db-cli` は 2026-10-03（PR #100）。差分 `20261003-db-cli-followup` は 2026-10-03（PR #103）。差分 `20261004-ingest-redistributed-revisions` は 2026-10-04（PR #112）。差分 `20261004-db-location` は 2026-10-04（PR #114）
 - 起こした元: v0.15.1 の `src/cli/index.ts`、`src/config.ts`、`src/services/bulk/zip-fetcher.ts`、`src/services/bulk/csv-parser.ts`、`src/services/bulk/xml-parser.ts`、`src/services/bulk/ingester.ts`、`src/cli/index.test.ts`、`src/services/bulk/zip-fetcher.test.ts`、`src/services/bulk/csv-parser.test.ts`、`src/services/bulk/xml-parser.test.ts`、`src/services/bulk/ingester.test.ts`
-- 関連する Issue: houki-egov-mcp #21（同じ法令の現行の版を 1 つにする変更は、#21 の `--sync` と同じ 0.8.0 で入った）、houki-egov-mcp #58・#59・#60（0.19.0）、houki-egov-mcp #101（0.19.0）、houki-egov-mcp #107（0.19.1）
+- 関連する Issue: houki-egov-mcp #21（同じ法令の現行の版を 1 つにする変更は、#21 の `--sync` と同じ 0.8.0 で入った）、houki-egov-mcp #58・#59・#60（0.19.0）、houki-egov-mcp #101（0.19.0）、houki-egov-mcp #107（0.19.1）、houki-egov-mcp #108（0.20.0）
 
 この文書は「このコマンドは何をするか」を書きます。どう実装しているか（関数名・テーブル名）は書きません。
 
@@ -282,13 +282,13 @@ XML の本則（`MainProvision`）が条（`Article`）を持たず段落（`Par
 
 `--bulk-download-by-date` は、経過の 1・2 行目（SPEC-EGOV-CLI-BULK-DOWNLOAD-021）を出した後、e-Gov に届くかを確かめる前に DB の状態を確かめる。DB を作らず、作り直さない（SPEC-EGOV-DB-SCHEMA-025）。
 
-- ファイルが無い・版の記録が無いときは、`[ERROR] DB がまだありません。先に houki-egov-mcp --bulk-download-everything を実行してください` を出して終了コード 1
+- ファイルが無い・版の記録が無いときは、`[ERROR] DB がまだありません。先に <コマンド> を実行してください` を出して終了コード 1。`<コマンド>` は `--bulk-download-everything` を付けた案内のコマンド（SPEC-EGOV-DB-SCHEMA-029）
 - 古い版・新しい版・読めない版のときは、SPEC-EGOV-DB-SCHEMA-025 のエラーの文を出して終了コード 1
 - 開けないときは `[ERROR] DB を開けません: <エラーの文>` で終了コード 1
 
 どの場合も zip を取得しない。版が同じ DB のときだけ、SPEC-EGOV-CLI-BULK-DOWNLOAD-028 以降の処理に進む。
 
-例: DB ファイルの無い場所で `--bulk-download-by-date 20260917` を実行すると、`[ERROR] DB がまだありません。…` を出して終了コード 1 で終わり、DB のファイルもフォルダーもできない（v0.18.x では DB を作って取り込み、`sync_state` に `last_sync_date` と `last_full_dl_at` がどちらも実行した日の UTC の日付（例: `2026-10-03`）の行を作ったので、その後の `--sync` は全件の取り込みが済んだものとして進んだ）。
+例: 環境変数を付けずに、DB ファイルの無い場所で `--bulk-download-by-date 20260917` を実行すると、`[ERROR] DB がまだありません。先に npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything を実行してください` を出して終了コード 1 で終わり、DB のファイルもフォルダーもできない（v0.19.x ではコマンドが `houki-egov-mcp --bulk-download-everything`。v0.18.x では DB を作って取り込み、`sync_state` に `last_sync_date` と `last_full_dl_at` がどちらも実行した日の UTC の日付（例: `2026-10-03`）の行を作ったので、その後の `--sync` は全件の取り込みが済んだものとして進んだ）。
 
 ### SPEC-EGOV-CLI-BULK-DOWNLOAD-031 中身が同じでも、未施行の欄が空になって届いた未施行の版は、状態だけを現行にする
 

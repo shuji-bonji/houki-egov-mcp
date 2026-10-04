@@ -3,9 +3,9 @@
 - 機能 ID: EGOV
 - 種類: CLI
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261003-t5-docs-mismatch` は 2026-10-03（PR #92）。差分 `20261003-db-cli` は 2026-10-03（PR #100）。差分 `20261003-db-cli-followup` は 2026-10-03（PR #103）
+- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261003-t5-docs-mismatch` は 2026-10-03（PR #92）。差分 `20261003-db-cli` は 2026-10-03（PR #100）。差分 `20261003-db-cli-followup` は 2026-10-03（PR #103）。差分 `20261004-db-location` は 2026-10-04（PR #114）
 - 起こした元: v0.15.1 の `src/index.ts`、`src/cli/index.ts`、`src/config.ts`、`src/cli/index.test.ts`
-- 関連する Issue: houki-egov-mcp #61（0.19.0）、houki-egov-mcp #102（0.19.0）
+- 関連する Issue: houki-egov-mcp #61（0.19.0）、houki-egov-mcp #102（0.19.0）、houki-egov-mcp #108（0.20.0）
 
 この文書は「このコマンドは何をするか」を書きます。どう実装しているか（関数名・テーブル名）は書きません。
 
@@ -41,7 +41,7 @@
 ```mermaid
 flowchart TD
   A["houki-egov-mcp を実行"] --> B{"引数があるか"}
-  B -- ない --> S0["不正な数値の環境変数は警告を出して既定値を使う（011）"] --> S["MCP サーバーとして標準入出力で待ち受ける（001）"]
+  B -- ない --> S0["不正な数値の環境変数は警告を出して既定値を使う（011）"] --> S["MCP サーバーとして標準入出力で待ち受ける（001）"] --> S1["起動時のログに DB の場所と、DB の場所の設定を出す（012）"]
   B -- ある --> C{"最初の引数"}
   C -- "--help / -h / --version / -v / --bulk-download-everything / --bulk-download-by-date / --sync / --bulk-download-incremental / --status" --> X{"そのフラグが受け取る数より後に引数があるか"}
   X -- ある --> Y["余分な引数のエラーと使い方を出し exit 2（009）"]
@@ -131,6 +131,18 @@ v0.18.x では 2 番目以降の引数を見なかったので、上の 4 行目
 引数なしで MCP サーバーとして起動するときは、SPEC-EGOV-CLI-ENTRY-010 と同じ 3 つの環境変数を確かめる。1 以上の整数でない値（空文字と無いときは除く）は、その変数の既定値（`HOUKI_EGOV_BULK_RETRY` は 3、`HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS` は 90、`HOUKI_EGOV_CONCURRENCY` は 4）に置き換え、変数ごとに標準エラー出力へ `[server] 警告: <変数名> は 1 以上の整数で指定してください: <値>（既定値 <既定値> を使います）` を 1 行出して、起動を続ける（`[server] … started` の行より前）。終了しない。
 
 例: `HOUKI_EGOV_CONCURRENCY=-1` で起動すると、`[server] 警告: HOUKI_EGOV_CONCURRENCY は 1 以上の整数で指定してください: -1（既定値 4 を使います）` を出して起動し、e-Gov への同時リクエスト数の上限は 4（v0.18.x では `createLimit: concurrency must be >= 1, got -1` の例外で、ツールを呼ぶ前に起動に失敗した。コードを読んで分かったことで、実行して確かめていない）。`HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS=abc` で起動すると警告を出して 90 を使い、`search_fulltext` の `freshness.warning` は `最終同期から 90 日を超えていれば`（SPEC-EGOV-SEARCH-FULLTEXT-023）。
+
+### SPEC-EGOV-CLI-ENTRY-012 MCP サーバーは起動時のログに、DB の絶対パスと DB の場所の設定を出す
+
+引数なしで MCP サーバーとして起動すると、`[server] <パッケージ名> v<版> started` の行（SPEC-EGOV-CLI-ENTRY-006）の次に、標準エラー出力へ次の 1 行を出す。
+
+```
+[server] DB: <DB の絶対パス>（DB の場所の設定: <設定の名前>）
+```
+
+`<DB の絶対パス>` と `<設定の名前>` は SPEC-EGOV-DB-SCHEMA-028 のとおり（ホームディレクトリを `~` に置き換えない）。この行のために DB を開かず、ファイルがあるかも確かめない（`search_fulltext` は呼び出しごとに DB を開くので、起動した後に CLI で作った DB も使える。起動時の有無を出すと古い情報になる）。MCP の応答（tools/list とツールの応答）は変わらない。
+
+例: 環境変数を付けずに、ホームディレクトリが `/Users/bonji` の環境で起動すると、標準エラー出力は `[server] @shuji-bonji/houki-egov-mcp v0.20.0 started` の次に `[server] DB: /Users/bonji/.cache/houki-egov-mcp/laws.db（DB の場所の設定: 既定）`。`HOUKI_EGOV_DB_PATH=/Users/bonji/.cache/houki-egov-mcp/laws.v3.db` を付けて起動すると `[server] DB: /Users/bonji/.cache/houki-egov-mcp/laws.v3.db（DB の場所の設定: HOUKI_EGOV_DB_PATH）`（v0.19.x では `… started` の 1 行だけで、どのファイルを開くかはログから分からなかった。houki-egov-mcp #108 の追記）。
 
 ## できないこと
 
