@@ -410,9 +410,9 @@ const NO_STATE_RESULT: SyncResult = {
 };
 
 /**
- * 同期結果を表示し、exit code を返す。
+ * 同期結果を表示し、exit code を返します。
  * countOverdue があれば、すべての日を確認済みにして終わったときに、施行日を過ぎた未施行の版を数えて
- * `[WARN]` を出す（SPEC-EGOV-CLI-SYNC-021）
+ * `[WARN]` を出します（SPEC-EGOV-CLI-SYNC-021）
  */
 function printSyncResult(r: SyncResult, countOverdue?: (lastSyncDate: string) => number): number {
   const { plan } = r;
@@ -469,8 +469,8 @@ function printSyncResult(r: SyncResult, countOverdue?: (lastSyncDate: string) =>
 }
 
 /**
- * 状態だけを書き換えた版があれば 1 行出す（SPEC-EGOV-CLI-BULK-DOWNLOAD-032・SPEC-EGOV-CLI-SYNC-020）。
- * 0 なら出さない
+ * 状態だけを書き換えた版があれば 1 行出します（SPEC-EGOV-CLI-BULK-DOWNLOAD-032・SPEC-EGOV-CLI-SYNC-020）。
+ * 0 なら出しません
  */
 function printStatusChanged(n: number): void {
   if (n > 0) {

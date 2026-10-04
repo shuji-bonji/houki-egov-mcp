@@ -13,6 +13,15 @@
  *    ※ これは "近似" — 正確には API /law_revisions/{lawId} で `PreviousEnforced` /
  *       `Repeal` を区別すべきだが、Phase 2-5 の範囲外。Phase 2-13 (API enrichment)
  *       で精緻化する
+ *    同じ法令の現行の版は、施行日が最も新しい 1 つだけにします（SPEC-EGOV-CLI-BULK-DOWNLOAD-016）
+ *  - XML が前回と同じ版でも、DB で `UnEnforced` の版が CSV の `unenforced` を空にして届いたら、
+ *    状態だけを `CurrentEnforced` にします（SPEC-EGOV-CLI-BULK-DOWNLOAD-031。v0.19.1）。
+ *    e-Gov は施行日の当日の差分に、同じ版を同じ XML のまま、未施行の欄を空にしてもう一度入れるためです。
+ *    条の本文・索引・`content_hash`・`fetched_at`・`updated` は書き換えず、`unchanged` と
+ *    `status_changed` に数えます。欄が `○` で届いても、現行・前の版を `UnEnforced` に戻しません
+ *  - 全件の取り込み (`fullSnapshot: true`) では、CSV の全行の後に、全件の CSV に無い `UnEnforced` の版のうち
+ *    同じ法令の現行の版の施行日以前のものを `PreviousEnforced` にします（SPEC-EGOV-CLI-BULK-DOWNLOAD-033。
+ *    v0.19.1）。全件の zip は施行済みで置き換わった前の版を入れないためです
  *  - `repeal_status` は `'None'` 固定 (API 拡張で更新)
  *  - `updated` は ingester 実行時刻 (`fetched_at` と同じ) を proxy として入れる
  *  - `promulgation_date` は XML 属性 (Era + Year + PromulgateMonth + PromulgateDay) から
@@ -63,10 +72,10 @@ export interface IngestZipOptions {
    */
   syncBaseIso?: string;
   /**
-   * 全件の zip の取り込みか (default false)。`--bulk-download-everything` だけが true を渡す。
+   * 全件の zip の取り込みかどうかです (default false)。`--bulk-download-everything` だけが true を渡します。
    * true なら、CSV の全行の後に、CSV に無い未施行の版のうち同じ法令の現行の版の施行日以前のものを
-   * PreviousEnforced にする（SPEC-EGOV-CLI-BULK-DOWNLOAD-033）。
-   * `source` の既定値 `'all_xml'` で呼ぶ取り込みがこの処理を通らないように、`source` とは分けている
+   * PreviousEnforced にします（SPEC-EGOV-CLI-BULK-DOWNLOAD-033）。
+   * `source` の既定値 `'all_xml'` で呼ぶ取り込みがこの処理を通らないように、`source` とは分けています
    */
   fullSnapshot?: boolean;
 }
@@ -90,9 +99,9 @@ export interface IngestResult {
   /** content_hash 一致で no-op skip した件数（状態だけを書き換えた版も含む） */
   unchanged: number;
   /**
-   * 状態（current_revision_status）だけを書き換えた版の数。
+   * 状態（current_revision_status）だけを書き換えた版の数です。
    * 同じ XML で未施行の欄が空になって届いた未施行の版（SPEC-EGOV-CLI-BULK-DOWNLOAD-031。`unchanged` の内数）と、
-   * 全件の取り込みで前の版にした、CSV に無い未施行の版（SPEC-EGOV-CLI-BULK-DOWNLOAD-033。`unchanged` に入らない）
+   * 全件の取り込みで前の版にした、CSV に無い未施行の版（SPEC-EGOV-CLI-BULK-DOWNLOAD-033。`unchanged` に入りません）を数えます
    */
   status_changed: number;
   /** INSERT or UPDATE した件数 */
@@ -112,6 +121,9 @@ const CSV_PATTERN = /(?:^|\/)([^/]*\.csv)$/i;
  * XML パーサーや normalize の変更で「同じ XML から違う行が生成される」ようになったときに上げる。
  * 上げると全法令の content_hash が変わり、`--bulk-download-everything` の再実行で
  * 全件が再 ingest される (スキーマを DROP せずに済む)。
+ *
+ * 版の状態（`current_revision_status`）だけの変化では上げません。v0.19.1 で施行日の当日に配り直される版の
+ * 状態を取り込むようにしたときも上げていません（状態は content_hash と別に比べます。SPEC-EGOV-CLI-BULK-DOWNLOAD-031）。
  *
  * - 1: v0.5.0 (normalize 適用)
  * - 2: v0.5.1 (xml-parser が Part (編) 配下の Article を拾うよう修正)
@@ -426,8 +438,8 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
 
 /**
  * 全件の CSV に無い UnEnforced の版のうち、同じ法令に CurrentEnforced の版があり、施行日がその版の
- * 施行日以前（同じ日を含む）のものを PreviousEnforced にする（SPEC-EGOV-CLI-BULK-DOWNLOAD-033）。
- * 施行日の無い版、現行の版の無い法令の版、施行日が現行の版より後の版は残す。
+ * 施行日以前（同じ日を含む）のものを PreviousEnforced にします（SPEC-EGOV-CLI-BULK-DOWNLOAD-033）。
+ * 施行日の無い版、現行の版の無い法令の版、施行日が現行の版より後の版は残します。
  *
  * @returns PreviousEnforced にした版の数
  */
@@ -475,8 +487,8 @@ export class IngestError extends Error {
 }
 
 /**
- * 内部: バッチの 1 項目。
- * `upsert` は 1 法令 ingest に必要な前処理済データ、`status` は状態だけの更新（SPEC-EGOV-CLI-BULK-DOWNLOAD-031）
+ * 内部: バッチの 1 項目です。
+ * `upsert` は 1 法令 ingest に必要な前処理済データ、`status` は状態だけの更新（SPEC-EGOV-CLI-BULK-DOWNLOAD-031）です
  */
 type PreparedItem =
   | { kind: 'upsert'; lawRow: LawRow; parsed: ParsedLaw }
@@ -584,10 +596,10 @@ export function countLaws(db: DatabaseT.Database): number {
 }
 
 /**
- * 施行日が `lastSyncDate` より前（同じ日を含まない）なのに UnEnforced のままの版の数。
- * 施行日の無い版は数えない。`--sync` と `--status` の `[WARN]` に使う
+ * 施行日が `lastSyncDate` より前（同じ日を含まない）なのに UnEnforced のままの版の数を返します。
+ * 施行日の無い版は数えません。`--sync` と `--status` の `[WARN]` に使います
  * （SPEC-EGOV-CLI-SYNC-021・SPEC-EGOV-CLI-STATUS-012）。
- * 施行日の当日の差分は当日の 15 時ごろに作られるので、今日ではなく `last_sync_date` と比べる
+ * 施行日の当日の差分は当日の 15 時ごろに作られるので、今日ではなく `last_sync_date` と比べます
  */
 export function countOverdueUnenforced(db: DatabaseT.Database, lastSyncDate: string): number {
   return (

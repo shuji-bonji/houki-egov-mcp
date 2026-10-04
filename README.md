@@ -207,7 +207,7 @@ DB は既定で `~/.cache/houki-egov-mcp/laws.db` に作られます。場所を
 
 ### 日々の更新と作り直し
 
-ふだんの更新は `--sync` だけで足ります。`--bulk-download-everything` を使うのは、表の 2〜4 行目の 3 つのときです。
+ふだんの更新は `--sync` だけで足ります。`--bulk-download-everything` を使うのは、表の 2〜5 行目の 4 つのときです。
 
 | 場面 | 使うコマンド | すること |
 |---|---|---|
@@ -215,8 +215,22 @@ DB は既定で `~/.cache/houki-egov-mcp/laws.db` に作られます。場所を
 | 初めて DB を作るとき | `--bulk-download-everything` | 全件の zip（約 290 MB）を取得して DB を作ります |
 | 最後の同期から 90 日（`HOUKI_EGOV_INCREMENTAL_LIMIT_DAYS`）を超えたとき | `--bulk-download-everything` | `--sync` は何もせずに、このコマンドを促して終了コード 1 で終わります |
 | houki-egov-mcp を上げて DB の版が変わったとき（0.19.0 で版 2 → 3） | `--bulk-download-everything` | 版の古い DB を作り直して取り込みます（取り込んだ中身は消えます） |
+| `--sync`・`--status` が `[WARN] 施行日が last_sync_date …` を出したとき（0.19.1 から） | `--bulk-download-everything` | 施行日を過ぎても未施行のまま残った版の状態を直します（条の本文は入れ直しません） |
 
-版が同じ DB に `--bulk-download-everything` を実行しても、作り直しはしません。全件の zip を取り直して、中身の変わった法令だけを書き換えます。ふだんの更新に使う必要はありません。
+版が同じ DB に `--bulk-download-everything` を実行しても、作り直しはしません。全件の zip を取り直して、中身の変わった法令と、施行されて状態が変わった版だけを書き換えます。ふだんの更新に使う必要はありません。
+
+### 0.19.0 で 2026-10-04 以降に `--sync` した DB は、0.19.1 で 1 回取り込み直してください
+
+e-Gov は、改正の施行日の当日の差分に、それまで未施行として配っていた版を同じ中身のまま「施行済み」としてもう一度入れます。0.19.0 はこの版を「中身が同じ」として飛ばしていたので、施行日を過ぎても版が未施行のまま残り、`search_fulltext` が改正前の条文を返し続けることがありました（#107）。0.19.1 は、中身が同じでも状態だけを書き換えます。
+
+0.19.0 で 2026-10-04 以降に `--sync` した DB は、0.19.1 に上げた後に次のコマンドを 1 回実行してください。施行日を過ぎても未施行のまま残った版の状態を直します（条の本文は入れ直しません。全件の zip 約 290 MB を取得します）。0.19.1 の `--sync` や `--status` が `[WARN] 施行日が last_sync_date …` を出したときも同じです。
+
+```bash
+npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything
+```
+
+- 取り込みで状態だけを書き換えた版があると、`  ingest 完了: …` の行の後に `  状態の更新: <件数> 件 (…)` の行が出ます
+- このコマンドが要る DB の正確な範囲（`--sync` だけで直る場合）は [docs/NOTES.md](docs/NOTES.md) の「施行日の当日に配り直される版（0.19.1）」にあります
 
 ### 0.19.0 に上げたら DB を作り直してください
 
@@ -608,6 +622,7 @@ houki-egov-mcp の [`src/errors.ts`](src/errors.ts) は family 全体の **リ�
 - [`docs/LAW-HIERARCHY.md`](docs/LAW-HIERARCHY.md) — 法令種別の階層リファレンス（専門家でない利用者向け）
 - [`docs/USE-CASES.md`](docs/USE-CASES.md) — プロダクト開発の典型ユースケース（電帳法・電子契約・個情法・e-KYC）
 - [`docs/DESIGN.md`](docs/DESIGN.md) — 設計原則・houki-hub family のロードマップ・業法との関係
+- [`docs/NOTES.md`](docs/NOTES.md) — README の注意書きの詳細（施行日の当日に配り直される版と 0.19.1 の DB の直し方）
 - [`DISCLAIMER.md`](DISCLAIMER.md) — 利用上の注意（業法との関係）
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — 貢献方法
 - [`CHANGELOG.md`](CHANGELOG.md) — リリースノート
