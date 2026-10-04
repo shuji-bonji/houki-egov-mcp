@@ -584,6 +584,23 @@ export function countLaws(db: DatabaseT.Database): number {
 }
 
 /**
+ * 施行日が `lastSyncDate` より前（同じ日を含まない）なのに UnEnforced のままの版の数。
+ * 施行日の無い版は数えない。`--sync` と `--status` の `[WARN]` に使う
+ * （SPEC-EGOV-CLI-SYNC-021・SPEC-EGOV-CLI-STATUS-012）。
+ * 施行日の当日の差分は当日の 15 時ごろに作られるので、今日ではなく `last_sync_date` と比べる
+ */
+export function countOverdueUnenforced(db: DatabaseT.Database, lastSyncDate: string): number {
+  return (
+    db
+      .prepare(
+        `SELECT count(*) AS c FROM laws
+         WHERE current_revision_status = 'UnEnforced' AND amendment_enforcement_date < ?`
+      )
+      .get(lastSyncDate) as { c: number }
+  ).c;
+}
+
+/**
  * sync_state を upsert (single-row, id=1)。
  * `last_full_dl_at` に null を渡すと既存の値を保つ (差分 ingest 用)
  */

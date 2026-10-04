@@ -32,7 +32,7 @@ import {
   openDbForFullIngest,
   openUsableDb,
 } from '../db/index.js';
-import { type IngestResult, ingestZip } from '../services/bulk/ingester.js';
+import { countOverdueUnenforced, type IngestResult, ingestZip } from '../services/bulk/ingester.js';
 import {
   createSqliteSyncStore,
   isNoDiffResponse,
@@ -265,6 +265,7 @@ async function runBulkDownloadEverything(): Promise<CliResult> {
     }
     console.error('');
     console.error(`  ingest 完了: ${formatIngestResult(result)}`);
+    printStatusChanged(result.status_changed);
 
     const totalMs = Date.now() - startedAt;
     console.error(`[完了] 全体 ${formatDuration(totalMs)}`);
@@ -332,6 +333,7 @@ async function runBulkDownloadByDate(yyyymmdd: string): Promise<CliResult> {
         updateSyncState: false,
       });
       console.error(`  ingest 完了: ${formatIngestResult(result)}`);
+      printStatusChanged(result.status_changed);
       return { exitCode: 0, command };
     } finally {
       closeDb(db);
@@ -386,7 +388,10 @@ async function runSyncCommand(): Promise<CliResult> {
       cleanupDay: (zipPath) => rm(zipPath, { force: true }),
       onDay: (r, i, total) => console.error(`  [${i + 1}/${total}] ${formatSyncDay(r)}`),
     });
-    return { exitCode: printSyncResult(result), command };
+    return {
+      exitCode: printSyncResult(result, (date) => countOverdueUnenforced(db, date)),
+      command,
+    };
   } catch (err) {
     console.error(`[ERROR] ${(err as Error).message ?? err}`);
     return { exitCode: 1, command };
@@ -404,8 +409,12 @@ const NO_STATE_RESULT: SyncResult = {
   durationMs: 0,
 };
 
-/** 同期結果を表示し、exit code を返す */
-function printSyncResult(r: SyncResult): number {
+/**
+ * 同期結果を表示し、exit code を返す。
+ * countOverdue があれば、すべての日を確認済みにして終わったときに、施行日を過ぎた未施行の版を数えて
+ * `[WARN]` を出す（SPEC-EGOV-CLI-SYNC-021）
+ */
+function printSyncResult(r: SyncResult, countOverdue?: (lastSyncDate: string) => number): number {
   const { plan } = r;
   if (plan.kind === 'no-state') {
     console.error(
@@ -425,6 +434,7 @@ function printSyncResult(r: SyncResult): number {
   const upserted = ingested.reduce((n, d) => n + (d.ingest?.upserted ?? 0), 0);
   const unchanged = ingested.reduce((n, d) => n + (d.ingest?.unchanged ?? 0), 0);
   const failedLaws = ingested.reduce((n, d) => n + (d.ingest?.failed ?? 0), 0);
+  const statusChanged = ingested.reduce((n, d) => n + (d.ingest?.status_changed ?? 0), 0);
 
   if (r.failed) {
     console.error(`[ERROR] ${r.failed.date}: ${r.failed.message}`);
@@ -450,7 +460,29 @@ function printSyncResult(r: SyncResult): number {
   if (failedLaws > 0) parts.push(`${failedLaws} 件は XML を読めず skip`);
   console.error(`[完了] ${parts.join('、')}。全体 ${formatDuration(r.durationMs)}`);
   console.error(`  last_sync_date: ${r.lastSyncDate}`);
+  printStatusChanged(statusChanged);
+  if (countOverdue && r.lastSyncDate) {
+    const overdue = countOverdue(r.lastSyncDate);
+    if (overdue > 0) console.error(overdueWarning(r.lastSyncDate, overdue));
+  }
   return 0;
+}
+
+/**
+ * 状態だけを書き換えた版があれば 1 行出す（SPEC-EGOV-CLI-BULK-DOWNLOAD-032・SPEC-EGOV-CLI-SYNC-020）。
+ * 0 なら出さない
+ */
+function printStatusChanged(n: number): void {
+  if (n > 0) {
+    console.error(
+      `  状態の更新: ${n} 件 (条の本文はそのまま、未施行 (UnEnforced) だった版の状態だけを書き換え)`
+    );
+  }
+}
+
+/** 施行日を過ぎても未施行のままの版の警告の文（SPEC-EGOV-CLI-SYNC-021・SPEC-EGOV-CLI-STATUS-012） */
+function overdueWarning(lastSyncDate: string, n: number): string {
+  return `[WARN] 施行日が last_sync_date (${lastSyncDate}) より前なのに未施行 (UnEnforced) のままの版が ${n} 件あります。houki-egov-mcp --bulk-download-everything を 1 回実行すると直ります（全件の zip 約 290 MB を取得します。条の本文は入れ直しません）`;
 }
 
 function formatSyncDay(d: SyncDayResult): string {
@@ -516,6 +548,9 @@ async function runStatus(): Promise<CliResult> {
       } else if (fresh.days_since_sync > 0) {
         console.log(`  差分を取り込むには --sync を実行してください`);
       }
+      // 施行日を過ぎても未施行のままの版（SPEC-EGOV-CLI-STATUS-012）。標準出力に出す
+      const overdue = countOverdueUnenforced(db, fresh.last_sync_date);
+      if (overdue > 0) console.log(overdueWarning(fresh.last_sync_date, overdue));
     }
     return { exitCode: 0, command: 'status' };
   } finally {
