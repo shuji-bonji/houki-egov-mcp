@@ -26,18 +26,19 @@ import {
 } from '@shuji-bonji/houki-abbreviations';
 import type DatabaseT from 'better-sqlite3';
 import { BULK_CONFIG } from '../config.js';
+import { type DbLocation, guideCommand } from '../db/location.js';
 
 // houki-abbreviations から re-export して既存利用者の互換性を保つ
 export type { StalenessLevel };
 export { judgeStaleness, STALENESS_THRESHOLDS };
 
 /**
- * sync_state ベースの freshness 情報。MCP レスポンスに埋め込む。
+ * sync_state から読んだ同期の鮮度。CLI の `--status` はこれをそのまま表示する。
  *
  * houki-nta-mcp の `FreshnessRange` と概念は同じだが、houki-egov-mcp は
  * sync_state single-row テーブルを参照するので構造が単純化されている。
  */
-export interface FreshnessInfo {
+export interface SyncFreshness {
   /** sync_state.last_sync_date (YYYY-MM-DD) — 最後の同期完了日 */
   last_sync_date: string;
   /** sync_state.last_full_dl_at (ISO 8601) — 最後の全件 DL 実行時刻 */
@@ -48,6 +49,59 @@ export interface FreshnessInfo {
   days_since_sync: number;
   /** outdated 時のみ付く再 bulk DL 案内メッセージ */
   warning?: string;
+}
+
+/**
+ * `search_fulltext` の応答の `freshness`。常にこの 5 つのキー（と outdated のときの `warning`）を持つ
+ * （SPEC-EGOV-SEARCH-FULLTEXT-023・043）。同期の記録が無いときは鮮度の 4 つが null、
+ * DB を引いていないとき（api-fallback）は `db_path` も null
+ */
+export interface FreshnessInfo {
+  last_sync_date: string | null;
+  last_full_dl_at: string | null;
+  staleness: StalenessLevel | null;
+  days_since_sync: number | null;
+  /** 引いた DB のパス。ホームディレクトリの部分は `~`（SPEC-EGOV-SEARCH-FULLTEXT-042） */
+  db_path: string | null;
+  warning?: string;
+}
+
+/**
+ * 応答の `freshness` を組み立てる（SPEC-EGOV-SEARCH-FULLTEXT-043）。
+ *
+ * @param sync `summarizeFreshness` の結果。同期の記録が無ければ null
+ * @param dbPath 引いた DB のパス（応答の形）。DB を引いていなければ null
+ */
+export function responseFreshness(
+  sync: SyncFreshness | null,
+  dbPath: string | null
+): FreshnessInfo {
+  if (!sync) {
+    return {
+      last_sync_date: null,
+      last_full_dl_at: null,
+      staleness: null,
+      days_since_sync: null,
+      db_path: dbPath,
+    };
+  }
+  const info: FreshnessInfo = {
+    last_sync_date: sync.last_sync_date,
+    last_full_dl_at: sync.last_full_dl_at,
+    staleness: sync.staleness,
+    days_since_sync: sync.days_since_sync,
+    db_path: dbPath,
+  };
+  if (sync.warning) info.warning = sync.warning;
+  return info;
+}
+
+/**
+ * outdated の警告に入れる、最新化のコマンドの書き方。`--sync` は案内のコマンドの形
+ * （SPEC-EGOV-DB-SCHEMA-029）、括弧の中の `--bulk-download-everything` はフラグだけ
+ */
+export function syncCommandHint(location: DbLocation): string {
+  return `\`${guideCommand('--sync', location)}\` (最終同期から ${BULK_CONFIG.incrementalLimitDays} 日を超えていれば \`--bulk-download-everything\`)`;
 }
 
 /**
@@ -84,7 +138,7 @@ export class SyncDateError extends Error {
 }
 
 /**
- * sync_state テーブルから FreshnessInfo を構築。
+ * sync_state テーブルから同期の鮮度を読む。
  *
  * @param db SQLite DB (initSchema 済み)
  * @param bulkDownloadHint 警告に埋め込む CLI コマンド表記の上書き
@@ -96,7 +150,7 @@ export function summarizeFreshness(
   db: DatabaseT.Database,
   bulkDownloadHint?: string,
   nowMs: number = Date.now()
-): FreshnessInfo | null {
+): SyncFreshness | null {
   const row = db
     .prepare('SELECT last_sync_date, last_full_dl_at FROM sync_state WHERE id = 1')
     .get() as { last_sync_date: string; last_full_dl_at: string } | undefined;
@@ -111,7 +165,7 @@ export function summarizeFreshness(
   } catch (err) {
     throw new SyncDateError(row.last_sync_date, err instanceof Error ? err.message : String(err));
   }
-  const result: FreshnessInfo = {
+  const result: SyncFreshness = {
     last_sync_date: row.last_sync_date,
     last_full_dl_at: row.last_full_dl_at,
     staleness,

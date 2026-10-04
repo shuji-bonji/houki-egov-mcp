@@ -13,6 +13,7 @@ import {
   type DbLocation,
   type DbState,
   dbLocationForPath,
+  displayDbPath,
   guideCommand,
   openUsableDb,
   resolveDbLocation,
@@ -20,7 +21,14 @@ import {
 } from '../db/index.js';
 import { type LawServiceError, makeError, NEXT_ACTIONS } from '../errors.js';
 import { findLawHierarchy, listLawHierarchyNames } from '../knowledge/law-hierarchy.js';
-import { type FreshnessInfo, SyncDateError, summarizeFreshness } from '../services/freshness.js';
+import {
+  type FreshnessInfo,
+  responseFreshness,
+  SyncDateError,
+  type SyncFreshness,
+  summarizeFreshness,
+  syncCommandHint,
+} from '../services/freshness.js';
 import { getAttachment, getLawFile, listAttachments } from '../services/law-files.js';
 import {
   hasAnyArticle,
@@ -160,8 +168,8 @@ export interface SearchFulltextBulkResponse {
   source: 'bulk';
   count: number;
   hits: LawSearchHit[];
-  /** bulk DB の鮮度 (sync_state 由来)。outdated なら warning 付き */
-  freshness: FreshnessInfo | null;
+  /** bulk DB の鮮度 (sync_state 由来) と引いた DB のパス。outdated なら warning 付き（SPEC-EGOV-SEARCH-FULLTEXT-023・043） */
+  freshness: FreshnessInfo;
   filters: {
     law_type: string | null;
     /** 分野での絞り込みはしない。domain の引数は 0.18.0 で外した（SPEC-EGOV-SEARCH-FULLTEXT-022）。キーは残す */
@@ -175,6 +183,8 @@ export interface SearchFulltextFallbackResponse {
   source: 'api-fallback';
   note: string;
   next_actions: Array<{ action: string; reason: string; example?: Record<string, unknown> }>;
+  /** DB を引いていないので 5 つとも null（SPEC-EGOV-SEARCH-FULLTEXT-043） */
+  freshness: FreshnessInfo;
   fallback: unknown;
 }
 
@@ -215,7 +225,7 @@ export async function handleSearchFulltext(
       // DB を開けない (権限・ディスク等) 場合も API フォールバックで応答する
       logger.warn('search_fulltext', `bulk DB open failed: ${state.message}`);
     }
-    return searchFulltextFallback(args, keyword, limit, fallbackReason(state, dbPath));
+    return searchFulltextFallback(args, keyword, limit, fallbackReason(state, location));
   }
 
   try {
@@ -224,7 +234,7 @@ export async function handleSearchFulltext(
         args,
         keyword,
         limit,
-        fallbackReason({ kind: 'no-version' }, dbPath)
+        fallbackReason({ kind: 'no-version' }, location)
       );
     }
 
@@ -233,13 +243,14 @@ export async function handleSearchFulltext(
       lawType: args.law_type,
       scanBody: args.scan_body === true,
     });
-    let freshness: FreshnessInfo | null;
+    let sync: SyncFreshness | null;
     try {
-      freshness = summarizeFreshness(db);
+      sync = summarizeFreshness(db, syncCommandHint(location));
     } catch (err) {
       if (err instanceof SyncDateError) return syncDateError(err, location);
       throw err;
     }
+    const freshness = responseFreshness(sync, displayDbPath(location.absolutePath));
 
     const response: SearchFulltextBulkResponse = {
       keyword,
@@ -279,44 +290,65 @@ interface FallbackReason {
   why: string;
   /** note の「、search_law (…) にフォールバックしています。」の後に続ける文 */
   remedy: string;
-  /** `--bulk-download-everything` を next_actions で案内するか（新しい版・読めない版では案内しない） */
-  suggestBulkDownload: boolean;
+  /**
+   * next_actions で案内する `--bulk-download-everything` のコマンド（SPEC-EGOV-DB-SCHEMA-029）。
+   * 案内しないとき（新しい版・読めない版・開けない）は null
+   */
+  bulkCommand: string | null;
 }
 
-const BUILD_DB_REMEDY =
-  '条文本文の全文検索を有効にするには `houki-egov-mcp --bulk-download-everything` でローカル DB を構築してください';
-
-/** DB の状態ごとの切り替えの理由（SPEC-EGOV-SEARCH-FULLTEXT-002・027・039・040） */
-function fallbackReason(state: DbState, dbPath: string): FallbackReason {
+/**
+ * DB の状態ごとの切り替えの理由（SPEC-EGOV-SEARCH-FULLTEXT-044 の表。002・027・039・040）。
+ * `<パス>` は開こうとした DB のパスの応答の形（042）、`<コマンド>` は案内のコマンド（SPEC-EGOV-DB-SCHEMA-029）
+ */
+function fallbackReason(state: DbState, location: DbLocation): FallbackReason {
+  const path = displayDbPath(location.absolutePath);
+  const command = guideCommand('--bulk-download-everything', location);
+  const build = `条文本文の全文検索を有効にするには \`${command}\` でローカル DB を構築してください`;
   switch (state.kind) {
-    case 'error':
-      return {
-        why: 'bulk DB を開けなかったため',
-        remedy: BUILD_DB_REMEDY,
-        suggestBulkDownload: true,
-      };
+    case 'missing':
+      if (location.setting === 'HOUKI_EGOV_DB_PATH') {
+        return {
+          why: `HOUKI_EGOV_DB_PATH が指すファイル (${path}) が無いため`,
+          remedy: `条文本文の全文検索を有効にするには、HOUKI_EGOV_DB_PATH を作ってある DB のファイルに直すか、\`${command}\` でこのパスにローカル DB を構築してください`,
+          bulkCommand: command,
+        };
+      }
+      return { why: `ローカル DB (${path}) が無いため`, remedy: build, bulkCommand: command };
     case 'old':
       return {
-        why: `bulk DB の版 (${state.version}) がこの houki-egov-mcp (${SCHEMA_VERSION}) より古いため`,
-        remedy:
-          '条文本文の全文検索を有効にするには `houki-egov-mcp --bulk-download-everything` でローカル DB を作り直してください（取り込んだ中身は消え、全件の zip 約 290 MB を取り直します）',
-        suggestBulkDownload: true,
+        why: `ローカル DB (${path}) の版 (${state.version}) がこの houki-egov-mcp (${SCHEMA_VERSION}) より古いため`,
+        remedy: `条文本文の全文検索を有効にするには \`${command}\` でローカル DB を作り直してください（取り込んだ中身は消え、全件の zip 約 290 MB を取り直します）`,
+        bulkCommand: command,
       };
     case 'new':
       return {
-        why: `bulk DB の版 (${state.version}) がこの houki-egov-mcp (${SCHEMA_VERSION}) より新しいため`,
+        why: `ローカル DB (${path}) の版 (${state.version}) がこの houki-egov-mcp (${SCHEMA_VERSION}) より新しいため`,
         remedy:
           '条文本文の全文検索を有効にするには houki-egov-mcp を新しい版に更新してください（DB は変更していません）',
-        suggestBulkDownload: false,
+        bulkCommand: null,
       };
     case 'unreadable':
       return {
-        why: `bulk DB の版を読めないため (schema_version: ${state.value})`,
-        remedy: `条文本文の全文検索を有効にするには DB ファイル (${dbPath}) を消してから \`houki-egov-mcp --bulk-download-everything\` を実行してください（DB は変更していません）`,
-        suggestBulkDownload: false,
+        why: `ローカル DB (${path}) の版を読めないため (schema_version: ${state.value})`,
+        remedy: `条文本文の全文検索を有効にするには DB ファイル (${path}) を消してから \`${command}\` を実行してください（DB は変更していません）`,
+        bulkCommand: null,
+      };
+    case 'error':
+      // --bulk-download-everything もこの DB では取得の前に止まるので案内しない（SPEC-EGOV-CLI-BULK-DOWNLOAD-029）
+      return {
+        why: `ローカル DB (${path}) を開けなかったため`,
+        remedy:
+          '条文本文の全文検索を有効にするには、このパスがフォルダーを指していないか、途中に普通のファイルが無いか、読む権限があるかを確かめてください（HOUKI_EGOV_DB_PATH を設定しているときはその値を直します）',
+        bulkCommand: null,
       };
     default:
-      return { why: 'bulk DL 未実行のため', remedy: BUILD_DB_REMEDY, suggestBulkDownload: true };
+      // 版の記録が無い、または版が同じで条が 1 件も無い
+      return {
+        why: `ローカル DB (${path}) にまだ法令が取り込まれていないため`,
+        remedy: build,
+        bulkCommand: command,
+      };
   }
 }
 
@@ -333,11 +365,11 @@ async function searchFulltextFallback(
     limit,
   });
   const next_actions: SearchFulltextFallbackResponse['next_actions'] = [];
-  if (reason.suggestBulkDownload) {
+  if (reason.bulkCommand) {
     next_actions.push({
       action: 'bulk_download_everything',
       reason: 'CLI でローカル bulk DB を構築すると search_fulltext が SQLite FTS5 で動作します',
-      example: { command: 'houki-egov-mcp --bulk-download-everything' },
+      example: { command: reason.bulkCommand },
     });
   }
   next_actions.push(NEXT_ACTIONS.searchLaw(keyword));
@@ -346,6 +378,7 @@ async function searchFulltextFallback(
     source: 'api-fallback',
     note: `${reason.why}、search_law (法令名のタイトル一致) にフォールバックしています。${reason.remedy}`,
     next_actions,
+    freshness: responseFreshness(null, null),
     fallback,
   };
 }
