@@ -252,6 +252,8 @@ async function runBulkDownloadEverything(): Promise<CliResult> {
         db,
         zip,
         source: 'all_xml',
+        // 全件の CSV に無い未施行の版を前の版にする（SPEC-EGOV-CLI-BULK-DOWNLOAD-033）
+        fullSnapshot: true,
         syncBaseIso: fetchStartedIso,
         onProgress: (p) =>
           process.stderr.write(

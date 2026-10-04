@@ -62,6 +62,13 @@ export interface IngestZipOptions {
    * 日本時間の日付、`last_full_dl_at` はこの時刻になる（SPEC-EGOV-CLI-BULK-DOWNLOAD-017）
    */
   syncBaseIso?: string;
+  /**
+   * 全件の zip の取り込みか (default false)。`--bulk-download-everything` だけが true を渡す。
+   * true なら、CSV の全行の後に、CSV に無い未施行の版のうち同じ法令の現行の版の施行日以前のものを
+   * PreviousEnforced にする（SPEC-EGOV-CLI-BULK-DOWNLOAD-033）。
+   * `source` の既定値 `'all_xml'` で呼ぶ取り込みがこの処理を通らないように、`source` とは分けている
+   */
+  fullSnapshot?: boolean;
 }
 
 /** 進捗イベント */
@@ -84,7 +91,8 @@ export interface IngestResult {
   unchanged: number;
   /**
    * 状態（current_revision_status）だけを書き換えた版の数。
-   * 同じ XML で未施行の欄が空になって届いた未施行の版（SPEC-EGOV-CLI-BULK-DOWNLOAD-031。`unchanged` の内数）
+   * 同じ XML で未施行の欄が空になって届いた未施行の版（SPEC-EGOV-CLI-BULK-DOWNLOAD-031。`unchanged` の内数）と、
+   * 全件の取り込みで前の版にした、CSV に無い未施行の版（SPEC-EGOV-CLI-BULK-DOWNLOAD-033。`unchanged` に入らない）
    */
   status_changed: number;
   /** INSERT or UPDATE した件数 */
@@ -136,6 +144,7 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     batchSize = 200,
     updateSyncState = true,
     syncBaseIso = nowIso,
+    fullSnapshot = false,
   } = opts;
 
   const start = Date.now();
@@ -386,7 +395,13 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     });
   }
 
-  // 7) sync_state を更新 (差分 zip の CSV は当日更新分だけなので total_laws は DB の件数を使う)
+  // 7) 全件の取り込みでは、全件の CSV に無い未施行の版を前の版にする（SPEC-EGOV-CLI-BULK-DOWNLOAD-033）。
+  //    全件の zip は現行の版と未施行の版だけを入れるので、CSV に無い未施行の版は施行されて置き換わった版
+  if (fullSnapshot) {
+    statusChanged += demoteReplacedUnenforced(db, csvByRevisionId);
+  }
+
+  // 8) sync_state を更新 (差分 zip の CSV は当日更新分だけなので total_laws は DB の件数を使う)
   if (updateSyncState) {
     upsertSyncState(db, {
       last_sync_date: jstDateOf(syncBaseIso),
@@ -407,6 +422,45 @@ export async function ingestZip(opts: IngestZipOptions): Promise<IngestResult> {
     failed,
     durationMs: Date.now() - start,
   };
+}
+
+/**
+ * 全件の CSV に無い UnEnforced の版のうち、同じ法令に CurrentEnforced の版があり、施行日がその版の
+ * 施行日以前（同じ日を含む）のものを PreviousEnforced にする（SPEC-EGOV-CLI-BULK-DOWNLOAD-033）。
+ * 施行日の無い版、現行の版の無い法令の版、施行日が現行の版より後の版は残す。
+ *
+ * @returns PreviousEnforced にした版の数
+ */
+function demoteReplacedUnenforced(
+  db: DatabaseT.Database,
+  csvByRevisionId: Map<string, AllLawListRow>
+): number {
+  const candidates = db
+    .prepare(
+      `SELECT u.law_revision_id FROM laws u
+       WHERE u.current_revision_status = 'UnEnforced'
+         AND u.amendment_enforcement_date IS NOT NULL
+         AND EXISTS (
+           SELECT 1 FROM laws c
+           WHERE c.law_id = u.law_id
+             AND c.current_revision_status = 'CurrentEnforced'
+             AND c.amendment_enforcement_date >= u.amendment_enforcement_date
+         )`
+    )
+    .all() as Array<{ law_revision_id: string }>;
+  const targets = candidates.map((r) => r.law_revision_id).filter((id) => !csvByRevisionId.has(id));
+  if (targets.length === 0) return 0;
+
+  const demote = db.prepare(
+    `UPDATE laws SET current_revision_status = 'PreviousEnforced'
+     WHERE law_revision_id = ? AND current_revision_status = 'UnEnforced'`
+  );
+  const run = db.transaction((ids: string[]) => {
+    let n = 0;
+    for (const id of ids) n += demote.run(id).changes;
+    return n;
+  });
+  return run(targets);
 }
 
 /** ingester 専用エラー */
