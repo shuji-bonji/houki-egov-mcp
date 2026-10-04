@@ -137,9 +137,12 @@ async function runStatus(dbPath: string): Promise<number> {
 }
 
 const SYNC_HINT = '  差分を取り込むには --sync を実行してください';
+/** 3 行目（SPEC-EGOV-CLI-STATUS-013）。runStatus は HOUKI_EGOV_DB_PATH で DB を決める */
+const SETTING_HOUKI =
+  '  DB の場所の設定: HOUKI_EGOV_DB_PATH（MCP クライアントから起動したサーバーは、シェルの環境変数を受け継がないことがあります）';
 
 describe('cli_status（差分 20260928-untested-behaviors）', () => {
-  it('SPEC-EGOV-CLI-STATUS-005 版・DB の場所・件数と同期の欄を標準出力に出して exit 0、標準エラー出力は空', async () => {
+  it('SPEC-EGOV-CLI-STATUS-005 版・DB の場所・DB の場所の設定・件数と同期の欄を標準出力に出して exit 0、標準エラー出力は空', async () => {
     mkdirSync(join(root, 'x'));
     const dbPath = join(root, 'x', 'laws.db');
     await seedDb(dbPath, {
@@ -152,6 +155,7 @@ describe('cli_status（差分 20260928-untested-behaviors）', () => {
     expect(lines(stdoutChunks)).toEqual([
       `[status] ${pkg.name} v${pkg.version}`,
       `  DB: ${dbPath}`,
+      SETTING_HOUKI,
       '  laws:     1 (版: 1)',
       '  articles: 2',
       '  sync:',
@@ -164,7 +168,7 @@ describe('cli_status（差分 20260928-untested-behaviors）', () => {
     expect(lines(stderrChunks)).toEqual([]);
   });
 
-  it('SPEC-EGOV-CLI-STATUS-005 同期の状態が無い空の DB なら件数 0 と未取り込みの 1 行で exit 0', async () => {
+  it('SPEC-EGOV-CLI-STATUS-005 同期の状態が無い空の DB なら 3 行目の後に件数 0 と未取り込みの 1 行で exit 0', async () => {
     // 0.19.0 から --status は DB を作らない（SPEC-EGOV-CLI-STATUS-010）ので、空の DB を先に作る
     mkdirSync(join(root, 'empty'));
     const dbPath = join(root, 'empty', 'laws.db');
@@ -177,6 +181,7 @@ describe('cli_status（差分 20260928-untested-behaviors）', () => {
     expect(lines(stdoutChunks)).toEqual([
       `[status] ${pkg.name} v${pkg.version}`,
       `  DB: ${dbPath}`,
+      SETTING_HOUKI,
       '  laws:     0 (版: 0)',
       '  articles: 0',
       '  sync:     (まだ bulk DL されていません — --bulk-download-everything を実行)',
@@ -184,7 +189,7 @@ describe('cli_status（差分 20260928-untested-behaviors）', () => {
     expect(lines(stderrChunks)).toEqual([]);
   });
 
-  it('SPEC-EGOV-CLI-STATUS-006 SQLite でない中身のファイルは [ERROR] DB を開けません: file is not a database で exit 1', async () => {
+  it('SPEC-EGOV-CLI-STATUS-006 SQLite でない中身のファイルは 1〜3 行目の後に [ERROR] DB を開けません: file is not a database で exit 1', async () => {
     const dbPath = join(root, 'not-a-db.db');
     writeFileSync(dbPath, 'this is not a sqlite database file, just plain text.\n'.repeat(20));
     const code = await runStatus(dbPath);
@@ -193,11 +198,12 @@ describe('cli_status（差分 20260928-untested-behaviors）', () => {
     expect(lines(stdoutChunks)).toEqual([
       `[status] ${pkg.name} v${pkg.version}`,
       `  DB: ${dbPath}`,
+      SETTING_HOUKI,
     ]);
     expect(lines(stderrChunks)).toEqual(['[ERROR] DB を開けません: file is not a database']);
   });
 
-  it('SPEC-EGOV-CLI-STATUS-006 フォルダーを指定すると [ERROR] DB を開けません: unable to open database file で exit 1', async () => {
+  it('SPEC-EGOV-CLI-STATUS-006 フォルダーを指定すると 1〜3 行目の後に [ERROR] DB を開けません: unable to open database file で exit 1', async () => {
     const dbPath = join(root, 'a-directory');
     mkdirSync(dbPath);
     const code = await runStatus(dbPath);
@@ -206,6 +212,7 @@ describe('cli_status（差分 20260928-untested-behaviors）', () => {
     expect(lines(stdoutChunks)).toEqual([
       `[status] ${pkg.name} v${pkg.version}`,
       `  DB: ${dbPath}`,
+      SETTING_HOUKI,
     ]);
     expect(lines(stderrChunks)).toEqual(['[ERROR] DB を開けません: unable to open database file']);
   });

@@ -16,9 +16,14 @@ export function statusChangedLine(n: number): string {
   return `  状態の更新: ${n} 件 (条の本文はそのまま、未施行 (UnEnforced) だった版の状態だけを書き換え)`;
 }
 
-/** SPEC-EGOV-CLI-SYNC-021 と SPEC-EGOV-CLI-STATUS-012 の行 */
-export function warnLine(lastSyncDate: string, n: number): string {
-  return `[WARN] 施行日が last_sync_date (${lastSyncDate}) より前なのに未施行 (UnEnforced) のままの版が ${n} 件あります。houki-egov-mcp --bulk-download-everything を 1 回実行すると直ります（全件の zip 約 290 MB を取得します。条の本文は入れ直しません）`;
+/**
+ * SPEC-EGOV-CLI-SYNC-021 と SPEC-EGOV-CLI-STATUS-012 の行。
+ * コマンドは案内のコマンドの形（SPEC-EGOV-DB-SCHEMA-029）。dbPath を渡したときは、HOUKI_EGOV_DB_PATH に
+ * そのパス（ホームディレクトリの外）を指定して実行したときの形
+ */
+export function warnLine(lastSyncDate: string, n: number, dbPath?: string): string {
+  const prefix = dbPath === undefined ? '' : `HOUKI_EGOV_DB_PATH='${dbPath}' `;
+  return `[WARN] 施行日が last_sync_date (${lastSyncDate}) より前なのに未施行 (UnEnforced) のままの版が ${n} 件あります。${prefix}npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything を 1 回実行すると直ります（全件の zip 約 290 MB を取得します。条の本文は入れ直しません）`;
 }
 
 /** 施行日 2026-10-05 の UnEnforced の版の ID（proposal.md の「確かめた値」） */

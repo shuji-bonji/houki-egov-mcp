@@ -87,7 +87,7 @@ async function status(dbPath: string): Promise<number> {
 }
 
 describe('cli_status（差分 20261003-db-cli）', () => {
-  it('SPEC-EGOV-CLI-STATUS-005 版・DB の場所・法令の数と版の数・条の件数と同期の欄を出して exit 0、標準エラー出力は空', async () => {
+  it('SPEC-EGOV-CLI-STATUS-005 版・DB の場所・DB の場所の設定・法令の数と版の数・条の件数と同期の欄を出して exit 0、標準エラー出力は空', async () => {
     mkdirSync(join(env.root, 'x'));
     const dbPath = join(env.root, 'x', 'laws.db');
     seedCurrent(
@@ -102,6 +102,7 @@ describe('cli_status（差分 20261003-db-cli）', () => {
     expect(lines(out.stdout)).toEqual([
       `[status] ${pkg.name} v${pkg.version}`,
       `  DB: ${dbPath}`,
+      '  DB の場所の設定: HOUKI_EGOV_DB_PATH（MCP クライアントから起動したサーバーは、シェルの環境変数を受け継がないことがあります）',
       '  laws:     1 (版: 1)',
       '  articles: 2',
       '  sync:',
@@ -124,11 +125,11 @@ describe('cli_status（差分 20261003-db-cli）', () => {
     expect(lines(out.stdout)).toContain('  laws:     1 (版: 2)');
   });
 
-  it('SPEC-EGOV-CLI-STATUS-005 同期の状態が無く空の DB なら 0 (版: 0)・0 と未取り込みの 1 行で exit 0', async () => {
+  it('SPEC-EGOV-CLI-STATUS-005 同期の状態が無く空の DB なら 3 行目の後に 0 (版: 0)・0 と未取り込みの 1 行で exit 0', async () => {
     const dbPath = join(env.root, 'laws.db');
     seedCurrent(dbPath, () => {});
     expect(await status(dbPath)).toBe(0);
-    expect(lines(out.stdout).slice(2)).toEqual([
+    expect(lines(out.stdout).slice(3)).toEqual([
       '  laws:     0 (版: 0)',
       '  articles: 0',
       '  sync:     (まだ bulk DL されていません — --bulk-download-everything を実行)',
@@ -144,7 +145,7 @@ describe('cli_status（差分 20261003-db-cli）', () => {
     });
     expect(await status(dbPath)).toBe(0);
     expect(lines(out.stdout)).toContain(
-      '  ⚠ bulk DB が 38 日前のデータです。最新化するには `houki-egov-mcp --sync` (最終同期から 60 日を超えていれば `--bulk-download-everything`) を実行してください'
+      `  ⚠ bulk DB が 38 日前のデータです。最新化するには \`HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --sync\` (最終同期から 60 日を超えていれば \`--bulk-download-everything\`) を実行してください`
     );
   });
 
@@ -193,25 +194,26 @@ describe('cli_status（差分 20261003-db-cli）', () => {
     });
   }
 
-  it('SPEC-EGOV-CLI-STATUS-010 DB が無いときは作らずに、3 行を出して exit 0', async () => {
+  it('SPEC-EGOV-CLI-STATUS-010 DB が無いときは作らずに、4 行を出して exit 0', async () => {
     const dbPath = join(env.root, 'empty', 'a', 'laws.db');
     mkdirSync(join(env.root, 'empty'));
     expect(await status(dbPath)).toBe(0);
     expect(lines(out.stdout)).toEqual([
       `[status] ${pkg.name} v${pkg.version}`,
       `  DB: ${dbPath}`,
-      '  (DB がまだありません — houki-egov-mcp --bulk-download-everything で作ります)',
+      '  DB の場所の設定: HOUKI_EGOV_DB_PATH（MCP クライアントから起動したサーバーは、シェルの環境変数を受け継がないことがあります）',
+      `  (DB がまだありません — HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything で作ります)`,
     ]);
     expect(lines(out.stderr)).toEqual([]);
     expect(existsSync(join(env.root, 'empty', 'a'))).toBe(false);
   });
 
-  it('SPEC-EGOV-CLI-STATUS-010 版の記録が無い DB（テーブルの無い SQLite）も同じ 3 行で exit 0、テーブルを作らない', async () => {
+  it('SPEC-EGOV-CLI-STATUS-010 版の記録が無い DB（テーブルの無い SQLite）も同じ 4 行で exit 0、テーブルを作らない', async () => {
     const dbPath = join(env.root, 'laws.db');
     new Database(dbPath).close();
     expect(await status(dbPath)).toBe(0);
-    expect(lines(out.stdout)[2]).toBe(
-      '  (DB がまだありません — houki-egov-mcp --bulk-download-everything で作ります)'
+    expect(lines(out.stdout)[3]).toBe(
+      `  (DB がまだありません — HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything で作ります)`
     );
     const db = new Database(dbPath, { readonly: true });
     try {
@@ -221,11 +223,15 @@ describe('cli_status（差分 20261003-db-cli）', () => {
     }
   });
 
-  it('SPEC-EGOV-CLI-STATUS-011 版 2 の DB では 1・2 行目の後に古い版のエラー（SPEC-EGOV-DB-SCHEMA-025 の文）を出して exit 1、件数は出さず DB も変わらない', async () => {
+  it('SPEC-EGOV-CLI-STATUS-011 版 2 の DB では 1〜3 行目の後に古い版のエラー（SPEC-EGOV-DB-SCHEMA-025 の文）を出して exit 1、件数は出さず DB も変わらない', async () => {
     const dbPath = join(env.root, 'laws.db');
     seedVersionedDb(dbPath, '2');
     expect(await status(dbPath)).toBe(1);
-    expect(lines(out.stdout)).toEqual([`[status] ${pkg.name} v${pkg.version}`, `  DB: ${dbPath}`]);
+    expect(lines(out.stdout)).toEqual([
+      `[status] ${pkg.name} v${pkg.version}`,
+      `  DB: ${dbPath}`,
+      '  DB の場所の設定: HOUKI_EGOV_DB_PATH（MCP クライアントから起動したサーバーは、シェルの環境変数を受け継がないことがあります）',
+    ]);
     expect(lines(out.stderr)).toEqual([
       `[ERROR] DB の版 (2) が古いため使えません。HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything で作り直してください（取り込んだ中身は消え、全件の zip 約 290 MB を取り直します）`,
     ]);

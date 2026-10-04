@@ -152,7 +152,7 @@ describe('cli_sync（差分 20261004-ingest-redistributed-revisions）', () => {
     const err = lines(out.stderr);
     const [last, warn] = indexesInOrder(err, [
       '  last_sync_date: 2026-10-07',
-      warnLine('2026-10-07', 5),
+      warnLine('2026-10-07', 5, dbPath),
     ]);
     expect(warn).toBe((last as number) + 1);
     expect(warn).toBe(err.length - 1);
@@ -174,7 +174,7 @@ describe('cli_sync（差分 20261004-ingest-redistributed-revisions）', () => {
     const [last, changed, warn] = indexesInOrder(err, [
       '  last_sync_date: 2026-10-07',
       statusChangedLine(1),
-      warnLine('2026-10-07', 5),
+      warnLine('2026-10-07', 5, dbPath),
     ]);
     expect(changed).toBe((last as number) + 1);
     expect(warn).toBe((changed as number) + 1);
@@ -209,7 +209,7 @@ describe('cli_sync（差分 20261004-ingest-redistributed-revisions）', () => {
     const err = lines(out.stderr);
     const [last, warn] = indexesInOrder(err, [
       '  last_sync_date: 2026-10-25',
-      warnLine('2026-10-25', 5),
+      warnLine('2026-10-25', 5, dbPath),
     ]);
     expect(warn).toBe((last as number) + 1);
   });

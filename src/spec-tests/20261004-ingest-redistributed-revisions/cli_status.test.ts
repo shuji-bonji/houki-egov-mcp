@@ -66,7 +66,7 @@ describe('cli_status（差分 20261004-ingest-redistributed-revisions）', () =>
       '    days_since_sync: 1',
       '    staleness:       fresh',
       '  差分を取り込むには --sync を実行してください',
-      warnLine('2026-10-06', 5),
+      warnLine('2026-10-06', 5, dbPath),
     ]);
     expect(warn).toBe((hint as number) + 1);
     expect(warn).toBe(stdout.length - 1);
@@ -101,7 +101,7 @@ describe('cli_status（差分 20261004-ingest-redistributed-revisions）', () =>
     const stdout = lines(out.stdout);
     const [outdated, warn] = indexesInOrder(stdout, [
       /^ {2}⚠ bulk DB が \d+ 日前のデータです。/,
-      warnLine('2026-06-01', 1),
+      warnLine('2026-06-01', 1, dbPath),
     ]);
     expect(warn).toBe((outdated as number) + 1);
   });

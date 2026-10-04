@@ -347,13 +347,16 @@ describe('DB の状態と入口ごとの扱い', () => {
     expect(s.laws).toBe(1);
   });
 
-  it('SPEC-EGOV-DB-SCHEMA-025 版を読めない DB（abc）で --status は 2 行の後に読めない版のエラーで exit 1', async () => {
+  it('SPEC-EGOV-DB-SCHEMA-025 版を読めない DB（abc）で --status は 3 行（3 行目は SPEC-EGOV-CLI-STATUS-013）の後に読めない版のエラーで exit 1', async () => {
     const dbPath = join(env.root, 'laws.db');
     process.env.HOUKI_EGOV_DB_PATH = dbPath;
     seedVersionedDb(dbPath, 'abc');
     expect((await runCliWith(['--status'])).exitCode).toBe(1);
-    expect(lines(out.stdout)).toHaveLength(2);
+    expect(lines(out.stdout)).toHaveLength(3);
     expect(lines(out.stdout)[1]).toBe(`  DB: ${dbPath}`);
+    expect(lines(out.stdout)[2]).toBe(
+      '  DB の場所の設定: HOUKI_EGOV_DB_PATH（MCP クライアントから起動したサーバーは、シェルの環境変数を受け継がないことがあります）'
+    );
     expect(lines(out.stderr)).toEqual([
       `[ERROR] DB の版を読めないため (schema_version: abc)、DB を変更しません。DB ファイル (${dbPath}) を消してから HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything を実行してください`,
     ]);

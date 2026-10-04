@@ -333,7 +333,7 @@ describe('--bulk-download-by-date は版が同じ DB にだけ取り込む', () 
     const egov = stubEgov({ head: 200, days: { '20260917': ZIP_YOKIN } });
     expect((await runCliWith(['--bulk-download-by-date', '20260917'])).exitCode).toBe(1);
     expect(lines(out.stderr)).toContain(
-      '[ERROR] DB がまだありません。先に houki-egov-mcp --bulk-download-everything を実行してください'
+      `[ERROR] DB がまだありません。先に HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything を実行してください`
     );
     expect(egov.fn).not.toHaveBeenCalled();
     expect(existsSync(dbPath)).toBe(false);
@@ -346,7 +346,7 @@ describe('--bulk-download-by-date は版が同じ DB にだけ取り込む', () 
     const egov = stubEgov({ head: 200, days: { '20260917': ZIP_YOKIN } });
     expect((await runCliWith(['--bulk-download-by-date', '20260917'])).exitCode).toBe(1);
     expect(lines(out.stderr)).toContain(
-      '[ERROR] DB がまだありません。先に houki-egov-mcp --bulk-download-everything を実行してください'
+      `[ERROR] DB がまだありません。先に HOUKI_EGOV_DB_PATH='${dbPath}' npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything を実行してください`
     );
     expect(egov.fn).not.toHaveBeenCalled();
     expect(withDb(dbPath, (db) => db.prepare('SELECT name FROM sqlite_master').all())).toEqual([]);

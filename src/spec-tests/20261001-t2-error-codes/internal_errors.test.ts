@@ -126,15 +126,16 @@ describe('同期の記録の日付を解釈できない (20261001-t2-error-codes
     }
   }
 
-  it('SPEC-EGOV-CLI-STATUS-009 解釈できない last_sync_date では 1〜4 行目を出した後 [ERROR] を出して exit 1（コマンドは SPEC-EGOV-DB-SCHEMA-029 の形）', async () => {
+  it('SPEC-EGOV-CLI-STATUS-009 解釈できない last_sync_date では 1〜6 行目（3 行目は SPEC-EGOV-CLI-STATUS-013）を出した後 [ERROR] を出して exit 1（コマンドは SPEC-EGOV-DB-SCHEMA-029 の形）', async () => {
     const path = join(root, 'status-bad.db');
     await seedWithSyncDate(path, '2026/05/08');
     const { result, out, err } = await runStatus(path);
     expect(result.exitCode).toBe(1);
     expect(out[0]).toMatch(/^\[status\] /);
     expect(out[1]).toMatch(/^ {2}DB: /);
-    expect(out[2]).toMatch(/^ {2}laws: /);
-    expect(out[3]).toMatch(/^ {2}articles: /);
+    expect(out[2]).toMatch(/^ {2}DB の場所の設定: HOUKI_EGOV_DB_PATH/);
+    expect(out[3]).toMatch(/^ {2}laws: /);
+    expect(out[4]).toMatch(/^ {2}articles: /);
     expect(out.some((l) => l.includes('sync:'))).toBe(false);
     // HOUKI_EGOV_DB_PATH で DB を決めているので、コマンドの前に同じ変数が付く
     expect(
