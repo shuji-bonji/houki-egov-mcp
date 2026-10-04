@@ -15,6 +15,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.20.0] - 2026-10-04
+
+✨ **minor リリース** — 段階 6 の段階 3（T6 ローカル DB の場所の見え方。houki-hub `docs/notes/2026-10-04-plan-stage6-and-followups.md`、規則の正本は houki-hub `docs/DECISIONS.md` 2026-10-04）。仕様 PR [#114](https://github.com/shuji-bonji/houki-egov-mcp/pull/114)（`20261004-db-location`）で承認した差分を実装し、`specs/current/` に取り込みました。閉じる Issue: #108 #110。#111（既定のファイル名に DB の版を入れるか）は、DECISIONS.md の決定（入れない）を書いて閉じています。
+
+> ⚠️ **`search_fulltext` が `api-fallback` を返したときの `note` の先頭の文が変わります。** `note` の先頭で原因を見分けているスクリプトは、下の「互換性」の表の新しい文に直してください。`--status` は 3 行目に「DB の場所の設定」の行が入るので、`  laws:` 以降の行が 1〜2 行下にずれます（行の形と終了コードは変えていません）。
+>
+> - DB のスキーマの版（3）と `INGEST_VERSION`（2）は変えていません。0.19.x の DB をそのまま使えます
+> - 応答のフィールドは消さず、名前も変えていません。`code` も変えていません
+
+### 互換性
+
+| 場面 | 0.19.x | 0.20.0 |
+| --- | --- | --- |
+| `search_fulltext` が DB を引いたとき | `freshness` に `db_path` が無い | `freshness.db_path` に DB のパス（ホームは `~`） |
+| 同期の記録が無い DB を引いたとき | `freshness: null` | `freshness` はオブジェクトで、鮮度の 4 つが `null`、`db_path` は DB のパス |
+| `source: "api-fallback"` | `freshness` のキーが無い | `freshness` の 5 つのキーがすべて `null` |
+| `api-fallback` の `note` の先頭 | `bulk DL 未実行のため` / `bulk DB を開けなかったため` / `bulk DB の版 (<n>) が…` / `bulk DB の版を読めないため …` | `ローカル DB (<パス>) が無いため` / `HOUKI_EGOV_DB_PATH が指すファイル (<パス>) が無いため` / `ローカル DB (<パス>) にまだ法令が取り込まれていないため` / `ローカル DB (<パス>) を開けなかったため` / `ローカル DB (<パス>) の版 (<n>) が…` / `ローカル DB (<パス>) の版を読めないため …`。`note` の先頭で原因を見分けているスクリプトは直す必要がある |
+| DB を開けないときの `next_actions` | 1 件目 `bulk_download_everything`、2 件目 `search_law` | `search_law` の 1 件だけ |
+| 案内のコマンド（応答と CLI の出力） | `houki-egov-mcp --<フラグ>` | `npx -y @shuji-bonji/houki-egov-mcp@latest --<フラグ>`。`HOUKI_EGOV_DB_PATH` / `XDG_CACHE_HOME` で起動したときは `HOUKI_EGOV_DB_PATH="$HOME/…" npx -y …` のように前に付く |
+| MCP サーバーの起動時のログ（標準エラー出力） | `[server] … started` の 1 行 | 次の行に `[server] DB: <絶対パス>（DB の場所の設定: <名前>）` |
+| `--status` の標準出力 | 2 行目の次が `  laws:` の行 | 3 行目に `  DB の場所の設定: …`。同じフォルダーに別の `laws*.db` があれば、その次に `[WARN] 同じフォルダーに、…` の行。`  laws:` 以降の行は 1〜2 行ずれる。終了コードは変わらない |
+
+### Added
+
+- **`search_fulltext` の `freshness.db_path`**（#108）: 引いた DB のパスを、ホームディレクトリの部分を `~` に置き換えて返します。`freshness` は常に 5 つのキーを持つオブジェクトになり、DB を引いていないとき（`api-fallback`）は 5 つとも `null` です（SPEC-EGOV-SEARCH-FULLTEXT-042・043）
+- **MCP サーバーの起動時のログの DB の行**（#108）: `[server] … started` の次に `[server] DB: <絶対パス>（DB の場所の設定: HOUKI_EGOV_DB_PATH / XDG_CACHE_HOME / 既定）` を出します。DB は開きません（SPEC-EGOV-CLI-ENTRY-012）
+- **`--status` の「DB の場所の設定」の行と `[WARN]`**（#110）: 3 行目に、DB の場所をどの設定で決めたかを出します。同じフォルダーに名前が `laws` で始まり `.db` で終わるファイルがほかにあれば、名前・大きさ・最終更新を挙げた `[WARN]` を出します。見つけたファイルは開かず、終了コードは変えません（SPEC-EGOV-CLI-STATUS-013・014）
+- **DB の場所の設定と案内のコマンドの規則**: DB の場所の設定の名前と DB の絶対パス（SPEC-EGOV-DB-SCHEMA-028）、案内のコマンドの形とシェルに書くパス（SPEC-EGOV-DB-SCHEMA-029）。`src/db/location.ts` の `resolveDbLocation()`・`displayDbPath()`・`shellPath()`・`guideCommand()` に置き、MCP と CLI の両方で使います
+- **受入テスト**: `src/spec-tests/20261004-db-location/`
+
+### Changed
+
+- **`api-fallback` の `note`**（#108）: 先頭に開こうとした DB のパスを入れ、DB の状態ごとに事実に合う文にしました。`HOUKI_EGOV_DB_PATH` が指すファイルが無いときは文を分けます。版の記録が無い DB と条が 0 件の DB は「まだ法令が取り込まれていない」にまとめました。開けない DB では、`--bulk-download-everything` もその DB で止まるので案内しません（SPEC-EGOV-SEARCH-FULLTEXT-044、002・027・039・040）
+- **案内のコマンド**（#108）: `next_actions[].example.command`、`note`・`freshness.warning`・`INTERNAL_ERROR` の `hint` の中のコマンド、CLI の `[ERROR]`・`[WARN]`・`(DB がまだありません — …)` の行のコマンドを `npx -y @shuji-bonji/houki-egov-mcp@latest <フラグ>` にしました。環境変数で DB の場所を決めたときは同じ変数を前に付けます。フラグだけを書いた文と `--help` の使い方は変えていません（SPEC-EGOV-DB-SCHEMA-025・029、SPEC-EGOV-SEARCH-FULLTEXT-023・035、SPEC-EGOV-CLI-STATUS-004・009・010・011・012、SPEC-EGOV-CLI-SYNC-019・021、SPEC-EGOV-CLI-BULK-DOWNLOAD-030、SPEC-EGOV-COMMON-ERRORS-031）
+- tools/list の `search_fulltext` の `description` のコマンドを `npx -y @shuji-bonji/houki-egov-mcp@latest --bulk-download-everything` にしました
+- 仕様 ID では ADDED 8 件（SPEC-EGOV-SEARCH-FULLTEXT-042・043・044、SPEC-EGOV-DB-SCHEMA-028・029、SPEC-EGOV-CLI-STATUS-013・014、SPEC-EGOV-CLI-ENTRY-012）、MODIFIED 18 件です
+- 既定のファイル名（`laws.db`）に DB の版は入れません（#111、DECISIONS.md の T6 の (f)）。開発で DB の版を上げるときは `HOUKI_EGOV_DB_PATH` で別のファイルを使います
+
+### Documentation
+
+- README: 「`search_fulltext` が `api-fallback` になるとき」の表を新しい `note` の先頭 7 つにし、`note` のパスと `--status` の 3 行目で確かめる手順にしました。CLI の節に、応答と CLI の案内が npx の形になったこと、`--status` の 3 行目と `[WARN]`、起動時のログと `freshness.db_path` で MCP サーバーが開くファイルを確かめられることを書きました
+- CONTRIBUTING.md: 「ローカル DB を使う開発」で、`--status` の 3 行目が `HOUKI_EGOV_DB_PATH` であることも確かめるようにしました
+- docs/NOTES.md: `[WARN]` の行のコマンドを `<コマンド>` にし、0.20.0 からの形を書きました
+
 ## [0.19.1] - 2026-10-04
 
 🐛 **patch リリース** — 段階 6 の段階 1（houki-hub `docs/notes/2026-10-04-plan-stage6-and-followups.md`）。仕様 PR [#112](https://github.com/shuji-bonji/houki-egov-mcp/pull/112)（`20261004-ingest-redistributed-revisions`）で承認した差分を実装し、`specs/current/` に取り込みました。閉じる Issue: #107。
