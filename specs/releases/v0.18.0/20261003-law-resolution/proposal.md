@@ -1,8 +1,13 @@
+---
+approved: 2026-10-03
+pr: 95
+implementation: required
+targets: [common_errors, get_article_references, get_attachment, get_law, get_law_file, get_law_range, get_law_revisions, get_related_laws, get_toc, list_attachments, verify_citations]
+---
 # 変更: 法令名・条・委任先を、確かなときだけ 1 つに決める（段階 5 法令の引き当て）
 
 - 対象: `specs/current/common_errors/spec.md` と、`get_law` / `get_toc` / `get_law_range` / `get_law_revisions` / `get_related_laws` / `get_article_references` / `verify_citations` / `list_attachments` / `get_attachment` / `get_law_file` の `specs/current/<tool>/spec.md`
-- 実装の変更: 要（下の「実装の変更」）
-- 承認日: 2026-10-03（PR #95）
+- 実装の変更の補足: 下の「実装の変更」
 - 状態: 取り込み済み（v0.18.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward

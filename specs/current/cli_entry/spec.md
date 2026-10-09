@@ -1,9 +1,12 @@
+---
+spec_id: EGOV
+kind: cli
+approved: 2026-09-28
+pr: 50
+---
 # 機能: cli_entry（`houki-egov-mcp` コマンドの起動と引数の振り分け）
 
-- 機能 ID: EGOV
-- 種類: CLI
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261003-t5-docs-mismatch` は 2026-10-03（PR #92）。差分 `20261003-db-cli` は 2026-10-03（PR #100）。差分 `20261003-db-cli-followup` は 2026-10-03（PR #103）。差分 `20261004-db-location` は 2026-10-04（PR #114）
 - 起こした元: v0.15.1 の `src/index.ts`、`src/cli/index.ts`、`src/config.ts`、`src/cli/index.test.ts`
 - 関連する Issue: houki-egov-mcp #61（0.19.0）、houki-egov-mcp #102（0.19.0）、houki-egov-mcp #108（0.20.0）
 

@@ -1,8 +1,12 @@
+---
+approved: 2026-10-01
+pr: 84
+implementation: required
+targets: [common_errors, explain_law_type, get_article_references, get_attachment, get_law, get_law_file, get_law_range, get_law_revisions, get_related_laws, get_toc, list_attachments, resolve_abbreviation, search_fulltext, search_law, verify_citations]
+---
 # 変更: 引数の検査を inputSchema に書き、丸めずに `INVALID_ARGUMENT` にする（T1）
 
 - 対象: `specs/current/common_errors/spec.md` と、tools/call で呼べる 14 ツールすべての `specs/current/<tool>/spec.md`
-- 実装の変更: 要
-- 承認日: 2026-10-01（PR #84）
 - 状態: 取り込み済み（v0.16.0）
 - 起こした日: 2026-10-01（JST）
 - 起こした役: Spec Steward

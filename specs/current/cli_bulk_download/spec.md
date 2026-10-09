@@ -1,9 +1,12 @@
+---
+spec_id: EGOV
+kind: cli
+approved: 2026-09-28
+pr: 50
+---
 # 機能: cli_bulk_download（e-Gov の一括ダウンロードの zip を取得してローカル DB に取り込む）
 
-- 機能 ID: EGOV
-- 種類: CLI
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261003-db-cli` は 2026-10-03（PR #100）。差分 `20261003-db-cli-followup` は 2026-10-03（PR #103）。差分 `20261004-ingest-redistributed-revisions` は 2026-10-04（PR #112）。差分 `20261004-db-location` は 2026-10-04（PR #114）
 - 起こした元: v0.15.1 の `src/cli/index.ts`、`src/config.ts`、`src/services/bulk/zip-fetcher.ts`、`src/services/bulk/csv-parser.ts`、`src/services/bulk/xml-parser.ts`、`src/services/bulk/ingester.ts`、`src/cli/index.test.ts`、`src/services/bulk/zip-fetcher.test.ts`、`src/services/bulk/csv-parser.test.ts`、`src/services/bulk/xml-parser.test.ts`、`src/services/bulk/ingester.test.ts`
 - 関連する Issue: houki-egov-mcp #21（同じ法令の現行の版を 1 つにする変更は、#21 の `--sync` と同じ 0.8.0 で入った）、houki-egov-mcp #58・#59・#60（0.19.0）、houki-egov-mcp #101（0.19.0）、houki-egov-mcp #107（0.19.1）、houki-egov-mcp #108（0.20.0）
 

@@ -1,8 +1,13 @@
+---
+approved: 2026-10-01
+pr: 86
+implementation: required
+targets: [db_schema, get_article_references, get_attachment, get_law, get_law_file, get_law_range, get_law_revisions, get_related_laws, get_toc, list_attachments, resolve_abbreviation, search_fulltext, search_law, verify_citations]
+---
 # 変更: 全角・半角・ダッシュ類の揃え方を houki-abbreviations 0.7.0 に一本化する（T3）
 
 - 対象: `resolve_abbreviation` / `search_law` / `search_fulltext` / `db_schema` と、`law_name` を略称辞書で引く 10 ツール（`get_law` / `get_toc` / `get_law_range` / `get_law_revisions` / `get_related_laws` / `get_article_references` / `list_attachments` / `get_attachment` / `get_law_file` / `verify_citations`）の `specs/current/<dir>/spec.md`
-- 実装の変更: 要（`package.json` の `@shuji-bonji/houki-abbreviations` を `^0.7.0` に上げる変更を含む）
-- 承認日: 2026-10-01（PR #86）
+- 実装の変更の補足: `package.json` の `@shuji-bonji/houki-abbreviations` を `^0.7.0` に上げる変更を含む
 - 状態: 取り込み済み（v0.16.0）
 - 起こした日: 2026-10-01（JST）
 - 起こした役: Spec Steward

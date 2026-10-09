@@ -1,8 +1,13 @@
+---
+approved: 2026-09-28
+pr: 76
+implementation: required
+targets: [cli_bulk_download, cli_entry, cli_status, cli_sync, common_errors, db_schema, explain_law_type, get_article_references, get_attachment, get_law, get_law_file, get_law_range, get_law_revisions, get_related_laws, get_toc, list_attachments, resolve_abbreviation, search_fulltext, search_law, verify_citations]
+---
 # 変更: テストが無いだけの振る舞いに仕様 ID を振る
 
 - 対象: `specs/current/` の下の 20 本の `spec.md`（「できること」への追加）
-- 実装の変更: 要（受入テストを足す。`src/` の実行されるコードは変えない）
-- 承認日: 2026-09-28（PR #76）
+- 実装の変更の補足: 受入テストを足す。`src/` の実行されるコードは変えない
 - 状態: 取り込み済み。実装（受入テスト）は v0.15.2、`specs/current/` への取り込みは 2026-09-28（JST、実装 PR の最終コミット）
 - 起こした日: 2026-09-28（JST）
 - 起こした役: Spec Steward

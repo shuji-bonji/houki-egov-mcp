@@ -1,8 +1,13 @@
+---
+approved: 2026-10-03
+pr: 99
+implementation: required
+targets: [common_errors, get_article_references, search_fulltext, search_law]
+---
 # 変更: law_type の勅令の値を e-Gov に揃え、条の無い参照から get_toc を案内する（段階 5 追加分）
 
 - 対象: `search_law` / `search_fulltext` / `common_errors` / `get_article_references` の `specs/current/<dir>/spec.md`
-- 実装の変更: 要（下の「実装の変更」）
-- 承認日: 2026-10-03（PR #99）
+- 実装の変更の補足: 下の「実装の変更」
 - 状態: 取り込み済み（v0.18.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward

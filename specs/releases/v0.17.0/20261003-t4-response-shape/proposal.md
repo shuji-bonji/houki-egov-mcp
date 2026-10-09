@@ -1,8 +1,13 @@
+---
+approved: 2026-10-03
+pr: 91
+implementation: required
+targets: [get_article_references, get_attachment, get_law, get_law_file, get_law_range, get_law_revisions, get_related_laws, get_toc, list_attachments, verify_citations]
+---
 # 変更: 値の無いフィールドを null にし、meta の時点を常に返す（T4 応答の形）
 
 - 対象: `get_law` / `get_toc` / `get_law_range` / `get_law_revisions` / `get_related_laws` / `get_article_references` / `list_attachments` / `get_attachment` / `get_law_file` / `verify_citations` の `specs/current/<tool>/spec.md`
-- 実装の変更: 要（`get_law_revisions` の 017 は今の振る舞いを書くだけで、受入テストを足すだけ。下の「実装の変更」）
-- 承認日: 2026-10-03（PR #91）
+- 実装の変更の補足: `get_law_revisions` の 017 は今の振る舞いを書くだけで、受入テストを足すだけ。下の「実装の変更」
 - 状態: 取り込み済み（v0.17.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward

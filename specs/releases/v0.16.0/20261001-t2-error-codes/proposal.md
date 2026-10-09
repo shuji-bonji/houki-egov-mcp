@@ -1,8 +1,12 @@
+---
+approved: 2026-10-01
+pr: 85
+implementation: required
+targets: [cli_status, common_errors, get_article_references, get_attachment, get_law, get_law_file, get_law_range, get_law_revisions, get_related_laws, get_toc, list_attachments, search_fulltext, verify_citations]
+---
 # 変更: 「見つからない」と「取得元の失敗」の code を分ける（T2）
 
 - 対象: `specs/current/common_errors/spec.md` と、`get_law` / `get_toc` / `get_law_range` / `get_law_revisions` / `get_related_laws` / `get_article_references` / `list_attachments` / `get_attachment` / `get_law_file` / `verify_citations` / `search_fulltext` / `cli_status` の `specs/current/<dir>/spec.md`
-- 実装の変更: 要
-- 承認日: 2026-10-01（PR #85）
 - 状態: 取り込み済み（v0.16.0）
 - 起こした日: 2026-10-01（JST）
 - 起こした役: Spec Steward

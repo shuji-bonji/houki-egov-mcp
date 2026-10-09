@@ -1,9 +1,12 @@
+---
+spec_id: EGOV
+kind: db
+approved: 2026-09-28
+pr: 50
+---
 # 機能: db_schema（全文検索に使うローカル SQLite DB の置き場所とテーブル）
 
-- 機能 ID: EGOV
-- 種類: DB
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-db-cli` は 2026-10-03（PR #100）。差分 `20261004-db-location` は 2026-10-04（PR #114）
 - 起こした元: v0.15.1 の `src/db/index.ts`、`src/db/schema.ts`、`src/config.ts`（`BULK_CONFIG`）、`src/cli/index.ts`（DB を開く箇所と `--help`）、`src/db/schema.test.ts`
 - 関連する Issue: houki-egov-mcp #59・#60・#71（0.19.0 のスキーマの版 3）、houki-egov-mcp #108・#110（0.20.0）
 

@@ -1,8 +1,13 @@
+---
+approved: 2026-10-04
+pr: 112
+implementation: required
+targets: [cli_bulk_download, cli_status, cli_sync]
+---
 # 変更: 施行日の当日に配り直される版の状態を取り込む（egov #107）
 
 - 対象: `cli_bulk_download` / `cli_sync` / `cli_status` の `specs/current/<dir>/spec.md`
-- 実装の変更: 要（下の「実装の変更」）
-- 承認日: 2026-10-04（PR #112）
+- 実装の変更の補足: 下の「実装の変更」
 - 状態: 取り込み済み（v0.19.1）
 - 起こした日: 2026-10-04（JST）
 - 起こした役: Spec Steward

@@ -1,9 +1,12 @@
+---
+spec_id: EGOV
+kind: tool
+approved: 2026-09-28
+pr: 50
+---
 # 機能: explain_law_type（法令種別の制定主体・階層・拘束力を解説する）
 
-- 機能 ID: EGOV
-- 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20260930-bugfix-batch` は 2026-09-30（PR #81）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261003-t5-docs-mismatch` は 2026-10-03（PR #92）。差分 `20261003-search-explain-attachment` は 2026-10-03（PR #96）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/knowledge/law-hierarchy.ts`、`src/tools/handlers.test.ts`、`src/knowledge/law-hierarchy.test.ts`、`src/server.test.ts`
 - 関連する Issue: なし
 

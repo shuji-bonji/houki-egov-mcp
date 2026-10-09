@@ -1,8 +1,13 @@
+---
+approved: 2026-10-03
+pr: 103
+implementation: required
+targets: [cli_bulk_download, cli_entry, search_fulltext]
+---
 # 変更: 段落だけの附則の表示と、数値の環境変数の検査（段階 5 DB と CLI の追加分）
 
 - 対象: `cli_bulk_download` / `search_fulltext` / `cli_entry` の `specs/current/<dir>/spec.md`
-- 実装の変更: 要（下の「実装の変更」）
-- 承認日: 2026-10-03（PR #103）
+- 実装の変更の補足: 下の「実装の変更」
 - 状態: 取り込み済み（v0.19.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward

@@ -1,8 +1,13 @@
+---
+approved: 2026-10-03
+pr: 100
+implementation: required
+targets: [cli_bulk_download, cli_entry, cli_status, cli_sync, db_schema, search_fulltext]
+---
 # 変更: ローカル DB の版の扱い・作る入口・取り込みと同期の記録・CLI の引数（段階 5 DB と CLI）
 
 - 対象: `db_schema` / `cli_entry` / `cli_bulk_download` / `cli_sync` / `cli_status` / `search_fulltext` の `specs/current/<dir>/spec.md`
-- 実装の変更: 要（下の「実装の変更」）
-- 承認日: 2026-10-03（PR #100）
+- 実装の変更の補足: 下の「実装の変更」
 - 状態: 取り込み済み（v0.19.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward

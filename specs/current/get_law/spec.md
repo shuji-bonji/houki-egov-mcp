@@ -1,9 +1,12 @@
+---
+spec_id: EGOV
+kind: tool
+approved: 2026-09-28
+pr: 50
+---
 # 機能: get_law（法令の条・項・号を 1 つ取得する。条を省くと目次を返す）
 
-- 機能 ID: EGOV
-- 種類: ツール
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261001-t3-normalize` は 2026-10-01（PR #86）。差分 `20261003-t4-response-shape` は 2026-10-03（PR #91）。差分 `20261003-law-resolution` は 2026-10-03（PR #95）
 - 起こした元: v0.15.1 の `src/tools/definitions.ts`、`src/tools/handlers.ts`、`src/services/law-service.ts`、`src/services/law-tree.ts`、`src/formatters/markdown.ts`、`src/utils/article-num.ts`、`src/server.test.ts`、`src/tools/handlers.test.ts`、`src/services/law-tree.test.ts`、`src/formatters/markdown.test.ts`、`src/utils/article-num.test.ts`、`CHANGELOG.md`
 - 関連する Issue: houki-egov-mcp #16（Markdown の条・号の表示）、#17（漢数字の条番号・号番号）、#24（本則と附則を分ける）
 

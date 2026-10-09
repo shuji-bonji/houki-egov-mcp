@@ -1,9 +1,12 @@
+---
+spec_id: EGOV
+kind: cli
+approved: 2026-09-28
+pr: 50
+---
 # 機能: cli_status（ローカル DB の同期の状態と件数を表示する）
 
-- 機能 ID: EGOV
-- 種類: CLI
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20260930-bugfix-batch` は 2026-09-30（PR #81）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261003-db-cli` は 2026-10-03（PR #100）。差分 `20261004-ingest-redistributed-revisions` は 2026-10-04（PR #112）。差分 `20261004-db-location` は 2026-10-04（PR #114）
 - 起こした元: v0.15.1 の `src/cli/index.ts`、`src/services/freshness.ts`、`src/config.ts`、`src/services/freshness.test.ts`
 - 関連する Issue: houki-egov-mcp #21（`--status` の案内を `--sync` に変えた）、houki-egov-mcp #60・#61（0.19.0）、houki-egov-mcp #107（0.19.1）、houki-egov-mcp #108・#110（0.20.0）
 

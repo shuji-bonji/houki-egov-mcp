@@ -1,8 +1,13 @@
+---
+approved: 2026-10-01
+pr: 89
+implementation: required
+targets: [common_errors, get_law_range, get_toc, search_fulltext]
+---
 # 変更: T1 の差分の書き残しを直す（和の型の message、max_chars の例、REMOVED を指す未決）
 
 - 対象: `specs/current/common_errors/spec.md`（SPEC-EGOV-COMMON-ERRORS-022）、`specs/current/get_law_range/spec.md`（SPEC-EGOV-GET-LAW-RANGE-023）、`specs/current/get_toc/spec.md` と `specs/current/search_fulltext/spec.md`（「未決」の各 1 行）
-- 実装の変更: 要（テストを 1 件足すだけ。実装は `feat/20261001-0.16.0` に入っている。下の「実装の変更」）
-- 承認日: 2026-10-01（PR #89）
+- 実装の変更の補足: テストを 1 件足すだけ。実装は `feat/20261001-0.16.0` に入っている。下の「実装の変更」
 - 状態: 取り込み済み（v0.16.0）
 - 起こした日: 2026-10-02（JST）
 - 起こした役: Spec Steward

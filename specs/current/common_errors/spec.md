@@ -1,9 +1,12 @@
+---
+spec_id: EGOV
+kind: common
+approved: 2026-09-28
+pr: 50
+---
 # 機能: common_errors（全ツールに共通するエラー応答の形と引数の検査、ツールの登録）
 
-- 機能 ID: EGOV
-- 種類: 共通
 - 版: current
-- 承認日: 2026-09-28（PR #50）。差分 `20260928-undecided-to-issues` は 2026-09-28（PR #68）。差分 `20260928-untested-behaviors` は 2026-09-28（PR #76）。差分 `20261001-t1-argument-guards` は 2026-10-01（PR #84）。差分 `20261001-t2-error-codes` は 2026-10-01（PR #85）。差分 `20261002-t1-followups` は 2026-10-01（PR #89）。差分 `20261003-t5-docs-mismatch` は 2026-10-03（PR #92）。差分 `20261003-law-resolution` は 2026-10-03（PR #95）。差分 `20261003-law-type-and-reference-actions` は 2026-10-03（PR #99）。差分 `20261004-db-location` は 2026-10-04（PR #114）
 - 起こした元: v0.15.1 の `src/server.ts`、`src/errors.ts`、`src/tools/tool-args.ts`、`src/tools/handlers.ts`（ツールの登録の表）、`src/tools/definitions.ts`（tools/list の一覧）、`src/server.test.ts`、`src/errors.test.ts`、`src/tools/handlers.test.ts`
 - 関連する Issue: houki-egov-mcp #108（0.20.0）
 

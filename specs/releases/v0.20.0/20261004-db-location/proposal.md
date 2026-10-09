@@ -1,8 +1,13 @@
+---
+approved: 2026-10-04
+pr: 114
+implementation: required
+targets: [cli_bulk_download, cli_entry, cli_status, cli_sync, common_errors, db_schema, search_fulltext]
+---
 # 変更: ローカル DB の場所を、応答・起動時のログ・`--status` で確かめられるようにする（egov #108・#110、T6）
 
 - 対象: `search_fulltext` / `db_schema` / `cli_status` / `cli_sync` / `cli_bulk_download` / `cli_entry` / `common_errors` の `specs/current/<dir>/spec.md`
-- 実装の変更: 要（下の「実装の変更」）
-- 承認日: 2026-10-04（PR #114）
+- 実装の変更の補足: 下の「実装の変更」
 - 状態: 取り込み済み（v0.20.0）
 - 起こした日: 2026-10-04（JST）
 - 起こした役: Spec Steward

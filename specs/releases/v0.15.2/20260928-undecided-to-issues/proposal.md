@@ -1,8 +1,12 @@
+---
+approved: 2026-09-28
+pr: 68
+implementation: none
+targets: [cli_bulk_download, cli_entry, cli_status, cli_sync, common_errors, db_schema, explain_law_type, get_article_references, get_attachment, get_law, get_law_file, get_law_range, get_law_revisions, get_related_laws, get_toc, list_attachments, resolve_abbreviation, search_fulltext, search_law, verify_citations]
+---
 # 変更: 「未決」のうち判断が要る 85 件を Issue に移す
 
 - 対象: `specs/current/` の下の 20 本の `spec.md`（`## 未決` の節）
-- 実装の変更: 不要
-- 承認日: 2026-09-28（PR #68）
 - 状態: 取り込み済み。この仕様 PR（#68）の中で `specs/current/` に反映し、v0.15.2 の実装 PR の最終コミットで `specs/releases/v0.15.2/` へ移した
 - 起こした日: 2026-09-28（JST）
 - 起こした役: Spec Steward

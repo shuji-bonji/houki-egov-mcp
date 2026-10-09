@@ -1,8 +1,13 @@
+---
+approved: 2026-10-03
+pr: 96
+implementation: required
+targets: [explain_law_type, list_attachments, search_fulltext, search_law]
+---
 # 変更: 検索の件数・0 件の案内・通称の展開・管轄外の略称、法令種別の解説、附則の別表の図の置き場所（段階 5 検索と解説と添付）
 
 - 対象: `search_law` / `search_fulltext` / `explain_law_type` / `list_attachments` の `specs/current/<tool>/spec.md`
-- 実装の変更: 要（下の「実装の変更」）
-- 承認日: 2026-10-03（PR #96）
+- 実装の変更の補足: 下の「実装の変更」
 - 状態: 取り込み済み（v0.18.0）
 - 起こした日: 2026-10-03（JST）
 - 起こした役: Spec Steward
