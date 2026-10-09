@@ -1,9 +1,28 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkScope, kindOf, onlyIdsAdded, parseNameStatus } from './check-pr-scope.mjs';
+import {
+  checkScope,
+  currentApproved,
+  kindOf,
+  noImplementation,
+  onlyIdsAdded,
+  parseNameStatus,
+  proposalApproved,
+} from './check-pr-scope.mjs';
 
-const APPROVED_PROPOSAL = '# 差分\n\n- 承認日: 2026-09-25（PR #60）\n- 実装の変更: 要\n';
-const APPROVED_SPEC = '# 機能\n\n- 承認日: 2026-09-25（PR #60）\n';
+/** front matter を組み立てる。値が null のキーは「キー:」だけ（空の値）にする */
+function fm(fields, body) {
+  const lines = Object.entries(fields).map(([k, v]) => (v === null ? `${k}:` : `${k}: ${v}`));
+  return `---\n${lines.join('\n')}\n---\n${body}`;
+}
+
+const APPROVED_PROPOSAL = fm(
+  { approved: '2026-09-25', pr: 60, implementation: 'required', targets: '[resolve_abbreviation]' },
+  '# 差分\n'
+);
+const NO_IMPL_PROPOSAL = APPROVED_PROPOSAL.replace('implementation: required', 'implementation: none');
+const APPROVED_SPEC = fm({ spec_id: 'EGOV', kind: 'tool', approved: '2026-09-25', pr: 60 }, '# 機能\n');
+const UNAPPROVED_SPEC = fm({ spec_id: 'EGOV', kind: 'tool', approved: null, pr: null }, '# 機能\n');
 
 function run(kind, changes, files = {}, diffs = {}, released = new Set()) {
   return checkScope({
@@ -45,29 +64,39 @@ test('仕様 PR: src/ を変えると止まる', () => {
   assert.match(errors[0], /src\/lookup\.ts/);
 });
 
-test('仕様 PR: 承認日が空欄なら止まる', () => {
+test('仕様 PR: front matter の approved と pr が空なら止まる', () => {
   const p = 'specs/changes/20260925-x/proposal.md';
-  const errors = run('spec', [{ status: 'A', path: p }], { [p]: '# 差分\n\n- 承認日: \n' });
+  const draft = fm({ approved: null, pr: null, implementation: 'required', targets: '[get_law]' }, '# 差分\n');
+  const errors = run('spec', [{ status: 'A', path: p }], { [p]: draft });
   assert.equal(errors.length, 1);
   assert.match(errors[0], /承認日と PR 番号/);
 });
 
-test('仕様 PR: 承認日に PR 番号が無ければ止まる', () => {
+test('仕様 PR: approved があっても pr が空なら止まる', () => {
   const p = 'specs/changes/20260925-x/proposal.md';
-  const errors = run('spec', [{ status: 'A', path: p }], { [p]: '- 承認日: 2026-09-25\n' });
+  const noPr = APPROVED_PROPOSAL.replace('pr: 60', 'pr:');
+  const errors = run('spec', [{ status: 'A', path: p }], { [p]: noPr });
   assert.equal(errors.length, 1);
 });
 
-test('仕様 PR: 「実装の変更: 不要」なら specs/current も書いてよい（承認日は要る）', () => {
+test('仕様 PR: 古い形（本文の「- 承認日:」の行だけで front matter が無い）の proposal.md は止まる', () => {
+  const p = 'specs/changes/20260925-x/proposal.md';
+  const legacy = '# 差分\n\n- 承認日: 2026-09-25（PR #60）\n- 実装の変更: 要\n';
+  const errors = run('spec', [{ status: 'A', path: p }], { [p]: legacy });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /front matter の approved と pr/);
+});
+
+test('仕様 PR: implementation: none なら specs/current も書いてよい（current の承認は要る）', () => {
   const p = 'specs/changes/20260925-x/proposal.md';
   const cur = 'specs/current/resolve_abbreviation/spec.md';
-  const files = { [p]: APPROVED_PROPOSAL.replace('要', '不要'), [cur]: APPROVED_SPEC };
+  const files = { [p]: NO_IMPL_PROPOSAL, [cur]: APPROVED_SPEC };
   assert.deepEqual(run('spec', [{ status: 'A', path: p }, { status: 'M', path: cur }], files), []);
-  const noDate = { ...files, [cur]: '# 機能\n\n- 承認日: （未承認）\n' };
+  const noDate = { ...files, [cur]: UNAPPROVED_SPEC };
   assert.equal(run('spec', [{ status: 'A', path: p }, { status: 'M', path: cur }], noDate).length, 1);
 });
 
-test('仕様 PR: 「実装の変更: 要」で specs/current を書くと止まる', () => {
+test('仕様 PR: implementation: required で specs/current を書くと止まる', () => {
   const p = 'specs/changes/20260925-x/proposal.md';
   const cur = 'specs/current/resolve_abbreviation/spec.md';
   const errors = run('spec', [{ status: 'A', path: p }, { status: 'M', path: cur }], {
@@ -75,7 +104,18 @@ test('仕様 PR: 「実装の変更: 要」で specs/current を書くと止ま�
     [cur]: APPROVED_SPEC,
   });
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /実装の変更: 不要/);
+  assert.match(errors[0], /implementation: none/);
+});
+
+test('仕様 PR: 本文の「- 実装の変更: 不要」の行だけでは specs/current を書けない', () => {
+  const p = 'specs/changes/20260925-x/proposal.md';
+  const cur = 'specs/current/resolve_abbreviation/spec.md';
+  const legacy = `${APPROVED_PROPOSAL}- 実装の変更: 不要\n`;
+  const errors = run('spec', [{ status: 'A', path: p }, { status: 'M', path: cur }], {
+    [p]: legacy,
+    [cur]: APPROVED_SPEC,
+  });
+  assert.equal(errors.length, 1);
 });
 
 test('実装 PR: specs/changes を releases へ移すのはよいが、書き換えると止まる', () => {
@@ -94,10 +134,28 @@ test('実装 PR: specs/changes を releases へ移すのはよいが、書き換
   assert.equal(ng.length, 1);
 });
 
-test('実装 PR: 取り込んだ specs/current に承認日が無ければ止まる', () => {
+test('実装 PR: 取り込んだ specs/current に初版の承認が無ければ止まる', () => {
   const cur = 'specs/current/resolve_abbreviation/spec.md';
-  const errors = run('impl', [{ status: 'M', path: cur }], { [cur]: '- 承認日: （未承認）\n' });
+  const errors = run('impl', [{ status: 'M', path: cur }], { [cur]: UNAPPROVED_SPEC });
   assert.equal(errors.length, 1);
+  // 古い形（本文の「- 承認日:」の行だけ）も止める
+  const legacy = '# 機能\n\n- 承認日: 2026-09-25（PR #60）\n';
+  assert.equal(run('impl', [{ status: 'M', path: cur }], { [cur]: legacy }).length, 1);
+});
+
+test('実装 PR: 差分で作った機能（introduced_by）は approved と pr が無くても通る', () => {
+  const cur = 'specs/current/cli_new/spec.md';
+  const born = fm({ spec_id: 'EGOV', kind: 'cli', introduced_by: '20261004-db-location' }, '# 機能\n');
+  assert.deepEqual(run('impl', [{ status: 'A', path: cur }], { [cur]: born }), []);
+});
+
+test('front matter の判定: 空の値・front matter の無い本文を「無い」とみなす', () => {
+  assert.equal(proposalApproved(APPROVED_PROPOSAL), true);
+  assert.equal(proposalApproved('# 差分\n'), false);
+  assert.equal(noImplementation(NO_IMPL_PROPOSAL), true);
+  assert.equal(noImplementation(APPROVED_PROPOSAL), false);
+  assert.equal(currentApproved(APPROVED_SPEC), true);
+  assert.equal(currentApproved(UNAPPROVED_SPEC), false);
 });
 
 test('初版起こし: spec.md の追加と、テスト名に ID を足すだけの変更は通る', () => {
@@ -132,7 +190,7 @@ test('初版起こし: 承認日が無ければ止まる、src/ の実装を変�
   const errors = run('spec-init', [
     { status: 'A', path: cur },
     { status: 'M', path: 'src/lookup.ts' },
-  ], { [cur]: '- 承認日: （未承認）\n' });
+  ], { [cur]: UNAPPROVED_SPEC });
   assert.equal(errors.length, 2);
 });
 

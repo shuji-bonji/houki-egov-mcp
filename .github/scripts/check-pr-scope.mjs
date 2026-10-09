@@ -4,26 +4,28 @@
  *
  * | ブランチ        | 種類         | 変えてよいもの |
  * |-----------------|--------------|----------------|
- * | `spec/*`        | 仕様 PR      | `specs/changes/`。proposal.md が「実装の変更: 不要」なら `specs/current/` も |
+ * | `spec/*`        | 仕様 PR      | `specs/changes/`。proposal.md の front matter が `implementation: none` なら `specs/current/` も |
  * | `spec-init/*`   | 初版起こし   | `specs/current/<dir>/spec.md` と、テスト名に仕様 ID を足すだけの変更 |
  * | それ以外        | 実装 PR など | `specs/changes/` は `specs/releases/` への移動だけ |
  *
  * `specs/{current,changes,releases}/.gitkeep`（`spec-ids init` が作る置き場の印）はどの種類でも検査しない。
  *
- * どの種類でも、変わった `specs/current/<dir>/spec.md` と仕様 PR の proposal.md に、
- * 承認日（`- 承認日: YYYY-MM-DD`）が無ければ止める。承認日は人がマージの前に書く。
+ * 承認の記録は、ファイルの先頭の front matter で見る（spec-ids 0.3.0 の形。読み取りは `@shuji-bonji/spec-ids` の
+ * `readFrontMatter`）。次のどれかが欠けていれば止める。承認日と PR 番号は人がマージの前に書く。
+ * - 仕様 PR の proposal.md: `approved` と `pr`（空でないこと）
+ * - どの種類でも、変わった `specs/current/<dir>/spec.md`: `approved` と `pr`（初版の承認）、
+ *   または `introduced_by`（差分で作った機能）
+ * front matter の書式そのもの（キーの打ち間違い、値の形、古い「- 承認日:」の行）は `spec-ids check`（spec-gate）が見る。
  *
  * 使い方（CI）: BASE_REF=origin/main HEAD_REF=<ブランチ名> node .github/scripts/check-pr-scope.mjs
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { readFrontMatter } from '@shuji-bonji/spec-ids';
 
 const ID_WITH_SPACE_RE = /SPEC-[A-Z]+-[A-Z0-9-]+-[0-9]{3}\s*/g;
 const ID_RE = /SPEC-[A-Z]+-[A-Z0-9-]+-[0-9]{3}/g;
-const APPROVAL_RE = /^- 承認日: \d{4}-\d{2}-\d{2}/m;
-const PR_NUMBER_RE = /#\d+/;
-const NO_IMPL_RE = /^- 実装の変更: 不要/m;
 const TEST_FILE_RE = /\.test\.[cm]?[jt]s$/;
 const CURRENT_SPEC_RE = /^specs\/current\/[^/]+\/spec\.md$/;
 const PROPOSAL_RE = /^specs\/changes\/[^/]+\/proposal\.md$/;
@@ -31,6 +33,33 @@ const PROPOSAL_RE = /^specs\/changes\/[^/]+\/proposal\.md$/;
 /** `specs/changes/<id>/` の下のパス。<id> を取り出す */
 const CHANGE_PATH_RE = /^specs\/changes\/([^/]+)\//;
 const PLACEHOLDER_RE = /^specs\/(current|changes|releases)\/\.gitkeep$/;
+
+/** front matter の値。front matter が無いファイルは空のオブジェクト（どのキーも無い）として扱う */
+function frontMatterOf(text) {
+  return readFrontMatter(text)?.data ?? {};
+}
+
+/** 値が空でないか（readFrontMatter は空の値を null で返す） */
+function filled(value) {
+  return value !== undefined && value !== null && value !== '';
+}
+
+/** 仕様 PR の proposal.md に、承認日と PR 番号があるか */
+export function proposalApproved(text) {
+  const fm = frontMatterOf(text);
+  return filled(fm.approved) && filled(fm.pr);
+}
+
+/** proposal.md の差分が、実装の変更を要らないとしているか（`implementation: none`） */
+export function noImplementation(text) {
+  return frontMatterOf(text).implementation === 'none';
+}
+
+/** current の spec.md に、初版の承認（approved と pr）か、作った差分（introduced_by）があるか */
+export function currentApproved(text) {
+  const fm = frontMatterOf(text);
+  return (filled(fm.approved) && filled(fm.pr)) || filled(fm.introduced_by);
+}
 
 /** ブランチ名から PR の種類を決める */
 export function kindOf(branch) {
@@ -90,7 +119,7 @@ export function checkScope({ kind, changes, read, diffOf, released = new Set() }
 
   if (kind === 'spec') {
     const proposals = changes.filter((c) => c.status !== 'D' && PROPOSAL_RE.test(c.path));
-    const noImpl = proposals.some((c) => NO_IMPL_RE.test(read(c.path)));
+    const noImpl = proposals.some((c) => noImplementation(read(c.path)));
     for (const c of changes) {
       for (const p of touched(c)) {
         if (p.startsWith('specs/changes/')) continue;
@@ -98,7 +127,7 @@ export function checkScope({ kind, changes, read, diffOf, released = new Set() }
         errors.push(
           `仕様 PR（spec/*）は specs/changes/ だけを変えます: ${p}${
             CURRENT_SPEC_RE.test(p)
-              ? '（specs/current/ を書くなら proposal.md に「- 実装の変更: 不要」）'
+              ? '（specs/current/ を書けるのは、proposal.md の front matter が implementation: none のときだけ）'
               : ''
           }`
         );
@@ -108,10 +137,9 @@ export function checkScope({ kind, changes, read, diffOf, released = new Set() }
       errors.push('仕様 PR（spec/*）に specs/changes/<id>/proposal.md がありません');
     }
     for (const c of proposals) {
-      const text = read(c.path);
-      if (!APPROVAL_RE.test(text) || !PR_NUMBER_RE.test(text.match(/^- 承認日:.*$/m)?.[0] ?? '')) {
+      if (!proposalApproved(read(c.path))) {
         errors.push(
-          `承認日と PR 番号がありません（マージの前に「- 承認日: YYYY-MM-DD（PR #N）」を書く）: ${c.path}`
+          `承認日と PR 番号がありません（マージの前に front matter の approved と pr を書く）: ${c.path}`
         );
       }
     }
@@ -156,8 +184,10 @@ export function checkScope({ kind, changes, read, diffOf, released = new Set() }
 
   for (const c of changes) {
     if (c.status === 'D' || !CURRENT_SPEC_RE.test(c.path)) continue;
-    if (!APPROVAL_RE.test(read(c.path))) {
-      errors.push(`承認日がありません（マージの前に「- 承認日: YYYY-MM-DD」を書く）: ${c.path}`);
+    if (!currentApproved(read(c.path))) {
+      errors.push(
+        `承認日と PR 番号がありません（マージの前に front matter の approved と pr を書く。差分で作った機能なら introduced_by）: ${c.path}`
+      );
     }
   }
   return [...new Set(errors)];
