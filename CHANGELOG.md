@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- CI の `pr-scope` を、`.github/scripts/check-pr-scope.mjs` のコピーから、`@shuji-bonji/spec-ids` 0.4.0 のサブコマンド `npx spec-ids pr-scope` に替えました（[shuji-bonji/spec-ids#9](https://github.com/shuji-bonji/spec-ids/issues/9)）。コピーとそのテスト（`check-pr-scope.test.mjs`）は消しました。ブランチ名の接頭辞ごとに変えてよいパスと承認の空欄の判定は、コピーと同じです
+- 開発用の依存 `@shuji-bonji/spec-ids` を `^0.4.0` にしました。npm で配布する中身（`dist/`）は変わりません
+
 ### In progress (Phase 2 — 残作業)
 
 - Phase 2-13: API enrichment（`category` / `revisions_meta` / PreviousEnforced・Repeal の精緻化）
