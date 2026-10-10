@@ -15,6 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
 
+## [0.20.1] - 2026-10-10
+
+🔧 **patch リリース** — 振る舞いの変更はありません。npm で配布する中身（`dist/`）は 0.20.0 と同じで、MCP のツールの応答・CLI の出力・DB のスキーマの版（3）と `INGEST_VERSION`（2）も変えていません。houki-hub のサイトの仕様書ページを公開版のタグから作り直すときに承認の履歴が残るよう、仕様の承認の記録を front matter に移した `specs/` をこの版のタグに含めるために出します。
+
+### Changed
+
+- **仕様の承認の記録を front matter に移しました**（[#117](https://github.com/shuji-bonji/houki-egov-mcp/pull/117)）。`specs/current/<dir>/spec.md` と `specs/releases/<tag>/<id>/proposal.md` の承認日と PR 番号を、本文の「- 承認日:」の行から、ファイルの先頭の front matter（`approved`・`pr`・`introduced_by` など。`@shuji-bonji/spec-ids` 0.3.0 の形）に移しました（`spec-ids migrate --write`）。仕様の本文と仕様 ID は変えていません。機能ごとの承認の履歴は `npx spec-ids history <dir>` で見られます
+- 開発用の依存 `@shuji-bonji/spec-ids` を `^0.3.0` にしました
+- CI の `pr-scope`（`.github/scripts/check-pr-scope.mjs`）が承認日と PR 番号を確かめる場所を、本文の行から front matter に替えました
+
+### Documentation
+
+- AGENTS.md の「承認の記録」と Publisher の手順を、front matter に書く形に直しました
+
 ## [0.20.0] - 2026-10-04
 
 ✨ **minor リリース** — 段階 6 の段階 3（T6 ローカル DB の場所の見え方。houki-hub `docs/notes/2026-10-04-plan-stage6-and-followups.md`、規則の正本は houki-hub `docs/DECISIONS.md` 2026-10-04）。仕様 PR [#114](https://github.com/shuji-bonji/houki-egov-mcp/pull/114)（`20261004-db-location`）で承認した差分を実装し、`specs/current/` に取り込みました。閉じる Issue: #108 #110。#111（既定のファイル名に DB の版を入れるか）は、DECISIONS.md の決定（入れない）を書いて閉じています。
