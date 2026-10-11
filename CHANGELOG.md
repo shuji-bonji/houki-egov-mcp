@@ -7,11 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Changed
-
-- CI の `pr-scope` を、`.github/scripts/check-pr-scope.mjs` のコピーから、`@shuji-bonji/spec-ids` 0.4.0 のサブコマンド `npx spec-ids pr-scope` に替えました（[shuji-bonji/spec-ids#9](https://github.com/shuji-bonji/spec-ids/issues/9)）。コピーとそのテスト（`check-pr-scope.test.mjs`）は消しました。ブランチ名の接頭辞ごとに変えてよいパスと承認の空欄の判定は、コピーと同じです
-- 開発用の依存 `@shuji-bonji/spec-ids` を `^0.4.0` にしました。npm で配布する中身（`dist/`）は変わりません
-
 ### In progress (Phase 2 — 残作業)
 
 - Phase 2-13: API enrichment（`category` / `revisions_meta` / PreviousEnforced・Repeal の精緻化）
@@ -19,6 +14,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Planned (Phase 1 磨き込み — 痛点ログ駆動 / Phase 2 着手前から残置)
 
 - `search_fulltext` のキーワード中の漢数字の条番号（「民法 第七百九条」）を boost に使う（v0.7.0 は `get_law` の引数だけ）
+
+## [0.21.0] - 2026-10-12
+
+✨ **minor リリース** — `get_toc` の応答に、`truncated` の理由を示す `truncated_by` を足しました。仕様 PR [#122](https://github.com/shuji-bonji/houki-egov-mcp/pull/122)（`20261012-toc-truncated-by`）で承認した差分を実装し、`specs/current/` に取り込みました。閉じる Issue: #121。
+
+> - DB のスキーマの版（3）と `INGEST_VERSION`（2）は変えていません。0.19.x〜0.20.x の DB をそのまま使えます
+> - 応答のフィールドは消さず、名前も変えていません。`truncated` だけを見ているスクリプトはそのまま動きます
+
+### 互換性
+
+| 場面 | 0.20.1 | 0.21.0 |
+| --- | --- | --- |
+| `get_toc` に `depth` を渡して本則の枝を刈ったとき | `truncated: true` | `truncated: true`、`truncated_by: "depth"` |
+| `depth` を省いた、または `depth` が構造階層の深さ以上で何も刈らなかったとき | `truncated: false` | `truncated: false`、`truncated_by: null` |
+
+### Added
+
+- **`get_toc` の `truncated_by`**（#121）: 応答の最上位に `truncated_by` を常に置きます。`depth` で本則の枝を刈って `truncated: true` のときは `"depth"`、刈らなかったときは `null` です。`get_toc` の `truncated` は `depth` で刈ったときだけ `true` になり、応答の大きさや文字数では打ち切りません。`get_law_range` の `range.truncated`（`max_chars` の文字数の上限で条を打ち切った印。続きを取る `next_from_article` と `next_actions` が付く）とは意味が違い、`get_toc` には続きを取る操作が無いので、全階層が要るときは `depth` を省いて呼び直してください（SPEC-EGOV-GET-TOC-030、010・016 の例）
+- **受入テスト**: `src/spec-tests/20261012-toc-truncated-by/`
+
+### Changed
+
+- tools/list の `get_toc` の `description` に、打ち切ったときは `truncated: true` と `truncated_by: "depth"` を返すこと、`truncated` が `true` になるのは `depth` で刈ったときだけで応答の大きさでは打ち切らないこと（`get_law_range` の `truncated` は文字数の上限の意味）を足しました
+- 仕様 ID では ADDED 1 件（SPEC-EGOV-GET-TOC-030）、MODIFIED 2 件（SPEC-EGOV-GET-TOC-010・016）です
+- CI の `pr-scope` を、`.github/scripts/check-pr-scope.mjs` のコピーから、`@shuji-bonji/spec-ids` 0.4.0 のサブコマンド `npx spec-ids pr-scope` に替えました（[shuji-bonji/spec-ids#9](https://github.com/shuji-bonji/spec-ids/issues/9)）。コピーとそのテスト（`check-pr-scope.test.mjs`）は消しました。ブランチ名の接頭辞ごとに変えてよいパスと承認の空欄の判定は、コピーと同じです
+- 開発用の依存 `@shuji-bonji/spec-ids` を `^0.4.0` にしました。npm で配布する中身（`dist/`）は変わりません
+
+### Documentation
+
+- README: `get_toc` の段落に、`depth` で刈ったときは `truncated: true` と `truncated_by: "depth"` が返り、`get_law_range` の `truncated`（文字数の上限）とは意味が違うことを書きました
+- README と DISCLAIMER.md: 業法の注記の主語を「資格のない者が他人のために業として」に限り、資格者が自分の調査に使うことは想定内と書きました（`0faa502`）
 
 ## [0.20.1] - 2026-10-10
 
