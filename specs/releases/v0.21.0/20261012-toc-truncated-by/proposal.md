@@ -9,7 +9,7 @@ targets: [get_toc]
 
 - 対象: `get_toc` の `specs/current/get_toc/spec.md`
 - 実装の変更の補足: 下の「実装の変更」
-- 状態: 草案（承認待ち）
+- 状態: 取り込み済み（v0.21.0）
 - 起こした日: 2026-10-12（JST）
 - 起こした役: Spec Steward
 - 対象 Issue: houki-egov-mcp #121（`get_toc` の `truncated: true` が `depth` で刈った意味で、`get_law_range` の `truncated`（文字数の上限）と取り違えやすい）
