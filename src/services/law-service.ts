@@ -1006,8 +1006,13 @@ export async function getLawToc(opts: {
     meta: ArticleMeta;
     /** 本則の TOC ノード総数。トリミング前/後どちらの値かは truncated を見て判断 */
     node_count: number;
-    /** depth 指定で枝を刈ったかどうか */
+    /**
+     * depth で本則の枝を刈ったかどうか。`depth` で刈ったときだけ true で、応答の大きさや
+     * 文字数では刈らない（get_law_range の range.truncated とは意味が違う。SPEC-EGOV-GET-TOC-010）
+     */
     truncated: boolean;
+    /** truncated の理由。depth で刈ったときは 'depth'、刈らなかったときは null（SPEC-EGOV-GET-TOC-030） */
+    truncated_by: 'depth' | null;
   }>
 > {
   const scopeError = checkAbbreviationScope(opts.law_name);
@@ -1078,6 +1083,7 @@ export async function getLawToc(opts: {
     },
     node_count: truncated ? countTocNodes(toc) : fullCount,
     truncated,
+    truncated_by: truncated ? 'depth' : null,
   };
 }
 
